@@ -45,6 +45,8 @@ A `ratelimit` binding in `wrangler.jsonc`:
 ]
 ```
 
+Each site must use its own `namespace_id`, never one another site uses. Sites in one account that share a namespace share its counters, so traffic to one site would spend another's limit.
+
 ## The contract
 
 All paths sit under `/api/carrel/v1`. Bodies are JSON, checked on the way in and on the way out. An adapter that answers outside the contract is reported as a site failure, and its body is never passed on.
