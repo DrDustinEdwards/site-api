@@ -3,19 +3,33 @@
 import { describe, expect, it } from "vitest";
 import { createSiteClient, SiteApiError } from "../src/client.js";
 import { schemaHash } from "../src/contract.js";
+import { MEMORY_MEDIA_LIMITS, memoryAdapter } from "../src/testing.js";
 import { KEY, ORIGIN, site } from "./helpers.js";
 
-function client() {
-  const s = site();
+function client(adapter = memoryAdapter()) {
+  const s = site(adapter);
   return { ...s, client: createSiteClient({ baseUrl: ORIGIN, key: KEY, fetch: s.fetch }) };
 }
 
 describe("client round trip", () => {
-  it("reads meta with this contract's hash and the stage 2 capabilities", async () => {
+  it("reads meta with this contract's hash and the capabilities, media and its limits included", async () => {
     const { client: c } = client();
     const meta = await c.meta();
     expect(meta.schemaHash).toBe(await schemaHash());
     expect(meta.capabilities).toEqual({
+      content: true,
+      preview: true,
+      media: true,
+      inbox: false,
+      insight: false,
+      publications: false,
+      mediaUpload: MEMORY_MEDIA_LIMITS,
+    });
+  });
+
+  it("reads a site with no media manager as the v0.1.0 capabilities, with no limits", async () => {
+    const { client: c } = client(memoryAdapter({ media: false }));
+    expect((await c.meta()).capabilities).toEqual({
       content: true,
       preview: true,
       media: false,

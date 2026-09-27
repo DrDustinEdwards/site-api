@@ -5,7 +5,7 @@
 
 import { z } from "zod";
 
-export const PACKAGE_VERSION = "0.1.0";
+export const PACKAGE_VERSION = "0.2.0";
 export const PREFIX = "/api/carrel/v1";
 
 /** Opaque to Carrel: each site decides what a version is (dustinedwards.info uses the head commit). */
@@ -30,6 +30,18 @@ export const SiteInfo = z.object({
   origin: z.url(),
 });
 
+/** The largest upload any site may declare: well under a Worker's request body limit. */
+export const MAX_MEDIA_BYTES = 25 * 1024 * 1024;
+
+/**
+ * What a site accepts as an upload, declared by the site (v0.2.0). `types` are MIME types, such as
+ * image/png; the package refuses anything else before the site sees a byte.
+ */
+export const MediaUploadLimits = z.object({
+  maxBytes: z.number().int().min(1).max(MAX_MEDIA_BYTES),
+  types: z.array(z.string().regex(/^[a-z]+\/[a-z0-9.+-]+$/)).min(1).max(50),
+});
+
 export const Capabilities = z.object({
   content: z.boolean(),
   preview: z.boolean(),
@@ -37,6 +49,8 @@ export const Capabilities = z.object({
   inbox: z.boolean(),
   insight: z.boolean(),
   publications: z.boolean(),
+  /** Present when `media` is true (v0.2.0). Optional, so a v0.1.0 reader parses a v0.2.0 meta. */
+  mediaUpload: MediaUploadLimits.optional(),
 });
 
 export const Meta = z.object({
@@ -136,6 +150,80 @@ export const PreviewInput = z.object({
   source: Source,
 });
 
+// ---------- media (v0.2.0)
+
+/**
+ * A site's id for one media file: its storage key, such as 2026/09/photo-a1b2.webp. Segments are
+ * joined by "/", and none may be empty, "." or "..", so an id is never a path out of the store.
+ */
+export const MediaId = z
+  .string()
+  .max(300)
+  .regex(/^[A-Za-z0-9][A-Za-z0-9._-]*(?:\/[A-Za-z0-9][A-Za-z0-9._-]*)*$/)
+  .refine((id) => !id.split("/").some((part) => part === "." || part === ".."), "An id segment may not be . or ..");
+
+/** One place a file is used, as the site's own reference check found it. */
+export const MediaUse = z.object({
+  /** What uses it, such as "post". */
+  type: z.string().min(1).max(64),
+  id: z.string().min(1).max(300),
+  title: z.string().max(1000),
+  /** Where in it, such as "cover image" or "line 12". */
+  detail: z.string().max(500),
+});
+
+export const MediaItem = z.object({
+  id: MediaId,
+  /** Where the site serves it: a path on the site, such as /media/2026/09/photo.webp, or a full URL. */
+  url: z.string().min(1).max(2000).refine((u) => u.startsWith("/") || /^https:\/\//.test(u), "A path or an https URL"),
+  /** The name it was uploaded with, when the site kept it. */
+  filename: z.string().max(300).nullable(),
+  contentType: z.string().min(1).max(200),
+  bytes: z.number().int().min(0),
+  width: z.number().int().min(1).nullable(),
+  height: z.number().int().min(1).nullable(),
+  alt: z.string().max(2000),
+  uploadedAt: Timestamp.nullable(),
+  /** False for files the site will never delete through this API, such as its own static assets. */
+  deletable: z.boolean(),
+});
+
+/** One file with the places it is used: what a delete would be refused over. */
+export const MediaDetail = MediaItem.extend({
+  usedBy: z.array(MediaUse),
+});
+
+export const MediaListQuery = z.object({
+  q: z.string().max(200).optional(),
+  cursor: z.string().max(500).optional(),
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+});
+
+export const MediaList = z.object({
+  items: z.array(MediaItem),
+  nextCursor: z.string().nullable(),
+});
+
+/**
+ * An upload is the file's own bytes as the body, its type as Content-Type, and these as the query:
+ * no base64, so a file costs its own size and no more.
+ */
+export const MediaUploadQuery = z.object({
+  filename: z.string().min(1).max(200).regex(/^[^/\\\u0000-\u001f]+$/, "A file name, with no path"),
+  alt: z.string().max(2000).default(""),
+  changeId: ChangeId,
+});
+
+export const MediaDeleteQuery = z.object({
+  changeId: ChangeId,
+});
+
+export const MediaDeleteResult = z.object({
+  id: MediaId,
+  deleted: z.literal(true),
+  changeId: ChangeId,
+});
+
 export const ErrorCode = z.enum([
   "unauthorized",
   "rate-limited",
@@ -156,6 +244,8 @@ export const ErrorBody = z.object({
   message: z.string(),
   /** On version-conflict only: what the site holds now, or null when the id does not exist. */
   currentVersion: Version.nullable().optional(),
+  /** On a refused media delete only (v0.2.0): every place the file is used. */
+  usedBy: z.array(MediaUse).optional(),
 });
 
 export type SiteInfo = z.infer<typeof SiteInfo>;
@@ -176,11 +266,20 @@ export type RevisionList = z.infer<typeof RevisionList>;
 export type Diff = z.infer<typeof Diff>;
 export type PreviewInput = z.infer<typeof PreviewInput>;
 export type ErrorCode = z.infer<typeof ErrorCode>;
+export type MediaUploadLimits = z.infer<typeof MediaUploadLimits>;
+export type MediaUse = z.infer<typeof MediaUse>;
+export type MediaItem = z.infer<typeof MediaItem>;
+export type MediaDetail = z.infer<typeof MediaDetail>;
+export type MediaListQuery = z.infer<typeof MediaListQuery>;
+export type MediaList = z.infer<typeof MediaList>;
+export type MediaUploadQuery = z.infer<typeof MediaUploadQuery>;
+export type MediaDeleteResult = z.infer<typeof MediaDeleteResult>;
 export type ErrorBody = z.infer<typeof ErrorBody>;
 
 /**
  * Every route, relative to PREFIX. Groups declared for later stages answer 501 until a site
- * implements them, so a route's existence is part of the contract even before its body is.
+ * implements them, so a route's existence is part of the contract even before its body is. The
+ * media group arrived in v0.2.0; a site whose adapter has no `media` still answers it 501.
  */
 export const ROUTES = [
   { group: "meta", method: "GET", path: "/meta", response: "Meta" },
@@ -193,7 +292,10 @@ export const ROUTES = [
   { group: "content", method: "GET", path: "/content/:id/revisions", response: "RevisionList" },
   { group: "content", method: "GET", path: "/content/:id/diff", query: "DiffQuery", response: "Diff" },
   { group: "preview", method: "POST", path: "/preview", request: "PreviewInput", response: "text/html" },
-  { group: "media", method: "*", path: "/media/*", response: "not-implemented" },
+  { group: "media", method: "GET", path: "/media", query: "MediaListQuery", response: "MediaList" },
+  { group: "media", method: "POST", path: "/media", query: "MediaUploadQuery", request: "the file's bytes", response: "MediaItem" },
+  { group: "media", method: "GET", path: "/media/:id", response: "MediaDetail" },
+  { group: "media", method: "DELETE", path: "/media/:id", query: "MediaDeleteQuery", response: "MediaDeleteResult" },
   { group: "inbox", method: "*", path: "/inbox/*", response: "not-implemented" },
   { group: "insight", method: "*", path: "/insight/*", response: "not-implemented" },
   { group: "publications", method: "*", path: "/publications/*", response: "not-implemented" },
@@ -202,7 +304,8 @@ export const ROUTES = [
 const HASHED = {
   Meta, ContentSummary, ContentDoc, ListQuery, ContentList, SaveDraftInput, PublishInput,
   ScheduleInput, UnpublishInput, WriteResult, Revision, RevisionList, DiffQuery, Diff,
-  PreviewInput, ErrorBody,
+  PreviewInput, ErrorBody, MediaItem, MediaDetail, MediaListQuery, MediaList, MediaUploadQuery,
+  MediaDeleteQuery, MediaDeleteResult,
 };
 
 /** JSON with sorted keys, so the hash depends on the contract and not on property order. */
