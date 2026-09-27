@@ -6,6 +6,12 @@ import type {
   ContentDoc,
   ContentList,
   ListQuery,
+  MediaDetail,
+  MediaItem,
+  MediaList,
+  MediaListQuery,
+  MediaUploadLimits,
+  MediaUse,
   PreviewInput,
   PublishInput,
   Revision,
@@ -41,13 +47,60 @@ export interface PreviewAdapter {
   render(input: PreviewInput): Promise<string>;
 }
 
+/** One upload, already checked by the package against the site's own limits and the file's bytes. */
+export interface MediaUpload {
+  bytes: Uint8Array;
+  /** One of the site's declared types, without parameters. */
+  contentType: string;
+  filename: string;
+  alt: string;
+  changeId: string;
+}
+
+/**
+ * The media group (v0.2.0). Files stay in the site's own storage and are served by the site; Carrel
+ * only lists, uploads and asks for deletes. The site's reference check decides every delete.
+ */
+export interface MediaAdapter {
+  /** What the site accepts. The package refuses any other type, and anything larger, unread. */
+  limits: MediaUploadLimits;
+  list(query: MediaListQuery): Promise<MediaList>;
+  /** The file and every place it is used. null when the id does not exist. */
+  get(id: string): Promise<MediaDetail | null>;
+  upload(input: MediaUpload): Promise<MediaItem>;
+  /**
+   * Deletes the file. Throws MediaInUseError naming each use when the site's reference check finds
+   * one, NotFoundError for a missing id, and RefusedError when the check could not run: a delete the
+   * site could not check is never made.
+   */
+  delete(id: string, input: { changeId: string }): Promise<void>;
+}
+
 export interface SiteAdapter {
   site: SiteInfo;
   content: ContentAdapter;
   preview: PreviewAdapter;
+  /** Absent on a site with no media manager: the media routes then answer 501, as in v0.1.0. */
+  media?: MediaAdapter;
 }
 
-/** Stage 2 implements content and preview; the other groups answer 501 until their stage. */
+/**
+ * Stage 2 implemented content and preview; v0.2.0 adds media for a site whose adapter has it. The
+ * other groups answer 501 until their stage.
+ */
+export function capabilitiesOf(adapter: SiteAdapter): Capabilities {
+  return {
+    content: true,
+    preview: true,
+    media: Boolean(adapter.media),
+    inbox: false,
+    insight: false,
+    publications: false,
+    ...(adapter.media ? { mediaUpload: adapter.media.limits } : {}),
+  };
+}
+
+/** @deprecated Since v0.2.0 capabilities depend on the adapter: use capabilitiesOf(adapter). */
 export const CAPABILITIES: Capabilities = {
   content: true,
   preview: true,
@@ -70,6 +123,19 @@ export class NotFoundError extends Error {
     super(message);
     this.name = "NotFoundError";
   }
+}
+
+/** The site's reference check found the file in use: the delete is refused, naming every use. */
+export class MediaInUseError extends Error {
+  constructor(readonly usedBy: MediaUse[], message?: string) {
+    super(message ?? `The file is in use: ${describeUses(usedBy)}. Remove it from each first.`);
+    this.name = "MediaInUseError";
+  }
+}
+
+/** "Title (detail); Other (detail)", one entry per use, for the refusal a writer reads. */
+export function describeUses(uses: MediaUse[]): string {
+  return uses.map((u) => `${u.title || u.id} (${u.detail})`).join("; ");
 }
 
 /** The site's own rules refused the write, such as a render failure or a policy. Shown to the writer. */

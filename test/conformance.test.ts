@@ -11,17 +11,67 @@ function failing(report: Awaited<ReturnType<typeof runConformance>>) {
 }
 
 describe("conformance", () => {
-  it("passes a conforming site", async () => {
+  it("passes a conforming site, with the media checks when it offers media", async () => {
     const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: site().fetch });
     expect(failing(report)).toEqual([]);
     expect(report.ok).toBe(true);
+    expect(report.checks.map((c) => c.name).slice(7)).toEqual([
+      "media: upload limits declared",
+      "media list: answers in the contract's shape",
+      "media delete of an unknown id: refused",
+      "media upload of a type the site does not accept: refused",
+    ]);
+  });
+
+  it("runs only the v0.1.0 checks on a site with no media manager", async () => {
+    const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: site(memoryAdapter({ media: false })).fetch });
+    expect(failing(report)).toEqual([]);
     expect(report.checks).toHaveLength(7);
   });
 
-  it("changes nothing on a conforming site", async () => {
+  it("changes nothing on a conforming site: no content, no file stored, no file deleted", async () => {
     const s = site();
+    await s.adapter.media!.upload({ bytes: new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), contentType: "image/png", filename: "real.png", alt: "", changeId: "seed" });
     await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: s.fetch });
     expect(s.adapter.store.size).toBe(0);
+    expect([...s.adapter.mediaStore.keys()]).toEqual(["uploads/1-real.png"]);
+    expect(s.adapter.deleted).toEqual([]);
+  });
+
+  it("with probeMediaUpload, uploads a file of its own and deletes that file and no other", async () => {
+    const s = site();
+    await s.adapter.media!.upload({ bytes: new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), contentType: "image/png", filename: "real.png", alt: "", changeId: "seed" });
+    const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: s.fetch, probeMediaUpload: true });
+    expect(failing(report)).toEqual([]);
+    expect(report.checks.at(-1)).toMatchObject({ name: "media round trip: upload, read, delete its own file", ok: true });
+    expect([...s.adapter.mediaStore.keys()]).toEqual(["uploads/1-real.png"]);
+    expect(s.adapter.deleted).toEqual(["uploads/2-carrel-conformance-probe.png"]);
+  });
+
+  it("PLANT: fails a site that accepts a type it never declared", async () => {
+    const s = site(memoryAdapter({ media: { maxBytes: 1000, types: ["image/png", "application/x-carrel-conformance-probe"] } }));
+    const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: s.fetch });
+    expect(failing(report)).toEqual(["media upload of a type the site does not accept: refused"]);
+  });
+
+  it("PLANT: fails a site that answers a delete of a file it does not hold as done", async () => {
+    const adapter = memoryAdapter();
+    adapter.media!.delete = async () => {};
+    const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: site(adapter).fetch });
+    expect(failing(report)).toEqual(["media delete of an unknown id: refused"]);
+  });
+
+  it("PLANT: fails a site that offers media without declaring its limits", async () => {
+    const s = site();
+    const unlimited = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const response = await s.fetch(input, init);
+      if (!new URL(new Request(input).url).pathname.endsWith("/meta") || !response.ok) return response;
+      const meta = await response.json();
+      const { mediaUpload: _gone, ...capabilities } = meta.capabilities;
+      return Response.json({ ...meta, capabilities });
+    }) as typeof fetch;
+    const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: unlimited });
+    expect(failing(report)).toEqual(["media: upload limits declared"]);
   });
 
   it("PLANT: fails a site that ignores expectedVersion", async () => {

@@ -7,11 +7,16 @@ import {
   ContentList,
   Diff,
   ErrorBody,
+  MediaDeleteResult,
+  MediaDetail,
+  MediaItem,
+  MediaList,
   Meta,
   PREFIX,
   RevisionList,
   WriteResult,
   type ListQuery,
+  type MediaListQuery,
   type PreviewInput,
   type PublishInput,
   type SaveDraftInput,
@@ -42,14 +47,15 @@ export function createSiteClient(config: SiteClientConfig) {
   const base = `${config.baseUrl.replace(/\/+$/, "")}${PREFIX}`;
   const enc = encodeURIComponent;
 
-  async function call(method: string, path: string, body?: unknown): Promise<Response> {
+  async function call(method: string, path: string, body?: unknown, raw?: { bytes: Uint8Array; contentType: string }): Promise<Response> {
     const response = await doFetch(`${base}${path}`, {
       method,
       headers: {
         authorization: `Bearer ${config.key}`,
-        ...(body === undefined ? {} : { "content-type": "application/json" }),
+        ...(raw ? { "content-type": raw.contentType } : body === undefined ? {} : { "content-type": "application/json" }),
       },
-      body: body === undefined ? undefined : JSON.stringify(body),
+      // A Blob, which every fetch takes as a body whatever its buffer type.
+      body: raw ? new Blob([raw.bytes as Uint8Array<ArrayBuffer>]) : body === undefined ? undefined : JSON.stringify(body),
     });
     if (!response.ok) {
       let parsed: ErrorBody | null = null;
@@ -86,6 +92,21 @@ export function createSiteClient(config: SiteClientConfig) {
     revisions: (id: string) => get(RevisionList, "GET", `/content/${enc(id)}/revisions`),
     diff: (id: string, from: string, to?: string) => get(Diff, "GET", `/content/${enc(id)}/diff${query({ from, to })}`),
     preview: async (input: PreviewInput) => (await call("POST", "/preview", input)).text(),
+    /** The media group (v0.2.0). A refused delete throws SiteApiError whose body carries `usedBy`. */
+    media: {
+      list: (q: Partial<MediaListQuery> = {}) => get(MediaList, "GET", `/media${query(q)}`),
+      get: (id: string) => get(MediaDetail, "GET", `/media/${enc(id)}`),
+      upload: async (input: { bytes: Uint8Array; contentType: string; filename: string; alt?: string; changeId: string }) =>
+        MediaItem.parse(
+          await (
+            await call("POST", `/media${query({ filename: input.filename, alt: input.alt, changeId: input.changeId })}`, undefined, {
+              bytes: input.bytes,
+              contentType: input.contentType,
+            })
+          ).json(),
+        ),
+      delete: (id: string, changeId: string) => get(MediaDeleteResult, "DELETE", `/media/${enc(id)}${query({ changeId })}`),
+    },
   };
 }
 

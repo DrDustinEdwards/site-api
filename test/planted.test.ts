@@ -179,9 +179,13 @@ describe("PLANT: an unknown route", () => {
     expect(response.status).toBe(405);
   });
 
-  it("answers 501 for the groups declared for later stages", async () => {
+  it("answers 501 for the groups declared for later stages, and for media on a site without it", async () => {
+    const { api: noMedia } = site(memoryAdapter({ media: false }));
+    for (const path of ["media", "media/anything"]) {
+      expect((await noMedia.handle(req(`/api/carrel/v1/${path}`))).status, path).toBe(501);
+    }
     const { api } = site();
-    for (const group of ["media", "inbox", "insight", "publications"]) {
+    for (const group of ["inbox", "insight", "publications"]) {
       const response = await api.handle(req(`/api/carrel/v1/${group}/anything`));
       expect(response.status, group).toBe(501);
     }

@@ -6,7 +6,8 @@
 import { createTwoFilesPatch } from "diff";
 import type { z } from "zod";
 import {
-  CAPABILITIES,
+  capabilitiesOf,
+  MediaInUseError,
   NotFoundError,
   RefusedError,
   VersionConflictError,
@@ -19,6 +20,14 @@ import {
   Diff,
   DiffQuery,
   ListQuery,
+  MediaDeleteQuery,
+  MediaDeleteResult,
+  MediaDetail,
+  MediaId,
+  MediaItem,
+  MediaList,
+  MediaListQuery,
+  MediaUploadQuery,
   Meta,
   PACKAGE_VERSION,
   PREFIX,
@@ -33,6 +42,7 @@ import {
   type ErrorBody,
   type ErrorCode,
 } from "./contract.js";
+import { checkUpload, essence, readUpload } from "./media.js";
 
 /** The shape of Cloudflare's `ratelimit` binding, so a site passes its binding straight in. */
 export interface RateLimiter {
@@ -193,7 +203,7 @@ export function createSiteApi(config: SiteApiConfig): SiteApi {
           packageVersion: PACKAGE_VERSION,
           schemaHash: await schemaHash(),
           site: adapter.site,
-          capabilities: CAPABILITIES,
+          capabilities: capabilitiesOf(adapter),
         }, "meta")),
     },
     {
@@ -271,7 +281,69 @@ export function createSiteApi(config: SiteApiConfig): SiteApi {
     },
   ];
 
-  const LATER = /^\/(media|inbox|insight|publications)(\/|$)/;
+  // ---------- media (v0.2.0), mounted only when the site's adapter has it
+
+  const media = adapter.media;
+
+  function mediaId(m: RegExpMatchArray): string {
+    let value: string;
+    try {
+      value = decodeURIComponent(m[1]!);
+    } catch {
+      throw new BadRequest("invalid", "The media id is not valid.");
+    }
+    if (!MediaId.safeParse(value).success) throw new BadRequest("invalid", "The media id is not valid.");
+    return value;
+  }
+
+  if (media) {
+    routes.push(
+      {
+        method: "GET",
+        pattern: /^\/media$/,
+        run: async (_m, url) => json(200, checked(MediaList, await media.list(readQuery(url, MediaListQuery)), "media list")),
+      },
+      {
+        method: "POST",
+        pattern: /^\/media$/,
+        run: async (_m, url, request) => {
+          const query = readQuery(url, MediaUploadQuery);
+          const contentType = essence(request.headers.get("content-type"));
+          // The type first, so a file the site does not accept is never read at all.
+          const wrongType = checkUpload(contentType, null, media.limits);
+          if (wrongType) throw new BadRequest(wrongType.code, wrongType.message);
+          const read = await readUpload(request, media.limits);
+          if (!read.ok) throw new BadRequest(read.refusal.code, read.refusal.message);
+          const wrongBytes = checkUpload(contentType, read.bytes, media.limits);
+          if (wrongBytes) throw new BadRequest(wrongBytes.code, wrongBytes.message);
+          const item = await media.upload({ bytes: read.bytes, contentType, filename: query.filename, alt: query.alt, changeId: query.changeId });
+          return json(201, checked(MediaItem, item, "uploaded media"));
+        },
+      },
+      {
+        method: "GET",
+        pattern: new RegExp(`^/media/${ID}$`),
+        run: async (m) => {
+          const item = await media.get(mediaId(m));
+          if (!item) throw new NotFoundError("No such media.");
+          return json(200, checked(MediaDetail, item, "media"));
+        },
+      },
+      {
+        method: "DELETE",
+        pattern: new RegExp(`^/media/${ID}$`),
+        run: async (m, url) => {
+          const id = mediaId(m);
+          const { changeId } = readQuery(url, MediaDeleteQuery);
+          await media.delete(id, { changeId });
+          return json(200, checked(MediaDeleteResult, { id, deleted: true, changeId }, "media delete"));
+        },
+      },
+    );
+  }
+
+  // Groups a site has not implemented. Media leaves this list when the adapter has it.
+  const LATER = media ? /^\/(inbox|insight|publications)(\/|$)/ : /^\/(media|inbox|insight|publications)(\/|$)/;
 
   async function handle(request: Request): Promise<Response> {
     const url = new URL(request.url);
@@ -318,6 +390,7 @@ export function createSiteApi(config: SiteApiConfig): SiteApi {
         return fail("version-conflict", error.message, { currentVersion: error.currentVersion });
       }
       if (error instanceof NotFoundError) return fail("not-found", error.message);
+      if (error instanceof MediaInUseError) return fail("refused", error.message, { usedBy: error.usedBy });
       if (error instanceof RefusedError) return fail("refused", error.message);
       if (error instanceof ContractBreach) {
         log({ siteApi: "contract-breach", detail: error.message });
