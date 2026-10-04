@@ -73,7 +73,7 @@ The media group arrived in v0.2.0. A site whose adapter has no `media` still ans
 
 Every write carries an `expectedVersion` and a Carrel `changeId`.
 
-- **`expectedVersion`** is opaque to Carrel, and each site decides what a version is. dustinedwards.info uses its head commit. On a save, `null` means create, and the id must be free.
+- **`expectedVersion`** is opaque to Carrel, and each site decides what a version is. It should identify the item's own content, so that a write to one item never makes another look changed. dustinedwards.info uses the git blob sha of the item's own file, so only a change to that item moves it. On a save, `null` means create, and the id must be free.
 - **Refusals.** A stale version is refused with `409 version-conflict` and the site's `currentVersion`. A version given for an id that does not exist is refused the same way, with a null `currentVersion`.
 - **`changeId`** goes into the site's commit or row, so Carrel's authorship record and the site's history join.
 - **First publish.** A first publish from Carrel's key is allowed (Carrel design decision 2). Carrel decides who may trigger it.
