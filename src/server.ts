@@ -33,6 +33,9 @@ import {
   MediaList,
   MediaListQuery,
   MediaTagsInput,
+  MediaTrashEmptyInput,
+  MediaTrashEmptyResult,
+  MAX_TRASH_EMPTY,
   MediaTrashInput,
   MediaUploadQuery,
   MediaWriteResult,
@@ -423,6 +426,36 @@ export function createSiteApi(config: SiteApiConfig): SiteApi {
           const input = await readBody(request, MediaTrashInput);
           const result = await media.restore(id, input);
           return json(200, checked(MediaWriteResult, { id, version: result.version, changeId: input.changeId }, "media restore"));
+        },
+      },
+      {
+        method: "POST",
+        pattern: /^\/media\/trash\/empty$/,
+        run: async (_m, _u, request) => {
+          if (!media.trash || !media.restore) return fail("not-implemented", "This site has no media trash.");
+          const input = await readBody(request, MediaTrashEmptyInput);
+          // Gather first, then delete: a cursor into a list that is shrinking would skip files.
+          const ids: string[] = [];
+          let cursor: string | undefined;
+          do {
+            const page = await media.list({ trashed: "only", limit: 200, ...(cursor ? { cursor } : {}) });
+            for (const item of page.items) if (item.trashedAt) ids.push(item.id);
+            cursor = page.nextCursor ?? undefined;
+          } while (cursor && ids.length <= MAX_TRASH_EMPTY);
+          const more = ids.length > MAX_TRASH_EMPTY;
+          const deleted: string[] = [];
+          const refused: Array<{ id: string; message: string; usedBy?: MediaUse[] }> = [];
+          for (const [n, id] of ids.slice(0, MAX_TRASH_EMPTY).entries()) {
+            try {
+              await media.delete(id, { changeId: `${input.changeId}-${n + 1}` });
+              deleted.push(id);
+            } catch (error) {
+              const failure = describeFailure(error);
+              if (failure.code !== "refused" && failure.code !== "not-found") throw error;
+              refused.push({ id, message: failure.message, ...(failure.usedBy ? { usedBy: failure.usedBy } : {}) });
+            }
+          }
+          return json(200, checked(MediaTrashEmptyResult, { changeId: input.changeId, deleted, refused, more }, "media trash empty"));
         },
       },
       {

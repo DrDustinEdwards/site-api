@@ -13,6 +13,7 @@ import {
   MediaDetail,
   MediaItem,
   MediaList,
+  MediaTrashEmptyResult,
   MediaWriteResult,
   Meta,
   PREFIX,
@@ -24,6 +25,7 @@ import {
   type MediaBulkInput,
   type MediaListQuery,
   type MediaTagsInput,
+  type MediaTrashEmptyInput,
   type MediaTrashInput,
   type PreviewInput,
   type PublishInput,
@@ -127,6 +129,8 @@ export function createSiteClient(config: SiteClientConfig) {
       setTags: (id: string, input: MediaTagsInput) => get(MediaWriteResult, "PUT", `/media/${enc(id)}/tags`, input),
       trash: (id: string, input: MediaTrashInput) => get(MediaWriteResult, "POST", `/media/${enc(id)}/trash`, input),
       restore: (id: string, input: MediaTrashInput) => get(MediaWriteResult, "POST", `/media/${enc(id)}/restore`, input),
+      /** Deletes for good every trashed file the site allows, up to MAX_TRASH_EMPTY; `more` says to send it again. */
+      emptyTrash: (input: MediaTrashEmptyInput) => get(MediaTrashEmptyResult, "POST", "/media/trash/empty", input),
       /** One request for many files; every file's outcome is its own, so check each `ok`. */
       bulk: (input: MediaBulkInput) => get(MediaBulkResult, "POST", "/media/bulk", input),
     },

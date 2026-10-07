@@ -348,6 +348,25 @@ export const MediaBulkResult = z.object({
   results: z.array(MediaBulkOutcome),
 });
 
+/** Empty the trash: delete for good every file in it, each through the site's own reference check. */
+export const MediaTrashEmptyInput = z.object({
+  /** The base of each file's own change id: file n is recorded as `<changeId>-<n>`, so each has its own authorship record. */
+  changeId: ChangeId,
+});
+
+/** The most files one empty-trash request deletes. When more remain, `more` is true and the caller sends it again. */
+export const MAX_TRASH_EMPTY = 100;
+
+export const MediaTrashEmptyResult = z.object({
+  changeId: ChangeId,
+  /** The ids deleted for good. */
+  deleted: z.array(MediaId),
+  /** Trashed files the site would not delete (still used by a post, for one); they stay in the trash. */
+  refused: z.array(z.object({ id: MediaId, message: z.string(), usedBy: z.array(MediaUse).optional() })),
+  /** True when the trash held more than one request handles. */
+  more: z.boolean(),
+});
+
 export const ErrorCode = z.enum([
   "unauthorized",
   "rate-limited",
@@ -410,6 +429,8 @@ export type MediaBulkItem = z.infer<typeof MediaBulkItem>;
 export type MediaBulkInput = z.infer<typeof MediaBulkInput>;
 export type MediaBulkOutcome = z.infer<typeof MediaBulkOutcome>;
 export type MediaBulkResult = z.infer<typeof MediaBulkResult>;
+export type MediaTrashEmptyInput = z.infer<typeof MediaTrashEmptyInput>;
+export type MediaTrashEmptyResult = z.infer<typeof MediaTrashEmptyResult>;
 export type ErrorBody = z.infer<typeof ErrorBody>;
 
 /**
@@ -418,7 +439,7 @@ export type ErrorBody = z.infer<typeof ErrorBody>;
  * media group arrived in v0.2.0; a site whose adapter has no `media` still answers it 501. v0.3.0
  * adds the source at a revision and an optional content delete (501 when the adapter has none).
  * v0.4.0 adds media writes, each optional per site (501 when the adapter lacks the method): alt
- * text, tags, trash and restore, and one bulk route that applies any of them to many files.
+ * text, tags, trash, restore and empty-trash, and one bulk route that applies any of them to many files.
  */
 export const ROUTES = [
   { group: "meta", method: "GET", path: "/meta", response: "Meta" },
@@ -441,6 +462,7 @@ export const ROUTES = [
   { group: "media", method: "PUT", path: "/media/:id/tags", request: "MediaTagsInput", response: "MediaWriteResult" },
   { group: "media", method: "POST", path: "/media/:id/trash", request: "MediaTrashInput", response: "MediaWriteResult" },
   { group: "media", method: "POST", path: "/media/:id/restore", request: "MediaTrashInput", response: "MediaWriteResult" },
+  { group: "media", method: "POST", path: "/media/trash/empty", request: "MediaTrashEmptyInput", response: "MediaTrashEmptyResult" },
   { group: "media", method: "POST", path: "/media/bulk", request: "MediaBulkInput", response: "MediaBulkResult" },
   { group: "inbox", method: "*", path: "/inbox/*", response: "not-implemented" },
   { group: "insight", method: "*", path: "/insight/*", response: "not-implemented" },
@@ -453,6 +475,7 @@ const HASHED = {
   PreviewInput, ErrorBody, MediaItem, MediaDetail, MediaListQuery, MediaList, MediaUploadQuery,
   MediaDeleteQuery, MediaDeleteResult, RevisionSource, ContentDeleteQuery, ContentDeleteResult,
   MediaAltInput, MediaTagsInput, MediaTrashInput, MediaWriteResult, MediaBulkInput, MediaBulkResult,
+  MediaTrashEmptyInput, MediaTrashEmptyResult,
 };
 
 /** JSON with sorted keys, so the hash depends on the contract and not on property order. */
