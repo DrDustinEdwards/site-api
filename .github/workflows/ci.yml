@@ -1,0 +1,33 @@
+# site-api's checks, on every push and every pull request. Every site and Carrel install this package
+# by git tag, so a release is only as good as these. No secrets: the tests run in Node against the
+# in-memory test site, and the conformance suite is part of `npm test`.
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      # Actions are pinned by commit sha, as the portfolio policy asks. The comment names the tag.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          # The version in package.json's engines field.
+          node-version-file: package.json
+          cache: npm
+      # `npm ci` runs the package's prepare script, which builds dist/.
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run build
+      - run: npm test
