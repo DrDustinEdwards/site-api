@@ -112,9 +112,19 @@ async function sha256(text: string): Promise<Uint8Array> {
   return new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text)));
 }
 
-/** Compares digests, not the keys, so the time taken says nothing about the key's length or prefix. */
+/** The Workers runtime's constant-time compare. Node, which runs the tests, has no such method. */
+type TimingSafe = { timingSafeEqual?: (a: Uint8Array, b: Uint8Array) => boolean };
+
+/**
+ * Compares digests, not the keys, so the time taken says nothing about the key's length or prefix.
+ * Both digests are 32 bytes. The Workers runtime compares them with crypto.subtle.timingSafeEqual
+ * (Cloudflare's Workers best practices, "Secret comparison"); where it is missing a loop that
+ * visits every byte does the same.
+ */
 export async function keysMatch(presented: string, expected: string): Promise<boolean> {
   const [a, b] = await Promise.all([sha256(presented), sha256(expected)]);
+  const native = (crypto.subtle as TimingSafe).timingSafeEqual;
+  if (native) return native.call(crypto.subtle, a, b);
   let diff = 0;
   for (let i = 0; i < a.length; i++) diff |= a[i]! ^ b[i]!;
   return diff === 0;
