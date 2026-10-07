@@ -3,7 +3,7 @@
 // by it. The one exception is opt-in (probeMediaUpload): it uploads a file of its own, then deletes
 // that file and no other.
 
-import { ContentList, ErrorBody, RevisionList, RevisionSource, MediaDeleteResult, MediaDetail, MediaItem, MediaList, Meta, PREFIX, schemaHash, type Meta as MetaType } from "./contract.js";
+import { MediaBulkResult, ContentList, ErrorBody, RevisionList, RevisionSource, MediaDeleteResult, MediaDetail, MediaItem, MediaList, Meta, PREFIX, schemaHash, type Meta as MetaType } from "./contract.js";
 
 export interface ConformanceConfig {
   baseUrl: string;
@@ -218,6 +218,65 @@ export async function runConformance(config: ConformanceConfig): Promise<Conform
         if (code !== "invalid") throw new Error(`error code ${code ?? "missing"}, expected invalid`);
         return "400 invalid";
       });
+
+      // v0.4.0 writes. Each is optional: where the site declares the capability, the probe is refused as
+      // a real error; where it does not, the same request must answer 501. Nothing here can change a file.
+      const probeId = encodeURIComponent(MEDIA_PROBE_ID);
+      const send = (method: string, path: string, body: unknown) =>
+        doFetch(`${origin}${PREFIX}${path}`, { method, headers: { ...auth, "content-type": "application/json" }, body: JSON.stringify(body) });
+      const stale = { expectedVersion: STALE_VERSION, changeId: "conformance-probe" };
+
+      async function refusedOrAbsent(offered: boolean, response: Response, status: number, code: string, what: string) {
+        if (!offered) {
+          expectStatus(response, 501, `${what} without the capability`);
+          const got = await errorCode(response);
+          if (got !== "not-implemented") throw new Error(`error code ${got ?? "missing"}, expected not-implemented`);
+          return "501 not-implemented";
+        }
+        expectStatus(response, status, what);
+        const got = await errorCode(response);
+        if (got !== code) throw new Error(`error code ${got ?? "missing"}, expected ${code}`);
+        return `${status} ${code}`;
+      }
+
+      const writes: Array<[string, boolean | undefined, string, string, unknown]> = [
+        ["alt", capabilities.mediaAlt, "PUT", "alt", { alt: "probe", ...stale }],
+        ["tags", capabilities.mediaTags, "PUT", "tags", { tags: ["probe"], ...stale }],
+        ["trash", capabilities.mediaTrash, "POST", "trash", stale],
+        ["restore", capabilities.mediaTrash, "POST", "restore", stale],
+      ];
+      for (const [name, offered, method, route, body] of writes) {
+        await check(`media ${name} of an unknown id: refused, or not implemented where the site lacks it`, async () =>
+          refusedOrAbsent(Boolean(offered), await send(method, `/media/${probeId}/${route}`, body), 404, "not-found", `media ${name}`));
+      }
+
+      await check("media alt with a body outside the contract: refused, or not implemented where the site lacks it", async () =>
+        refusedOrAbsent(Boolean(capabilities.mediaAlt), await send("PUT", `/media/${probeId}/alt`, { alt: 7 }), 400, "invalid", "malformed alt"));
+
+      await check("media bulk: an unknown id is that file's own not-found, and the request answers 200", async () => {
+        const response = await send("POST", "/media/bulk", { op: "trash", items: [{ id: MEDIA_PROBE_ID, ...stale }] });
+        if (!capabilities.mediaTrash) return refusedOrAbsent(false, response, 200, "", "media bulk trash");
+        expectStatus(response, 200, "media bulk");
+        const result = MediaBulkResult.parse(await response.json());
+        const only = result.results[0];
+        if (result.results.length !== 1 || !only || only.ok || only.error !== "not-found") {
+          throw new Error(`expected one failed not-found outcome, got ${JSON.stringify(result.results)}`);
+        }
+        return "200, not-found for the file";
+      });
+
+      await check("media bulk tag op with no tags: refused, or not implemented where the site lacks tags", async () =>
+        refusedOrAbsent(
+          Boolean(capabilities.mediaTags),
+          await send("POST", "/media/bulk", { op: "add-tags", items: [{ id: MEDIA_PROBE_ID, ...stale }] }),
+          400,
+          "invalid",
+          "bulk add-tags without tags",
+        ));
+
+      // Empty-trash deletes real files, so only its refusal of a malformed body is probed.
+      await check("media empty trash with a body outside the contract: refused, or not implemented where the site has no trash", async () =>
+        refusedOrAbsent(Boolean(capabilities.mediaTrash), await send("POST", "/media/trash/empty", {}), 400, "invalid", "malformed empty trash"));
     }
 
     if (config.probeMediaUpload && capabilities.mediaUpload?.types.includes("image/png")) {
