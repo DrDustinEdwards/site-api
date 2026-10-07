@@ -8,7 +8,7 @@ import { z } from "zod";
 export const PACKAGE_VERSION = "0.2.0";
 export const PREFIX = "/api/carrel/v1";
 
-/** Opaque to Carrel: each site decides what a version is (dustinedwards.info uses the head commit). */
+/** Opaque to Carrel: each site decides what a version is. It should identify the item's own content (dustinedwards.info uses the git blob sha of the item's own file). */
 export const Version = z.string().min(1).max(200);
 
 /** Carrel's id for one change, carried into the site's commit or row so the two records join. */
