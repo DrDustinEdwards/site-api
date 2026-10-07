@@ -5,7 +5,7 @@
 
 import { z } from "zod";
 
-export const PACKAGE_VERSION = "0.2.0";
+export const PACKAGE_VERSION = "0.3.0";
 export const PREFIX = "/api/carrel/v1";
 
 /** Opaque to Carrel: each site decides what a version is. It should identify the item's own content (dustinedwards.info uses the git blob sha of the item's own file). */
@@ -51,6 +51,8 @@ export const Capabilities = z.object({
   publications: z.boolean(),
   /** Present when `media` is true (v0.2.0). Optional, so a v0.1.0 reader parses a v0.2.0 meta. */
   mediaUpload: MediaUploadLimits.optional(),
+  /** True when the site can delete content (v0.3.0). Absent or false: `DELETE /content/:id` answers 501. */
+  contentDelete: z.boolean().optional(),
 });
 
 export const Meta = z.object({
@@ -142,6 +144,28 @@ export const Diff = z.object({
   to: Version,
   /** A unified diff of the source, from `from` to `to`. */
   patch: z.string(),
+});
+
+/** One revision's source, so each revision in the list can be opened (v0.3.0). */
+export const RevisionSource = z.object({
+  id: ContentId,
+  version: Version,
+  source: Source,
+});
+
+/**
+ * Deleting an item (v0.3.0, optional per site). Sent as a query, since a DELETE carries no body:
+ * the version the caller last saw, and Carrel's change id.
+ */
+export const ContentDeleteQuery = z.object({
+  expectedVersion: Version,
+  changeId: ChangeId,
+});
+
+export const ContentDeleteResult = z.object({
+  id: ContentId,
+  deleted: z.literal(true),
+  changeId: ChangeId,
 });
 
 /** id, when sent, lets the site render the draft at that item's own route. */
@@ -264,6 +288,9 @@ export type WriteResult = z.infer<typeof WriteResult>;
 export type Revision = z.infer<typeof Revision>;
 export type RevisionList = z.infer<typeof RevisionList>;
 export type Diff = z.infer<typeof Diff>;
+export type RevisionSource = z.infer<typeof RevisionSource>;
+export type ContentDeleteQuery = z.infer<typeof ContentDeleteQuery>;
+export type ContentDeleteResult = z.infer<typeof ContentDeleteResult>;
 export type PreviewInput = z.infer<typeof PreviewInput>;
 export type ErrorCode = z.infer<typeof ErrorCode>;
 export type MediaUploadLimits = z.infer<typeof MediaUploadLimits>;
@@ -279,7 +306,8 @@ export type ErrorBody = z.infer<typeof ErrorBody>;
 /**
  * Every route, relative to PREFIX. Groups declared for later stages answer 501 until a site
  * implements them, so a route's existence is part of the contract even before its body is. The
- * media group arrived in v0.2.0; a site whose adapter has no `media` still answers it 501.
+ * media group arrived in v0.2.0; a site whose adapter has no `media` still answers it 501. v0.3.0
+ * adds the source at a revision and an optional content delete (501 when the adapter has none).
  */
 export const ROUTES = [
   { group: "meta", method: "GET", path: "/meta", response: "Meta" },
@@ -291,6 +319,8 @@ export const ROUTES = [
   { group: "content", method: "POST", path: "/content/:id/unpublish", request: "UnpublishInput", response: "WriteResult" },
   { group: "content", method: "GET", path: "/content/:id/revisions", response: "RevisionList" },
   { group: "content", method: "GET", path: "/content/:id/diff", query: "DiffQuery", response: "Diff" },
+  { group: "content", method: "GET", path: "/content/:id/revisions/:version", response: "RevisionSource" },
+  { group: "content", method: "DELETE", path: "/content/:id", query: "ContentDeleteQuery", response: "ContentDeleteResult" },
   { group: "preview", method: "POST", path: "/preview", request: "PreviewInput", response: "text/html" },
   { group: "media", method: "GET", path: "/media", query: "MediaListQuery", response: "MediaList" },
   { group: "media", method: "POST", path: "/media", query: "MediaUploadQuery", request: "the file's bytes", response: "MediaItem" },
@@ -305,7 +335,7 @@ const HASHED = {
   Meta, ContentSummary, ContentDoc, ListQuery, ContentList, SaveDraftInput, PublishInput,
   ScheduleInput, UnpublishInput, WriteResult, Revision, RevisionList, DiffQuery, Diff,
   PreviewInput, ErrorBody, MediaItem, MediaDetail, MediaListQuery, MediaList, MediaUploadQuery,
-  MediaDeleteQuery, MediaDeleteResult,
+  MediaDeleteQuery, MediaDeleteResult, RevisionSource, ContentDeleteQuery, ContentDeleteResult,
 };
 
 /** JSON with sorted keys, so the hash depends on the contract and not on property order. */

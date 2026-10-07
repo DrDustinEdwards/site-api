@@ -34,12 +34,19 @@ export interface ContentAdapter {
   /** A first publish from Carrel's key is allowed (design decision 2): Carrel decides who triggers it. */
   publish(id: string, input: PublishInput): Promise<WriteResult>;
   schedule(id: string, input: ScheduleInput): Promise<WriteResult>;
-  /** Unpublish returns the item to draft. Deleting stays in the site's own history, never here. */
+  /** Unpublish returns the item to draft. A delete is the separate, optional `delete` below. */
   unpublish(id: string, input: UnpublishInput): Promise<WriteResult>;
   /** Newest first. null when the id does not exist. */
   revisions(id: string): Promise<Revision[] | null>;
   /** The source as it was at a version; null when the id or the version does not exist. */
   revisionSource(id: string, version: string): Promise<string | null>;
+  /**
+   * Optional (v0.3.0): deletes the item. Throws VersionConflictError when expectedVersion is not
+   * what the site holds, NotFoundError for a missing id, and RefusedError when the site's own rules
+   * refuse. A site without it answers `DELETE /content/:id` with 501. The write and whatever the
+   * site must do afterward (its cache purge, say) are one unit, so the site runs them together here.
+   */
+  delete?(id: string, input: { expectedVersion: string; changeId: string }): Promise<void>;
 }
 
 export interface PreviewAdapter {
@@ -97,6 +104,7 @@ export function capabilitiesOf(adapter: SiteAdapter): Capabilities {
     insight: false,
     publications: false,
     ...(adapter.media ? { mediaUpload: adapter.media.limits } : {}),
+    ...(adapter.content.delete ? { contentDelete: true } : {}),
   };
 }
 

@@ -175,7 +175,7 @@ describe("PLANT: an unknown route", () => {
 
   it("refuses a known path with the wrong method", async () => {
     const { api } = site();
-    const response = await api.handle(req("/api/carrel/v1/content/a", { method: "DELETE" }));
+    const response = await api.handle(req("/api/carrel/v1/content/a", { method: "PATCH" }));
     expect(response.status).toBe(405);
   });
 

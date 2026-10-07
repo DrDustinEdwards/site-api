@@ -3,7 +3,7 @@
 // by it. The one exception is opt-in (probeMediaUpload): it uploads a file of its own, then deletes
 // that file and no other.
 
-import { ContentList, ErrorBody, MediaDeleteResult, MediaDetail, MediaItem, MediaList, Meta, PREFIX, schemaHash, type Meta as MetaType } from "./contract.js";
+import { ContentList, ErrorBody, RevisionList, RevisionSource, MediaDeleteResult, MediaDetail, MediaItem, MediaList, Meta, PREFIX, schemaHash, type Meta as MetaType } from "./contract.js";
 
 export interface ConformanceConfig {
   baseUrl: string;
@@ -135,6 +135,49 @@ export async function runConformance(config: ConformanceConfig): Promise<Conform
       const code = await errorCode(response);
       if (code !== "version-conflict") throw new Error(`error code ${code ?? "missing"}, expected version-conflict`);
       return "409 version-conflict";
+    });
+  }
+
+  // ---------- v0.3.0: the source at a revision, and the optional content delete
+
+  await check("revision source of an unknown id: not found", async () => {
+    const response = await doFetch(`${origin}${PREFIX}/content/${PROBE_ID}/revisions/${STALE_VERSION}`, { headers: auth });
+    expectStatus(response, 404, "unknown revision");
+    const code = await errorCode(response);
+    if (code !== "not-found") throw new Error(`error code ${code ?? "missing"}, expected not-found`);
+    return "404 not-found";
+  });
+
+  await check("revision source: the newest revision of the first item opens", async () => {
+    const list = ContentList.parse(await (await doFetch(`${origin}${PREFIX}/content?limit=1`, { headers: auth })).json());
+    const first = list.items[0];
+    if (!first) return "no items to read a revision of";
+    const revisions = RevisionList.parse(await (await doFetch(`${origin}${PREFIX}/content/${encodeURIComponent(first.id)}/revisions`, { headers: auth })).json());
+    const newest = revisions.items[0];
+    if (!newest) return `${first.id} has no revisions`;
+    const response = await doFetch(`${origin}${PREFIX}/content/${encodeURIComponent(first.id)}/revisions/${encodeURIComponent(newest.version)}`, { headers: auth });
+    expectStatus(response, 200, "revision source");
+    const opened = RevisionSource.parse(await response.json());
+    if (opened.version !== newest.version) throw new Error(`asked for ${newest.version}, got ${opened.version}`);
+    return `${first.id} at ${newest.version}`;
+  });
+
+  if (config.probeWrites !== false) {
+    // Only ever the probe id: a site that wrongly accepts one of these deletes nothing real.
+    const deleteUrl = `${origin}${PREFIX}/content/${PROBE_ID}?expectedVersion=${STALE_VERSION}&changeId=conformance-probe`;
+    await check("content delete without a key: refused", async () => {
+      expectStatus(await doFetch(deleteUrl, { method: "DELETE" }), 401, "delete without a key");
+      expectStatus(await doFetch(deleteUrl, { method: "DELETE", headers: { authorization: `Bearer ${config.key}x` } }), 401, "delete with a wrong key");
+      return "401";
+    });
+    await check("content delete of an unknown id: refused, or not implemented where the site has no delete", async () => {
+      const response = await doFetch(deleteUrl, { method: "DELETE", headers: auth });
+      const offered = (meta as MetaType | null)?.capabilities.contentDelete === true;
+      expectStatus(response, offered ? 404 : 501, offered ? "unknown content delete" : "content delete on a site without it");
+      const code = await errorCode(response);
+      const expected = offered ? "not-found" : "not-implemented";
+      if (code !== expected) throw new Error(`error code ${code ?? "missing"}, expected ${expected}`);
+      return offered ? "404 not-found" : "501 not-implemented";
     });
   }
 

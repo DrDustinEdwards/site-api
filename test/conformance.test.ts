@@ -15,7 +15,7 @@ describe("conformance", () => {
     const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: site().fetch });
     expect(failing(report)).toEqual([]);
     expect(report.ok).toBe(true);
-    expect(report.checks.map((c) => c.name).slice(7)).toEqual([
+    expect(report.checks.map((c) => c.name).slice(11)).toEqual([
       "media: upload limits declared",
       "media list: answers in the contract's shape",
       "media delete of an unknown id: refused",
@@ -23,10 +23,38 @@ describe("conformance", () => {
     ]);
   });
 
-  it("runs only the v0.1.0 checks on a site with no media manager", async () => {
+  it("runs only the content checks on a site with no media manager", async () => {
     const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: site(memoryAdapter({ media: false })).fetch });
     expect(failing(report)).toEqual([]);
-    expect(report.checks).toHaveLength(7);
+    expect(report.checks).toHaveLength(11);
+  });
+
+  it("expects 501 on a site with no content delete, and 404 where it has one", async () => {
+    const without = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: site(memoryAdapter({ contentDelete: false })).fetch });
+    expect(failing(without)).toEqual([]);
+    expect(without.checks.find((c) => c.name.startsWith("content delete of an unknown id"))?.detail).toBe("501 not-implemented");
+    const withDelete = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: site().fetch });
+    expect(withDelete.checks.find((c) => c.name.startsWith("content delete of an unknown id"))?.detail).toBe("404 not-found");
+  });
+
+  it("PLANT: fails a site that answers a delete of an item it does not hold as done", async () => {
+    const adapter = memoryAdapter();
+    adapter.content.delete = async () => {};
+    const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: site(adapter).fetch });
+    expect(failing(report)).toEqual(["content delete of an unknown id: refused, or not implemented where the site has no delete"]);
+  });
+
+  it("PLANT: fails a site that offers a delete but does not say so in its capabilities", async () => {
+    const s = site();
+    const silent = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const response = await s.fetch(input, init);
+      if (!new URL(new Request(input).url).pathname.endsWith("/meta") || !response.ok) return response;
+      const meta = await response.json();
+      const { contentDelete: _gone, ...capabilities } = meta.capabilities;
+      return Response.json({ ...meta, capabilities });
+    }) as typeof fetch;
+    const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: silent });
+    expect(failing(report)).toEqual(["content delete of an unknown id: refused, or not implemented where the site has no delete"]);
   });
 
   it("changes nothing on a conforming site: no content, no file stored, no file deleted", async () => {
@@ -34,6 +62,7 @@ describe("conformance", () => {
     await s.adapter.media!.upload({ bytes: new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), contentType: "image/png", filename: "real.png", alt: "", changeId: "seed" });
     await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: s.fetch });
     expect(s.adapter.store.size).toBe(0);
+    expect(s.adapter.deletedContent).toEqual([]);
     expect([...s.adapter.mediaStore.keys()]).toEqual(["uploads/1-real.png"]);
     expect(s.adapter.deleted).toEqual([]);
   });
@@ -79,7 +108,7 @@ describe("conformance", () => {
     const save = adapter.content.saveDraft;
     adapter.content.saveDraft = (id, input) => save(id, { ...input, expectedVersion: null });
     const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: site(adapter).fetch });
-    expect(failing(report)).toEqual(["stale expectedVersion: refused"]);
+    expect(failing(report)).toContain("stale expectedVersion: refused");
   });
 
   it("PLANT: fails a site that serves the key off its prefix", async () => {

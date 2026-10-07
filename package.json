@@ -1,6 +1,6 @@
 {
   "name": "@dustinedwards/site-api",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "description": "The standard site API every Dustin Edwards site includes so Carrel can list, edit and publish its content.",
   "license": "MIT",
