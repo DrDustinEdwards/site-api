@@ -5,7 +5,7 @@
 
 import { z } from "zod";
 
-export const PACKAGE_VERSION = "0.3.0";
+export const PACKAGE_VERSION = "0.4.0";
 export const PREFIX = "/api/carrel/v1";
 
 /** Opaque to Carrel: each site decides what a version is. It should identify the item's own content (dustinedwards.info uses the git blob sha of the item's own file). */
@@ -53,6 +53,12 @@ export const Capabilities = z.object({
   mediaUpload: MediaUploadLimits.optional(),
   /** True when the site can delete content (v0.3.0). Absent or false: `DELETE /content/:id` answers 501. */
   contentDelete: z.boolean().optional(),
+  /** True when the site can edit a file's alt text after upload (v0.4.0). Absent or false: the alt route answers 501. */
+  mediaAlt: z.boolean().optional(),
+  /** True when the site keeps tags on files (v0.4.0). Absent or false: the tags route answers 501. */
+  mediaTags: z.boolean().optional(),
+  /** True when the site has a media trash: soft delete and restore (v0.4.0). Absent or false: those routes answer 501. */
+  mediaTrash: z.boolean().optional(),
 });
 
 export const Meta = z.object({
@@ -196,6 +202,12 @@ export const MediaUse = z.object({
   detail: z.string().max(500),
 });
 
+/** A tag: lower case words joined by single hyphens, so the same tag is always spelled one way. */
+export const MediaTag = z.string().min(1).max(32).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/);
+
+/** A file's whole tag set (v0.4.0). The most any file carries is 12. */
+export const MediaTags = z.array(MediaTag).max(12);
+
 export const MediaItem = z.object({
   id: MediaId,
   /** Where the site serves it: a path on the site, such as /media/2026/09/photo.webp, or a full URL. */
@@ -210,6 +222,15 @@ export const MediaItem = z.object({
   uploadedAt: Timestamp.nullable(),
   /** False for files the site will never delete through this API, such as its own static assets. */
   deletable: z.boolean(),
+  /**
+   * Opaque, like a content version (v0.4.0): it identifies the file's editable metadata, so alt,
+   * tags and trash state each move it. Present on a site that offers any media write.
+   */
+  version: Version.optional(),
+  /** The file's tags (v0.4.0), present on a site that keeps them. */
+  tags: MediaTags.optional(),
+  /** When the file was moved to the trash (v0.4.0); null or absent when it is in the library. */
+  trashedAt: Timestamp.nullable().optional(),
 });
 
 /** One file with the places it is used: what a delete would be refused over. */
@@ -219,6 +240,10 @@ export const MediaDetail = MediaItem.extend({
 
 export const MediaListQuery = z.object({
   q: z.string().max(200).optional(),
+  /** Only files carrying this tag (v0.4.0). A site without tags ignores it. */
+  tag: MediaTag.optional(),
+  /** "only" lists the trash (v0.4.0). Without it the trash is left out. A site without a trash ignores it. */
+  trashed: z.enum(["only"]).optional(),
   cursor: z.string().max(500).optional(),
   limit: z.coerce.number().int().min(1).max(200).default(50),
 });
@@ -246,6 +271,81 @@ export const MediaDeleteResult = z.object({
   id: MediaId,
   deleted: z.literal(true),
   changeId: ChangeId,
+});
+
+// ---------- media writes (v0.4.0)
+
+/** Every media metadata write names the version the caller last saw and Carrel's change id. */
+export const MediaAltInput = z.object({
+  alt: z.string().max(2000),
+  expectedVersion: Version,
+  changeId: ChangeId,
+});
+
+/** The file's whole tag set after the write. */
+export const MediaTagsInput = z.object({
+  tags: MediaTags,
+  expectedVersion: Version,
+  changeId: ChangeId,
+});
+
+/** The body of a trash and of a restore. */
+export const MediaTrashInput = z.object({
+  expectedVersion: Version,
+  changeId: ChangeId,
+});
+
+export const MediaWriteResult = z.object({
+  id: MediaId,
+  /** The file's version after the write. */
+  version: Version,
+  changeId: ChangeId,
+});
+
+export const MEDIA_BULK_OPS = ["trash", "restore", "delete", "add-tags", "remove-tags"] as const;
+export const MAX_MEDIA_BULK = 100;
+
+/** One file in a bulk write, with its own change id so each file has its own authorship record. */
+export const MediaBulkItem = z.object({
+  id: MediaId,
+  /** Required for every op but delete, which is the site's reference check and carries no version. */
+  expectedVersion: Version.optional(),
+  changeId: ChangeId,
+});
+
+export const MediaBulkInput = z.object({
+  op: z.enum(MEDIA_BULK_OPS),
+  /** For add-tags and remove-tags only: the tags to add to, or take from, each file. */
+  tags: MediaTags.optional(),
+  items: z.array(MediaBulkItem).min(1).max(MAX_MEDIA_BULK),
+});
+
+/** The outcome of one file. A refusal for one file never stops the others. */
+export const MediaBulkOutcome = z.discriminatedUnion("ok", [
+  z.object({
+    ok: z.literal(true),
+    id: MediaId,
+    changeId: ChangeId,
+    /** The file's version after the write; absent after a delete. */
+    version: Version.optional(),
+  }),
+  z.object({
+    ok: z.literal(false),
+    id: MediaId,
+    changeId: ChangeId,
+    error: z.enum(["not-found", "version-conflict", "refused", "invalid", "internal"]),
+    message: z.string(),
+    /** On version-conflict: what the site holds now. */
+    currentVersion: Version.nullable().optional(),
+    /** On a refused delete: every place the file is used. */
+    usedBy: z.array(MediaUse).optional(),
+  }),
+]);
+
+/** The request as a whole answers 200 whenever it was well formed: each file's result is its own. */
+export const MediaBulkResult = z.object({
+  op: z.enum(MEDIA_BULK_OPS),
+  results: z.array(MediaBulkOutcome),
 });
 
 export const ErrorCode = z.enum([
@@ -301,6 +401,15 @@ export type MediaListQuery = z.infer<typeof MediaListQuery>;
 export type MediaList = z.infer<typeof MediaList>;
 export type MediaUploadQuery = z.infer<typeof MediaUploadQuery>;
 export type MediaDeleteResult = z.infer<typeof MediaDeleteResult>;
+export type MediaTags = z.infer<typeof MediaTags>;
+export type MediaAltInput = z.infer<typeof MediaAltInput>;
+export type MediaTagsInput = z.infer<typeof MediaTagsInput>;
+export type MediaTrashInput = z.infer<typeof MediaTrashInput>;
+export type MediaWriteResult = z.infer<typeof MediaWriteResult>;
+export type MediaBulkItem = z.infer<typeof MediaBulkItem>;
+export type MediaBulkInput = z.infer<typeof MediaBulkInput>;
+export type MediaBulkOutcome = z.infer<typeof MediaBulkOutcome>;
+export type MediaBulkResult = z.infer<typeof MediaBulkResult>;
 export type ErrorBody = z.infer<typeof ErrorBody>;
 
 /**
@@ -308,6 +417,8 @@ export type ErrorBody = z.infer<typeof ErrorBody>;
  * implements them, so a route's existence is part of the contract even before its body is. The
  * media group arrived in v0.2.0; a site whose adapter has no `media` still answers it 501. v0.3.0
  * adds the source at a revision and an optional content delete (501 when the adapter has none).
+ * v0.4.0 adds media writes, each optional per site (501 when the adapter lacks the method): alt
+ * text, tags, trash and restore, and one bulk route that applies any of them to many files.
  */
 export const ROUTES = [
   { group: "meta", method: "GET", path: "/meta", response: "Meta" },
@@ -326,6 +437,11 @@ export const ROUTES = [
   { group: "media", method: "POST", path: "/media", query: "MediaUploadQuery", request: "the file's bytes", response: "MediaItem" },
   { group: "media", method: "GET", path: "/media/:id", response: "MediaDetail" },
   { group: "media", method: "DELETE", path: "/media/:id", query: "MediaDeleteQuery", response: "MediaDeleteResult" },
+  { group: "media", method: "PUT", path: "/media/:id/alt", request: "MediaAltInput", response: "MediaWriteResult" },
+  { group: "media", method: "PUT", path: "/media/:id/tags", request: "MediaTagsInput", response: "MediaWriteResult" },
+  { group: "media", method: "POST", path: "/media/:id/trash", request: "MediaTrashInput", response: "MediaWriteResult" },
+  { group: "media", method: "POST", path: "/media/:id/restore", request: "MediaTrashInput", response: "MediaWriteResult" },
+  { group: "media", method: "POST", path: "/media/bulk", request: "MediaBulkInput", response: "MediaBulkResult" },
   { group: "inbox", method: "*", path: "/inbox/*", response: "not-implemented" },
   { group: "insight", method: "*", path: "/insight/*", response: "not-implemented" },
   { group: "publications", method: "*", path: "/publications/*", response: "not-implemented" },
@@ -336,6 +452,7 @@ const HASHED = {
   ScheduleInput, UnpublishInput, WriteResult, Revision, RevisionList, DiffQuery, Diff,
   PreviewInput, ErrorBody, MediaItem, MediaDetail, MediaListQuery, MediaList, MediaUploadQuery,
   MediaDeleteQuery, MediaDeleteResult, RevisionSource, ContentDeleteQuery, ContentDeleteResult,
+  MediaAltInput, MediaTagsInput, MediaTrashInput, MediaWriteResult, MediaBulkInput, MediaBulkResult,
 };
 
 /** JSON with sorted keys, so the hash depends on the contract and not on property order. */

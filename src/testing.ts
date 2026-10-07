@@ -16,6 +16,8 @@ export interface MemoryAdapterOptions {
   media?: MediaUploadLimits | false;
   /** false for a site whose adapter has no content delete (its route then answers 501). On by default. */
   contentDelete?: boolean;
+  /** false for a media manager with no alt, tag or trash writes (a v0.2.0 site): those routes then answer 501. On by default. */
+  mediaWrites?: boolean;
 }
 
 /** What the reference adapter accepts, like dustinedwards.info's own list, at a test-sized limit. */
@@ -101,6 +103,24 @@ export function memoryAdapter(
   const deleted: string[] = [];
   const deletedContent: string[] = [];
   let mediaCounter = 0;
+  let mediaVersion = 0;
+  const nextMediaVersion = () => `m${++mediaVersion}`;
+  const mediaWrites = options.mediaWrites !== false;
+
+  /** The stored file, or NotFoundError; a stale expectedVersion is VersionConflictError. */
+  function heldMedia(id: string, expectedVersion: string): StoredMedia {
+    const stored = mediaStore.get(id);
+    if (!stored) throw new NotFoundError("No such media.");
+    if (stored.item.version !== expectedVersion) throw new VersionConflictError(stored.item.version ?? null, "The file changed since it was loaded.");
+    return stored;
+  }
+
+  /** Every metadata write moves the version, so alt, tags and trash each count as a change. */
+  function touchMedia(stored: StoredMedia, changes: Partial<MediaItem>): { version: string } {
+    const version = nextMediaVersion();
+    stored.item = { ...stored.item, ...changes, version };
+    return { version };
+  }
 
   /** The site's reference check: every post whose source carries the file's URL, as the real site scans. */
   function usesOf(id: string): MediaUse[] {
@@ -124,6 +144,8 @@ export function memoryAdapter(
             const needle = query.q?.toLowerCase();
             const all = [...mediaStore.values()]
               .map((m) => m.item)
+              .filter((i) => (query.trashed === "only" ? Boolean(i.trashedAt) : !i.trashedAt))
+              .filter((i) => !query.tag || (i.tags ?? []).includes(query.tag))
               .filter((i) => !needle || [i.id, i.filename ?? "", i.alt].some((t) => t.toLowerCase().includes(needle)))
               .reverse();
             const start = query.cursor ? Number(query.cursor) : 0;
@@ -148,6 +170,7 @@ export function memoryAdapter(
               alt: input.alt,
               uploadedAt: now().toISOString(),
               deletable: true,
+              ...(mediaWrites ? { version: nextMediaVersion(), tags: [], trashedAt: null } : {}),
             };
             mediaStore.set(id, { item, bytes: input.bytes });
             return item;
@@ -159,6 +182,22 @@ export function memoryAdapter(
             mediaStore.delete(id);
             deleted.push(id);
           },
+          ...(mediaWrites
+            ? {
+                async setAlt(id: string, input: { alt: string; expectedVersion: string; changeId: string }) {
+                  return touchMedia(heldMedia(id, input.expectedVersion), { alt: input.alt });
+                },
+                async setTags(id: string, input: { tags: string[]; expectedVersion: string; changeId: string }) {
+                  return touchMedia(heldMedia(id, input.expectedVersion), { tags: input.tags });
+                },
+                async trash(id: string, input: { expectedVersion: string; changeId: string }) {
+                  return touchMedia(heldMedia(id, input.expectedVersion), { trashedAt: now().toISOString() });
+                },
+                async restore(id: string, input: { expectedVersion: string; changeId: string }) {
+                  return touchMedia(heldMedia(id, input.expectedVersion), { trashedAt: null });
+                },
+              }
+            : {}),
         };
 
   return {

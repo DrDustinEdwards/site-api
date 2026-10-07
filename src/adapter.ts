@@ -81,6 +81,19 @@ export interface MediaAdapter {
    * site could not check is never made.
    */
   delete(id: string, input: { changeId: string }): Promise<void>;
+  /**
+   * Optional (v0.4.0), each answering 501 when absent. Every one throws VersionConflictError when
+   * expectedVersion is not what the site holds, NotFoundError for a missing id and RefusedError when
+   * the site's own rules refuse, and returns the file's version after the write. A file's version
+   * identifies its editable metadata, so each write here moves it. The write and whatever must
+   * follow it (a cache purge) are one unit, run together in the method.
+   */
+  setAlt?(id: string, input: { alt: string; expectedVersion: string; changeId: string }): Promise<{ version: string }>;
+  /** `tags` is the whole set after the write, already in the contract's spelling. */
+  setTags?(id: string, input: { tags: string[]; expectedVersion: string; changeId: string }): Promise<{ version: string }>;
+  /** Soft delete: hides the file from list and removes nothing. Both trash and restore, or neither. */
+  trash?(id: string, input: { expectedVersion: string; changeId: string }): Promise<{ version: string }>;
+  restore?(id: string, input: { expectedVersion: string; changeId: string }): Promise<{ version: string }>;
 }
 
 export interface SiteAdapter {
@@ -105,6 +118,9 @@ export function capabilitiesOf(adapter: SiteAdapter): Capabilities {
     publications: false,
     ...(adapter.media ? { mediaUpload: adapter.media.limits } : {}),
     ...(adapter.content.delete ? { contentDelete: true } : {}),
+    ...(adapter.media?.setAlt ? { mediaAlt: true } : {}),
+    ...(adapter.media?.setTags ? { mediaTags: true } : {}),
+    ...(adapter.media?.trash && adapter.media.restore ? { mediaTrash: true } : {}),
   };
 }
 

@@ -8,17 +8,23 @@ import {
   ContentList,
   Diff,
   ErrorBody,
+  MediaBulkResult,
   MediaDeleteResult,
   MediaDetail,
   MediaItem,
   MediaList,
+  MediaWriteResult,
   Meta,
   PREFIX,
   RevisionList,
   RevisionSource,
   WriteResult,
   type ListQuery,
+  type MediaAltInput,
+  type MediaBulkInput,
   type MediaListQuery,
+  type MediaTagsInput,
+  type MediaTrashInput,
   type PreviewInput,
   type PublishInput,
   type SaveDraftInput,
@@ -113,6 +119,16 @@ export function createSiteClient(config: SiteClientConfig) {
           ).json(),
         ),
       delete: (id: string, changeId: string) => get(MediaDeleteResult, "DELETE", `/media/${enc(id)}${query({ changeId })}`),
+      /**
+       * The writes of v0.4.0, each optional per site: a site without it answers SiteApiError with
+       * status 501 (see meta().capabilities). A stale version is status 409 with the current version.
+       */
+      setAlt: (id: string, input: MediaAltInput) => get(MediaWriteResult, "PUT", `/media/${enc(id)}/alt`, input),
+      setTags: (id: string, input: MediaTagsInput) => get(MediaWriteResult, "PUT", `/media/${enc(id)}/tags`, input),
+      trash: (id: string, input: MediaTrashInput) => get(MediaWriteResult, "POST", `/media/${enc(id)}/trash`, input),
+      restore: (id: string, input: MediaTrashInput) => get(MediaWriteResult, "POST", `/media/${enc(id)}/restore`, input),
+      /** One request for many files; every file's outcome is its own, so check each `ok`. */
+      bulk: (input: MediaBulkInput) => get(MediaBulkResult, "POST", "/media/bulk", input),
     },
   };
 }
