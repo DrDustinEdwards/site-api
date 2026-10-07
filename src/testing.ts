@@ -1,8 +1,8 @@
 // A reference adapter held in memory: what a conforming site does, small enough to read in one
 // sitting. Carrel's tests run against it, and the conformance suite is proven on it.
 
-import { MediaInUseError, NotFoundError, VersionConflictError, type MediaAdapter, type SiteAdapter } from "./adapter.js";
-import type { ContentDoc, ContentStatus, MediaItem, MediaUploadLimits, MediaUse, Revision, SiteInfo, WriteResult } from "./contract.js";
+import { MediaInUseError, NotFoundError, RefusedError, VersionConflictError, type MediaAdapter, type MentionsAdapter, type SiteAdapter } from "./adapter.js";
+import type { ContentDoc, ContentStatus, MediaItem, MediaUploadLimits, MediaUse, MentionItem, MentionStatus, Revision, SiteInfo, WriteResult } from "./contract.js";
 
 interface Stored {
   doc: ContentDoc;
@@ -18,6 +18,23 @@ export interface MemoryAdapterOptions {
   contentDelete?: boolean;
   /** false for a media manager with no alt, tag or trash writes (a v0.2.0 site): those routes then answer 501. On by default. */
   mediaWrites?: boolean;
+  /** false for a site that does not receive webmentions (its routes then answer 501). On by default. */
+  mentions?: boolean;
+}
+
+/** What the reference adapter's sweep keeps, like dustinedwards.info: failed rows 30 days, rejected rows 90. */
+export const MEMORY_MENTION_RETENTION_DAYS = { failed: 30, rejected: 90 } as const;
+
+/** What the endpoint writes when a stranger sends a mention, for tests to seed the queue with. */
+export interface ReceivedMention {
+  sourceUrl: string;
+  targetId: string;
+  status?: MentionStatus;
+  authorName?: string | null;
+  authorUrl?: string | null;
+  excerpt?: string | null;
+  failureReason?: string | null;
+  receivedAt?: Date;
 }
 
 /** What the reference adapter accepts, like dustinedwards.info's own list, at a test-sized limit. */
@@ -50,7 +67,17 @@ function titleOf(source: string, id: string): string {
 
 export function memoryAdapter(
   options: MemoryAdapterOptions = {},
-): SiteAdapter & { store: Map<string, Stored>; mediaStore: Map<string, StoredMedia>; deleted: string[]; deletedContent: string[] } {
+): SiteAdapter & {
+  store: Map<string, Stored>;
+  mediaStore: Map<string, StoredMedia>;
+  deleted: string[];
+  deletedContent: string[];
+  mentionStore: Map<string, MentionItem>;
+  /** Targets whose cached page the adapter purged, one entry per write that purges. */
+  purged: string[];
+  /** Adds a mention as the site's endpoint would, and returns its id. */
+  receiveMention(fields: ReceivedMention): string;
+} {
   const site = options.site ?? { id: "memory", name: "Memory site", origin: "https://memory.example" };
   const now = options.now ?? (() => new Date());
   const store = new Map<string, Stored>();
@@ -200,8 +227,106 @@ export function memoryAdapter(
             : {}),
         };
 
+  // ---------- mentions: what dustinedwards.info does, in memory
+
+  const mentionStore = new Map<string, MentionItem>();
+  const purged: string[] = [];
+  let mentionCounter = 0;
+  let mentionVersion = 0;
+  const DAY = 24 * 60 * 60 * 1000;
+  /** Same rule as the site: only a verified mention (pending, approved, rejected) takes a decision. */
+  const DECIDABLE: MentionStatus[] = ["pending", "approved", "rejected"];
+
+  function receiveMention(fields: ReceivedMention): string {
+    const id = String(++mentionCounter);
+    const status = fields.status ?? "pending";
+    const receivedAt = (fields.receivedAt ?? now()).toISOString();
+    mentionStore.set(id, {
+      id,
+      status,
+      sourceUrl: fields.sourceUrl,
+      targetId: fields.targetId,
+      authorName: fields.authorName ?? null,
+      authorUrl: fields.authorUrl ?? null,
+      excerpt: fields.excerpt ?? null,
+      failureReason: fields.failureReason ?? (status === "failed" ? "no-link" : null),
+      receivedAt,
+      verifiedAt: status === "unverified" ? null : receivedAt,
+      decidedAt: null,
+      version: `m${++mentionVersion}`,
+    });
+    return id;
+  }
+
+  function heldMention(id: string, expectedVersion: string): MentionItem {
+    const current = mentionStore.get(id);
+    if (!current) throw new NotFoundError("No such mention.");
+    if (current.version !== expectedVersion) throw new VersionConflictError(current.version);
+    return current;
+  }
+
+  function expiring(): { failed: MentionItem[]; rejected: MentionItem[] } {
+    const at = now().getTime();
+    const past = (status: "failed" | "rejected") =>
+      [...mentionStore.values()].filter(
+        (m) => m.status === status && Date.parse(m.receivedAt) < at - MEMORY_MENTION_RETENTION_DAYS[status] * DAY,
+      );
+    return { failed: past("failed"), rejected: past("rejected") };
+  }
+
+  const mentionsAdapter: MentionsAdapter | undefined =
+    options.mentions === false
+      ? undefined
+      : {
+          async list(query) {
+            const all = [...mentionStore.values()]
+              .filter((m) => !query.status || m.status === query.status)
+              .sort((a, b) => Date.parse(b.receivedAt) - Date.parse(a.receivedAt) || Number(b.id) - Number(a.id));
+            const start = query.cursor ? Number(query.cursor) : 0;
+            const counts = { unverified: 0, pending: 0, approved: 0, rejected: 0, failed: 0 };
+            for (const m of mentionStore.values()) counts[m.status]++;
+            const soon = expiring();
+            return {
+              items: all.slice(start, start + query.limit),
+              nextCursor: start + query.limit < all.length ? String(start + query.limit) : null,
+              counts,
+              expiring: { failed: soon.failed.length, rejected: soon.rejected.length },
+            };
+          },
+          async decide(id, input) {
+            const current = heldMention(id, input.expectedVersion);
+            if (!DECIDABLE.includes(current.status)) {
+              throw new RefusedError(`A ${current.status} mention cannot be decided: only a verified mention can.`);
+            }
+            const next: MentionItem = {
+              ...current,
+              status: input.decision === "approve" ? "approved" : "rejected",
+              decidedAt: now().toISOString(),
+              version: `m${++mentionVersion}`,
+            };
+            mentionStore.set(id, next);
+            purged.push(current.targetId);
+            return { status: next.status, version: next.version, purged: true };
+          },
+          async delete(id, input) {
+            const current = heldMention(id, input.expectedVersion);
+            mentionStore.delete(id);
+            purged.push(current.targetId);
+            return { purged: true };
+          },
+          async sweep() {
+            const gone = expiring();
+            for (const m of [...gone.failed, ...gone.rejected]) mentionStore.delete(m.id);
+            return { failed: gone.failed.length, rejected: gone.rejected.length };
+          },
+        };
+
   return {
     site,
+    mentionStore,
+    purged,
+    receiveMention,
+    ...(mentionsAdapter ? { mentions: mentionsAdapter } : {}),
     store,
     mediaStore,
     deleted,

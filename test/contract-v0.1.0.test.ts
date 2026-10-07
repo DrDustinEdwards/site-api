@@ -100,6 +100,6 @@ describe("the v0.1.0 contract", () => {
 
   it("bumps the schema hash and the package version", async () => {
     expect(await contract.schemaHash()).not.toBe(V010.schemaHash);
-    expect(contract.PACKAGE_VERSION).toBe("0.4.0");
+    expect(contract.PACKAGE_VERSION).toBe("0.5.0");
   });
 });

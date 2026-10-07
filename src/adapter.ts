@@ -12,6 +12,9 @@ import type {
   MediaListQuery,
   MediaUploadLimits,
   MediaUse,
+  MentionList,
+  MentionListQuery,
+  MentionStatus,
   PreviewInput,
   PublishInput,
   Revision,
@@ -96,12 +99,34 @@ export interface MediaAdapter {
   restore?(id: string, input: { expectedVersion: string; changeId: string }): Promise<{ version: string }>;
 }
 
+/**
+ * The mentions group (v0.5.0), optional per site. Every write throws VersionConflictError when
+ * expectedVersion is not what the site holds, NotFoundError for a missing id and RefusedError when
+ * the site's own rules refuse. The write and the cache purge it needs are one unit, run together in
+ * the method, and the method reports whether the purge worked.
+ */
+export interface MentionsAdapter {
+  /** Newest first. `counts` and `expiring` cover the whole queue, not the page. */
+  list(query: MentionListQuery): Promise<MentionList>;
+  /** Approve or reject. Refuse (RefusedError) a mention that is not yet verified or that failed verification. */
+  decide(
+    id: string,
+    input: { decision: "approve" | "reject"; expectedVersion: string; changeId: string },
+  ): Promise<{ status: MentionStatus; version: string; purged: boolean | null }>;
+  /** Removes the only copy of what a stranger sent. */
+  delete(id: string, input: { expectedVersion: string; changeId: string }): Promise<{ purged: boolean | null }>;
+  /** Removes failed and rejected mentions past the site's retention windows, and reports how many. */
+  sweep(input: { changeId: string }): Promise<{ failed: number; rejected: number }>;
+}
+
 export interface SiteAdapter {
   site: SiteInfo;
   content: ContentAdapter;
   preview: PreviewAdapter;
   /** Absent on a site with no media manager: the media routes then answer 501, as in v0.1.0. */
   media?: MediaAdapter;
+  /** Absent on a site that does not receive webmentions: the mentions routes then answer 501. */
+  mentions?: MentionsAdapter;
 }
 
 /**
@@ -121,6 +146,7 @@ export function capabilitiesOf(adapter: SiteAdapter): Capabilities {
     ...(adapter.media?.setAlt ? { mediaAlt: true } : {}),
     ...(adapter.media?.setTags ? { mediaTags: true } : {}),
     ...(adapter.media?.trash && adapter.media.restore ? { mediaTrash: true } : {}),
+    ...(adapter.mentions ? { mentions: true } : {}),
   };
 }
 

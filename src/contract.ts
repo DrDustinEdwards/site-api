@@ -5,7 +5,7 @@
 
 import { z } from "zod";
 
-export const PACKAGE_VERSION = "0.4.0";
+export const PACKAGE_VERSION = "0.5.0";
 export const PREFIX = "/api/carrel/v1";
 
 /** Opaque to Carrel: each site decides what a version is. It should identify the item's own content (dustinedwards.info uses the git blob sha of the item's own file). */
@@ -59,6 +59,8 @@ export const Capabilities = z.object({
   mediaTags: z.boolean().optional(),
   /** True when the site has a media trash: soft delete and restore (v0.4.0). Absent or false: those routes answer 501. */
   mediaTrash: z.boolean().optional(),
+  /** True when the site receives webmentions and lets Carrel moderate them (v0.5.0). Absent or false: every mentions route answers 501. */
+  mentions: z.boolean().optional(),
 });
 
 export const Meta = z.object({
@@ -367,6 +369,101 @@ export const MediaTrashEmptyResult = z.object({
   more: z.boolean(),
 });
 
+// ---------- mentions (v0.5.0)
+
+/** A site's id for one received mention, as text: a row id such as 41. Never a path. */
+export const MentionId = ContentId;
+
+/**
+ * Where a mention is in the site's moderation queue. unverified: received, the sender's page not yet
+ * fetched. pending: the link is really there, awaiting a decision. approved: shown on the post.
+ * rejected: kept, so a re-sender does not reappear as new. failed: verification found no link.
+ */
+export const MentionStatus = z.enum(["unverified", "pending", "approved", "rejected", "failed"]);
+
+export const MentionItem = z.object({
+  id: MentionId,
+  status: MentionStatus,
+  /** The page the sender says links to us. Text from a stranger: never a link. */
+  sourceUrl: z.string().min(1).max(2000),
+  /** The content id the mention targets, such as a post slug. */
+  targetId: z.string().min(1).max(300),
+  authorName: z.string().max(500).nullable(),
+  authorUrl: z.string().max(2000).nullable(),
+  excerpt: z.string().max(5000).nullable(),
+  /** Why verification failed, in the site's fixed words; null unless failed. */
+  failureReason: z.string().max(500).nullable(),
+  receivedAt: Timestamp,
+  verifiedAt: Timestamp.nullable(),
+  decidedAt: Timestamp.nullable(),
+  /** Opaque, like a content version: it must move whenever the status, the verification or the decision does. */
+  version: Version,
+});
+
+export const MentionListQuery = z.object({
+  status: MentionStatus.optional(),
+  cursor: z.string().max(500).optional(),
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+});
+
+/** How many mentions the site holds in each status. */
+export const MentionCounts = z.object({
+  unverified: z.number().int().min(0),
+  pending: z.number().int().min(0),
+  approved: z.number().int().min(0),
+  rejected: z.number().int().min(0),
+  failed: z.number().int().min(0),
+});
+
+export const MentionList = z.object({
+  items: z.array(MentionItem),
+  nextCursor: z.string().nullable(),
+  /** Across the whole queue, not the page, so a filter can show its count. */
+  counts: MentionCounts,
+  /** What a sweep would remove now, by status (the site's retention windows). */
+  expiring: z.object({ failed: z.number().int().min(0), rejected: z.number().int().min(0) }),
+});
+
+export const MENTION_DECISIONS = ["approve", "reject"] as const;
+
+export const MentionDecideInput = z.object({
+  decision: z.enum(MENTION_DECISIONS),
+  expectedVersion: Version,
+  changeId: ChangeId,
+});
+
+export const MentionWriteResult = z.object({
+  id: MentionId,
+  status: MentionStatus,
+  /** The mention's version after the write. */
+  version: Version,
+  changeId: ChangeId,
+  /** Whether the site purged the target's cached page: false when the purge failed, null when there was none to run. */
+  purged: z.boolean().nullable(),
+});
+
+export const MentionDeleteQuery = z.object({
+  expectedVersion: Version,
+  changeId: ChangeId,
+});
+
+export const MentionDeleteResult = z.object({
+  id: MentionId,
+  deleted: z.literal(true),
+  changeId: ChangeId,
+  purged: z.boolean().nullable(),
+});
+
+/** Sweeping removes the mentions past the site's retention windows: failed and rejected ones. It names no version, since it is not about one mention. */
+export const MentionSweepInput = z.object({
+  changeId: ChangeId,
+});
+
+export const MentionSweepResult = z.object({
+  changeId: ChangeId,
+  removed: z.object({ failed: z.number().int().min(0), rejected: z.number().int().min(0) }),
+});
+
 export const ErrorCode = z.enum([
   "unauthorized",
   "rate-limited",
@@ -431,6 +528,17 @@ export type MediaBulkOutcome = z.infer<typeof MediaBulkOutcome>;
 export type MediaBulkResult = z.infer<typeof MediaBulkResult>;
 export type MediaTrashEmptyInput = z.infer<typeof MediaTrashEmptyInput>;
 export type MediaTrashEmptyResult = z.infer<typeof MediaTrashEmptyResult>;
+export type MentionStatus = z.infer<typeof MentionStatus>;
+export type MentionItem = z.infer<typeof MentionItem>;
+export type MentionListQuery = z.infer<typeof MentionListQuery>;
+export type MentionCounts = z.infer<typeof MentionCounts>;
+export type MentionList = z.infer<typeof MentionList>;
+export type MentionDecideInput = z.infer<typeof MentionDecideInput>;
+export type MentionWriteResult = z.infer<typeof MentionWriteResult>;
+export type MentionDeleteQuery = z.infer<typeof MentionDeleteQuery>;
+export type MentionDeleteResult = z.infer<typeof MentionDeleteResult>;
+export type MentionSweepInput = z.infer<typeof MentionSweepInput>;
+export type MentionSweepResult = z.infer<typeof MentionSweepResult>;
 export type ErrorBody = z.infer<typeof ErrorBody>;
 
 /**
@@ -440,6 +548,8 @@ export type ErrorBody = z.infer<typeof ErrorBody>;
  * adds the source at a revision and an optional content delete (501 when the adapter has none).
  * v0.4.0 adds media writes, each optional per site (501 when the adapter lacks the method): alt
  * text, tags, trash, restore and empty-trash, and one bulk route that applies any of them to many files.
+ * v0.5.0 adds the mentions group: list, decide, delete and sweep, answering 501 for a site whose
+ * adapter has no `mentions`.
  */
 export const ROUTES = [
   { group: "meta", method: "GET", path: "/meta", response: "Meta" },
@@ -464,6 +574,10 @@ export const ROUTES = [
   { group: "media", method: "POST", path: "/media/:id/restore", request: "MediaTrashInput", response: "MediaWriteResult" },
   { group: "media", method: "POST", path: "/media/trash/empty", request: "MediaTrashEmptyInput", response: "MediaTrashEmptyResult" },
   { group: "media", method: "POST", path: "/media/bulk", request: "MediaBulkInput", response: "MediaBulkResult" },
+  { group: "mentions", method: "GET", path: "/mentions", query: "MentionListQuery", response: "MentionList" },
+  { group: "mentions", method: "POST", path: "/mentions/sweep", request: "MentionSweepInput", response: "MentionSweepResult" },
+  { group: "mentions", method: "POST", path: "/mentions/:id/decide", request: "MentionDecideInput", response: "MentionWriteResult" },
+  { group: "mentions", method: "DELETE", path: "/mentions/:id", query: "MentionDeleteQuery", response: "MentionDeleteResult" },
   { group: "inbox", method: "*", path: "/inbox/*", response: "not-implemented" },
   { group: "insight", method: "*", path: "/insight/*", response: "not-implemented" },
   { group: "publications", method: "*", path: "/publications/*", response: "not-implemented" },
@@ -476,6 +590,8 @@ const HASHED = {
   MediaDeleteQuery, MediaDeleteResult, RevisionSource, ContentDeleteQuery, ContentDeleteResult,
   MediaAltInput, MediaTagsInput, MediaTrashInput, MediaWriteResult, MediaBulkInput, MediaBulkResult,
   MediaTrashEmptyInput, MediaTrashEmptyResult,
+  MentionItem, MentionListQuery, MentionList, MentionDecideInput, MentionWriteResult, MentionDeleteQuery,
+  MentionDeleteResult, MentionSweepInput, MentionSweepResult,
 };
 
 /** JSON with sorted keys, so the hash depends on the contract and not on property order. */
