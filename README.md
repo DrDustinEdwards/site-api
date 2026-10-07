@@ -62,6 +62,8 @@ All paths sit under `/api/carrel/v1`. Bodies are JSON, checked on the way in and
 | content | `POST /content/:id/unpublish` | `UnpublishInput` | `WriteResult` |
 | content | `GET /content/:id/revisions` | | `RevisionList`, newest first |
 | content | `GET /content/:id/diff?from&to` | | `Diff`: a unified patch; `to` defaults to current |
+| content | `GET /content/:id/revisions/:version` | | `RevisionSource`: the source as it was at that version (v0.3.0) |
+| content | `DELETE /content/:id?expectedVersion&changeId` | | `ContentDeleteResult` (v0.3.0, optional per site: `501` where the adapter has no `delete`) |
 | preview | `POST /preview` | `PreviewInput` | the full page HTML from the site's own pipeline |
 | media | `GET /media?q&cursor&limit` | | `MediaList` |
 | media | `POST /media?filename&alt&changeId` | the file's own bytes, typed by `Content-Type` | `201 MediaItem` |
@@ -77,7 +79,15 @@ Every write carries an `expectedVersion` and a Carrel `changeId`.
 - **Refusals.** A stale version is refused with `409 version-conflict` and the site's `currentVersion`. A version given for an id that does not exist is refused the same way, with a null `currentVersion`.
 - **`changeId`** goes into the site's commit or row, so Carrel's authorship record and the site's history join.
 - **First publish.** A first publish from Carrel's key is allowed (Carrel design decision 2). Carrel decides who may trigger it.
-- **Deletes.** Unpublish returns an item to draft. Deleting stays in the site's own history.
+- **Deletes.** Unpublish returns an item to draft. A delete is the separate `DELETE /content/:id` of v0.3.0, below.
+
+## Changes in v0.3.0
+
+Additive: every v0.2.0 route and body is unchanged, and the schema hash and package version move on purpose.
+
+- **The source at a revision.** `GET /content/:id/revisions/:version` returns `{ id, version, source }`, so each revision in the list opens. It reads the adapter's existing `revisionSource`; `404` for an item or version the site does not hold. The client's `revision(id, version)` calls it.
+- **Content delete, optional per site.** `DELETE /content/:id?expectedVersion=...&changeId=...` (a query, since a DELETE carries no body) answers `ContentDeleteResult` `{ id, deleted: true, changeId }`. A stale `expectedVersion` is `409 version-conflict` with the site's `currentVersion`; an id the site does not hold is `404 not-found`; the site's own rules refusing it is `422 refused`. A site whose adapter has no `content.delete` answers `501 not-implemented` whatever the query says, and `meta.capabilities.contentDelete` is absent, so Carrel can hide the action with the reason before anyone asks. The adapter runs the delete and whatever must follow it (a cache purge, an index) as one unit.
+- **Conformance** adds the revision-source checks and, with `probeWrites`, a delete without a key, a wrong key, and a delete of the probe id (`404` where the site offers delete, `501` where it does not). It never deletes anything real.
 
 ## Media (v0.2.0)
 
@@ -127,6 +137,7 @@ interface SiteAdapter {
     unpublish(id: string, input: UnpublishInput): Promise<WriteResult>;
     revisions(id: string): Promise<Revision[] | null>;
     revisionSource(id: string, version: string): Promise<string | null>;
+    delete?(id: string, input: { expectedVersion: string; changeId: string }): Promise<void>; // v0.3.0; omit and the route answers 501
   };
   preview: { render(input: PreviewInput): Promise<string> };
   media?: {                                        // v0.2.0; omit for a site with no media manager
@@ -146,9 +157,9 @@ An adapter signals refusals by throwing these errors:
 - **`RefusedError(message)`:** the site's own rules said no, such as a failed render. The writer sees the message.
 - **`MediaInUseError(usedBy)`:** the file is in use; the delete is refused with each use named.
 
-The package computes diffs from `revisionSource`, so a site only has to return old source.
+The package computes diffs, and serves the source at a revision, from `revisionSource`, so a site only has to return old source. `content.delete` throws `VersionConflictError`, `NotFoundError` or `RefusedError` like the writes.
 
-`@dustinedwards/site-api/testing` exports `memoryAdapter()`, a conforming reference adapter held in memory, media included (its reference check scans each post's source for `/media/<id>`, as dustinedwards.info's does). `memoryAdapter({ media: false })` is a site with no media manager. Carrel's tests run against it.
+`@dustinedwards/site-api/testing` exports `memoryAdapter()`, a conforming reference adapter held in memory, media included (its reference check scans each post's source for `/media/<id>`, as dustinedwards.info's does). `memoryAdapter({ media: false })` is a site with no media manager, and `memoryAdapter({ contentDelete: false })` one with no content delete. Carrel's tests run against it.
 
 ## Carrel's side
 

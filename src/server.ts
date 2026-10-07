@@ -14,6 +14,8 @@ import {
   type SiteAdapter,
 } from "./adapter.js";
 import {
+  ContentDeleteQuery,
+  ContentDeleteResult,
   ContentDoc,
   ContentId,
   ContentList,
@@ -34,9 +36,11 @@ import {
   PreviewInput,
   PublishInput,
   RevisionList,
+  RevisionSource,
   SaveDraftInput,
   ScheduleInput,
   UnpublishInput,
+  Version,
   WriteResult,
   schemaHash,
   type ErrorBody,
@@ -247,6 +251,35 @@ export function createSiteApi(config: SiteApiConfig): SiteApi {
         const items = await adapter.content.revisions(id(m));
         if (!items) throw new NotFoundError();
         return json(200, checked(RevisionList, { items }, "revisions"));
+      },
+    },
+    {
+      method: "GET",
+      pattern: new RegExp(`^/content/${ID}/revisions/${ID}$`),
+      run: async (m) => {
+        const contentId = id(m);
+        let version: string;
+        try {
+          version = decodeURIComponent(m[2]!);
+        } catch {
+          throw new BadRequest("invalid", "The version is not valid.");
+        }
+        if (!Version.safeParse(version).success) throw new BadRequest("invalid", "The version is not valid.");
+        const source = await adapter.content.revisionSource(contentId, version);
+        if (source === null) throw new NotFoundError("No such version.");
+        return json(200, checked(RevisionSource, { id: contentId, version, source }, "revision source"));
+      },
+    },
+    {
+      method: "DELETE",
+      pattern: new RegExp(`^/content/${ID}$`),
+      run: async (m, url) => {
+        const contentId = id(m);
+        // A site with no delete answers 501 whatever the query says.
+        if (!adapter.content.delete) return fail("not-implemented", "This site does not delete content through the API.");
+        const query = readQuery(url, ContentDeleteQuery);
+        await adapter.content.delete(contentId, query);
+        return json(200, checked(ContentDeleteResult, { id: contentId, deleted: true, changeId: query.changeId }, "content delete"));
       },
     },
     {

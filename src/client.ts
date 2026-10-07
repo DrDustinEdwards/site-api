@@ -3,6 +3,7 @@
 
 import type { z } from "zod";
 import {
+  ContentDeleteResult,
   ContentDoc,
   ContentList,
   Diff,
@@ -14,6 +15,7 @@ import {
   Meta,
   PREFIX,
   RevisionList,
+  RevisionSource,
   WriteResult,
   type ListQuery,
   type MediaListQuery,
@@ -90,6 +92,11 @@ export function createSiteClient(config: SiteClientConfig) {
     schedule: (id: string, input: ScheduleInput) => get(WriteResult, "POST", `/content/${enc(id)}/schedule`, input),
     unpublish: (id: string, input: UnpublishInput) => get(WriteResult, "POST", `/content/${enc(id)}/unpublish`, input),
     revisions: (id: string) => get(RevisionList, "GET", `/content/${enc(id)}/revisions`),
+    /** One revision's source (v0.3.0), so each revision in the list opens. */
+    revision: (id: string, version: string) => get(RevisionSource, "GET", `/content/${enc(id)}/revisions/${enc(version)}`),
+    /** Optional per site (v0.3.0): a site with no delete answers SiteApiError with status 501. */
+    delete: (id: string, input: { expectedVersion: string; changeId: string }) =>
+      get(ContentDeleteResult, "DELETE", `/content/${enc(id)}${query(input)}`),
     diff: (id: string, from: string, to?: string) => get(Diff, "GET", `/content/${enc(id)}/diff${query({ from, to })}`),
     preview: async (input: PreviewInput) => (await call("POST", "/preview", input)).text(),
     /** The media group (v0.2.0). A refused delete throws SiteApiError whose body carries `usedBy`. */

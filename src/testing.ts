@@ -14,6 +14,8 @@ export interface MemoryAdapterOptions {
   now?: () => Date;
   /** The media group's limits, or false for a site with no media manager (a v0.1.0 site). */
   media?: MediaUploadLimits | false;
+  /** false for a site whose adapter has no content delete (its route then answers 501). On by default. */
+  contentDelete?: boolean;
 }
 
 /** What the reference adapter accepts, like dustinedwards.info's own list, at a test-sized limit. */
@@ -46,7 +48,7 @@ function titleOf(source: string, id: string): string {
 
 export function memoryAdapter(
   options: MemoryAdapterOptions = {},
-): SiteAdapter & { store: Map<string, Stored>; mediaStore: Map<string, StoredMedia>; deleted: string[] } {
+): SiteAdapter & { store: Map<string, Stored>; mediaStore: Map<string, StoredMedia>; deleted: string[]; deletedContent: string[] } {
   const site = options.site ?? { id: "memory", name: "Memory site", origin: "https://memory.example" };
   const now = options.now ?? (() => new Date());
   const store = new Map<string, Stored>();
@@ -97,6 +99,7 @@ export function memoryAdapter(
 
   const mediaStore = new Map<string, StoredMedia>();
   const deleted: string[] = [];
+  const deletedContent: string[] = [];
   let mediaCounter = 0;
 
   /** The site's reference check: every post whose source carries the file's URL, as the real site scans. */
@@ -163,6 +166,7 @@ export function memoryAdapter(
     store,
     mediaStore,
     deleted,
+    deletedContent,
     ...(mediaAdapter ? { media: mediaAdapter } : {}),
     content: {
       async list(query) {
@@ -206,6 +210,16 @@ export function memoryAdapter(
       async revisionSource(id, version) {
         return store.get(id)?.history.find((h) => h.revision.version === version)?.source ?? null;
       },
+      ...(options.contentDelete === false
+        ? {}
+        : {
+            async delete(id: string, input: { expectedVersion: string; changeId: string }) {
+              if (!store.has(id)) throw new NotFoundError();
+              expect(id, input.expectedVersion);
+              store.delete(id);
+              deletedContent.push(id);
+            },
+          }),
     },
     preview: {
       async render(input) {
