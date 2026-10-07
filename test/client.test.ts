@@ -25,6 +25,9 @@ describe("client round trip", () => {
       publications: false,
       mediaUpload: MEMORY_MEDIA_LIMITS,
       contentDelete: true,
+      mediaAlt: true,
+      mediaTags: true,
+      mediaTrash: true,
     });
   });
 

@@ -43,6 +43,12 @@ describe("the v0.1.0 contract", () => {
       "POST /media",
       "GET /media/:id",
       "DELETE /media/:id",
+      "PUT /media/:id/alt",
+      "PUT /media/:id/tags",
+      "POST /media/:id/trash",
+      "POST /media/:id/restore",
+      "POST /media/trash/empty",
+      "POST /media/bulk",
     ]);
   });
 
@@ -94,6 +100,6 @@ describe("the v0.1.0 contract", () => {
 
   it("bumps the schema hash and the package version", async () => {
     expect(await contract.schemaHash()).not.toBe(V010.schemaHash);
-    expect(contract.PACKAGE_VERSION).toBe("0.3.0");
+    expect(contract.PACKAGE_VERSION).toBe("0.4.0");
   });
 });
