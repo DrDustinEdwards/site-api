@@ -65,10 +65,16 @@ All paths sit under `/api/carrel/v1`. Bodies are JSON, checked on the way in and
 | content | `GET /content/:id/revisions/:version` | | `RevisionSource`: the source as it was at that version (v0.3.0) |
 | content | `DELETE /content/:id?expectedVersion&changeId` | | `ContentDeleteResult` (v0.3.0, optional per site: `501` where the adapter has no `delete`) |
 | preview | `POST /preview` | `PreviewInput` | the full page HTML from the site's own pipeline |
-| media | `GET /media?q&cursor&limit` | | `MediaList` |
+| media | `GET /media?q&tag&trashed&cursor&limit` | | `MediaList` (`tag` and `trashed=only` are v0.4.0) |
 | media | `POST /media?filename&alt&changeId` | the file's own bytes, typed by `Content-Type` | `201 MediaItem` |
 | media | `GET /media/:id` | | `MediaDetail`: the file and every place it is used |
 | media | `DELETE /media/:id?changeId` | | `MediaDeleteResult`, or `422 refused` naming each use |
+| media | `PUT /media/:id/alt` | `MediaAltInput` | `MediaWriteResult` (v0.4.0, optional) |
+| media | `PUT /media/:id/tags` | `MediaTagsInput` | `MediaWriteResult` (v0.4.0, optional) |
+| media | `POST /media/:id/trash` | `MediaTrashInput` | `MediaWriteResult` (v0.4.0, optional) |
+| media | `POST /media/:id/restore` | `MediaTrashInput` | `MediaWriteResult` (v0.4.0, optional) |
+| media | `POST /media/trash/empty` | `MediaTrashEmptyInput` | `MediaTrashEmptyResult` (v0.4.0, optional) |
+| media | `POST /media/bulk` | `MediaBulkInput` | `MediaBulkResult` (v0.4.0, optional) |
 | inbox, insight, publications | `/*` | | `501` until their stage |
 
 The media group arrived in v0.2.0. A site whose adapter has no `media` still answers it `501`, as in v0.1.0.
@@ -88,6 +94,19 @@ Additive: every v0.2.0 route and body is unchanged, and the schema hash and pack
 - **The source at a revision.** `GET /content/:id/revisions/:version` returns `{ id, version, source }`, so each revision in the list opens. It reads the adapter's existing `revisionSource`; `404` for an item or version the site does not hold. The client's `revision(id, version)` calls it.
 - **Content delete, optional per site.** `DELETE /content/:id?expectedVersion=...&changeId=...` (a query, since a DELETE carries no body) answers `ContentDeleteResult` `{ id, deleted: true, changeId }`. A stale `expectedVersion` is `409 version-conflict` with the site's `currentVersion`; an id the site does not hold is `404 not-found`; the site's own rules refusing it is `422 refused`. A site whose adapter has no `content.delete` answers `501 not-implemented` whatever the query says, and `meta.capabilities.contentDelete` is absent, so Carrel can hide the action with the reason before anyone asks. The adapter runs the delete and whatever must follow it (a cache purge, an index) as one unit.
 - **Conformance** adds the revision-source checks and, with `probeWrites`, a delete without a key, a wrong key, and a delete of the probe id (`404` where the site offers delete, `501` where it does not). It never deletes anything real.
+
+## Changes in v0.4.0
+
+Additive: every v0.3.0 route and body is unchanged, and the schema hash and package version move on purpose. Every new route is optional per site.
+
+- **Alt text, tags, trash.** `PUT /media/:id/alt` `{ alt, expectedVersion, changeId }`, `PUT /media/:id/tags` `{ tags, expectedVersion, changeId }`, `POST /media/:id/trash` and `POST /media/:id/restore` `{ expectedVersion, changeId }`. Each answers `MediaWriteResult` `{ id, version, changeId }`, the file's version after the write. A file's `version` (new, optional on `MediaItem`) identifies its editable metadata, so alt, tags and trash state each move it. A stale one is `409 version-conflict` with `currentVersion`, a missing id `404`, the site's own rules `422 refused`, a malformed body `400`.
+- **Tags** are lower case words joined by single hyphens, at most 32 characters, at most 12 per file. A write sets the whole set; the package sorts it and drops duplicates before the adapter sees it. `GET /media?tag=` lists the files carrying one.
+- **Trash is soft delete.** A trashed file leaves the default list (`trashedAt` is set; `GET /media?trashed=only` lists the trash) and nothing is removed. Whether the file keeps being served is the site's rule: dustinedwards.info keeps serving it, so trash is not a protection for readers.
+- **Empty trash.** `POST /media/trash/empty` `{ changeId }` deletes for good the trashed files, through the same adapter `delete` and reference check as `DELETE /media/:id`, one at a time. File n is recorded under `<changeId>-<n>`. It answers `{ changeId, deleted, refused, more }`: a file still used stays in the trash and is listed in `refused` with its `usedBy`. At most 100 files go per request; `more: true` means send it again.
+- **Bulk.** `POST /media/bulk` `{ op, tags?, items }`, with `op` one of `trash`, `restore`, `delete`, `add-tags`, `remove-tags` and 1 to 100 items, each `{ id, expectedVersion?, changeId }` with its own change id (`expectedVersion` is required for every op but `delete`). It answers `200 { op, results }` whenever the request was well formed, with one outcome per item in order: `{ ok: true, id, changeId, version? }` or `{ ok: false, id, changeId, error, message, currentVersion?, usedBy? }` with `error` one of `not-found`, `version-conflict`, `refused`, `invalid`, `internal`. One file's refusal never stops the others. The tag ops work from the file's current tags, refused as a version conflict if its version is not the one the caller saw. A malformed request is `400` and runs nothing.
+- **Optional per site.** An adapter that lacks `setAlt`, `setTags`, or `trash` with `restore` answers that route `501 not-implemented` whatever the body says, and `meta.capabilities` carries `mediaAlt`, `mediaTags` and `mediaTrash` only where true. A bulk op needs the matching adapter methods (`delete` needs only the delete every media site has).
+- **Folders are not in the contract.** dustinedwards.info's media table has no folder column and its keys are content-addressed, so there is nothing for a folder route to edit. Tags carry the organising.
+- **Conformance** adds, under `probeWrites`: each write on the probe id (`404` where the capability is declared, `501` where not), a malformed alt body, a bulk trash whose one unknown file must come back as that file's own `not-found` inside a `200`, a bulk tag op with no tags, and an empty-trash body outside the contract. It never trashes, restores, tags or deletes a real file.
 
 ## Media (v0.2.0)
 
@@ -146,6 +165,12 @@ interface SiteAdapter {
     get(id: string): Promise<MediaDetail | null>;  // with usedBy, from the site's reference check
     upload(input: MediaUpload): Promise<MediaItem>; // already checked against the limits and the bytes
     delete(id: string, input: { changeId: string }): Promise<void>;
+    // v0.4.0, each optional (the route answers 501 when absent). Each throws VersionConflictError,
+    // NotFoundError or RefusedError, and returns the file's version after the write.
+    setAlt?(id: string, input: { alt: string; expectedVersion: string; changeId: string }): Promise<{ version: string }>;
+    setTags?(id: string, input: { tags: string[]; expectedVersion: string; changeId: string }): Promise<{ version: string }>;
+    trash?(id: string, input: { expectedVersion: string; changeId: string }): Promise<{ version: string }>;   // with restore, or neither
+    restore?(id: string, input: { expectedVersion: string; changeId: string }): Promise<{ version: string }>;
   };
 }
 ```
@@ -159,7 +184,7 @@ An adapter signals refusals by throwing these errors:
 
 The package computes diffs, and serves the source at a revision, from `revisionSource`, so a site only has to return old source. `content.delete` throws `VersionConflictError`, `NotFoundError` or `RefusedError` like the writes.
 
-`@dustinedwards/site-api/testing` exports `memoryAdapter()`, a conforming reference adapter held in memory, media included (its reference check scans each post's source for `/media/<id>`, as dustinedwards.info's does). `memoryAdapter({ media: false })` is a site with no media manager, and `memoryAdapter({ contentDelete: false })` one with no content delete. Carrel's tests run against it.
+`@dustinedwards/site-api/testing` exports `memoryAdapter()`, a conforming reference adapter held in memory, media included (its reference check scans each post's source for `/media/<id>`, as dustinedwards.info's does). `memoryAdapter({ media: false })` is a site with no media manager, `memoryAdapter({ contentDelete: false })` one with no content delete, and `memoryAdapter({ mediaWrites: false })` a v0.2.0 media manager with no alt, tag or trash writes. Its files carry a `version` that every metadata write moves. Carrel's tests run against it.
 
 ## Carrel's side
 
@@ -172,6 +197,8 @@ The package computes diffs, and serves the source at a revision, from `revisionS
   - the list answers in shape;
   - a stale write is refused;
   - on a site that offers media (v0.2.0): the upload limits are declared, the media list answers in shape, a delete of an id no site holds is refused, and an upload of a type no site accepts is refused.
+
+  - on a site that offers media (v0.4.0): each media write is refused on the probe id (or answers 501 where the site lacks it), as above under Changes in v0.4.0.
 
   Every write it sends must be refused, so it never changes a conforming site. `probeMediaUpload: true` adds one real round trip: it uploads a 1x1 PNG of its own, reads it back, and deletes that file and no other. It is off by default.
 
@@ -187,4 +214,5 @@ Tests run locally, with no Actions minutes. The planted tests send a request eac
 
 - `test/planted.test.ts`: the key off its prefix, a wrong key, a stale `expectedVersion`, an unknown route.
 - `test/media.test.ts`: a file a post uses (refused with the post named), an oversized or undeclared upload, bytes that are not their type, an id that climbs out.
+- `test/media-writes.test.ts`: alt, tags, trash, restore, empty trash and bulk, with stale versions, files in use, the 100-file limits and a site without the writes.
 - `test/contract-v0.1.0.test.ts`: the v0.1.0 contract unchanged, against `test/fixtures/contract-v0.1.0.json`, written from the v0.1.0 build. Every v0.1.0 route and schema is identical, except three schemas that gain optional properties only (`Meta`, `Capabilities`, `ErrorBody`).

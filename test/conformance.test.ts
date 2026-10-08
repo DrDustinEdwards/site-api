@@ -20,6 +20,14 @@ describe("conformance", () => {
       "media list: answers in the contract's shape",
       "media delete of an unknown id: refused",
       "media upload of a type the site does not accept: refused",
+      "media alt of an unknown id: refused, or not implemented where the site lacks it",
+      "media tags of an unknown id: refused, or not implemented where the site lacks it",
+      "media trash of an unknown id: refused, or not implemented where the site lacks it",
+      "media restore of an unknown id: refused, or not implemented where the site lacks it",
+      "media alt with a body outside the contract: refused, or not implemented where the site lacks it",
+      "media bulk: an unknown id is that file's own not-found, and the request answers 200",
+      "media bulk tag op with no tags: refused, or not implemented where the site lacks tags",
+      "media empty trash with a body outside the contract: refused, or not implemented where the site has no trash",
     ]);
   });
 
@@ -88,6 +96,46 @@ describe("conformance", () => {
     adapter.media!.delete = async () => {};
     const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: site(adapter).fetch });
     expect(failing(report)).toEqual(["media delete of an unknown id: refused"]);
+  });
+
+  it("expects 501 from every media write on a v0.2.0 site, and passes it", async () => {
+    const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: site(memoryAdapter({ mediaWrites: false })).fetch });
+    expect(failing(report)).toEqual([]);
+    const details = report.checks.filter((c) => /^media (alt|tags|trash|restore|bulk|empty)/.test(c.name)).map((c) => c.detail);
+    expect(details).toHaveLength(8);
+    expect(details.every((d) => d.startsWith("501"))).toBe(true);
+  });
+
+  it("PLANT: fails a site whose alt write accepts a stale version on a file it does not hold", async () => {
+    const adapter = memoryAdapter();
+    adapter.media!.setAlt = async () => ({ version: "x" });
+    const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: site(adapter).fetch });
+    expect(failing(report)).toEqual(["media alt of an unknown id: refused, or not implemented where the site lacks it"]);
+  });
+
+  it("PLANT: fails a site that offers a trash but does not say so in its capabilities", async () => {
+    const s = site();
+    const silent = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const response = await s.fetch(input, init);
+      if (!new URL(new Request(input).url).pathname.endsWith("/meta") || !response.ok) return response;
+      const meta = await response.json();
+      const { mediaTrash: _gone, ...capabilities } = meta.capabilities;
+      return Response.json({ ...meta, capabilities });
+    }) as typeof fetch;
+    const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: silent });
+    expect(failing(report)).toEqual([
+      "media trash of an unknown id: refused, or not implemented where the site lacks it",
+      "media restore of an unknown id: refused, or not implemented where the site lacks it",
+      "media bulk: an unknown id is that file's own not-found, and the request answers 200",
+      "media empty trash with a body outside the contract: refused, or not implemented where the site has no trash",
+    ]);
+  });
+
+  it("changes no file on a conforming site when the write probes run", async () => {
+    const s = site();
+    const item = await s.adapter.media!.upload({ bytes: new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), contentType: "image/png", filename: "real.png", alt: "kept", changeId: "seed" });
+    await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: s.fetch });
+    expect(s.adapter.mediaStore.get(item.id)?.item).toEqual(item);
   });
 
   it("PLANT: fails a site that offers media without declaring its limits", async () => {
