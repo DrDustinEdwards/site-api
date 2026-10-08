@@ -15,6 +15,11 @@ import {
   MediaList,
   MediaTrashEmptyResult,
   MediaWriteResult,
+  MentionDecideInput,
+  MentionDeleteResult,
+  MentionList,
+  MentionSweepResult,
+  MentionWriteResult,
   Meta,
   PREFIX,
   RevisionList,
@@ -27,6 +32,7 @@ import {
   type MediaTagsInput,
   type MediaTrashEmptyInput,
   type MediaTrashInput,
+  type MentionListQuery,
   type PreviewInput,
   type PublishInput,
   type SaveDraftInput,
@@ -133,6 +139,14 @@ export function createSiteClient(config: SiteClientConfig) {
       emptyTrash: (input: MediaTrashEmptyInput) => get(MediaTrashEmptyResult, "POST", "/media/trash/empty", input),
       /** One request for many files; every file's outcome is its own, so check each `ok`. */
       bulk: (input: MediaBulkInput) => get(MediaBulkResult, "POST", "/media/bulk", input),
+    },
+    /** The mentions group (v0.5.0), optional per site: a site without it answers SiteApiError with status 501. */
+    mentions: {
+      list: (q: Partial<MentionListQuery> = {}) => get(MentionList, "GET", `/mentions${query(q)}`),
+      decide: (id: string, input: MentionDecideInput) => get(MentionWriteResult, "POST", `/mentions/${enc(id)}/decide`, input),
+      delete: (id: string, input: { expectedVersion: string; changeId: string }) =>
+        get(MentionDeleteResult, "DELETE", `/mentions/${enc(id)}${query(input)}`),
+      sweep: (changeId: string) => get(MentionSweepResult, "POST", "/mentions/sweep", { changeId }),
     },
   };
 }

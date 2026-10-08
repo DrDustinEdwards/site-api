@@ -3,7 +3,7 @@
 // by it. The one exception is opt-in (probeMediaUpload): it uploads a file of its own, then deletes
 // that file and no other.
 
-import { MediaBulkResult, ContentList, ErrorBody, RevisionList, RevisionSource, MediaDeleteResult, MediaDetail, MediaItem, MediaList, Meta, PREFIX, schemaHash, type Meta as MetaType } from "./contract.js";
+import { MediaBulkResult, ContentList, ErrorBody, RevisionList, RevisionSource, MediaDeleteResult, MediaDetail, MediaItem, MediaList, MentionList, Meta, PREFIX, schemaHash, type Meta as MetaType } from "./contract.js";
 
 export interface ConformanceConfig {
   baseUrl: string;
@@ -41,6 +41,8 @@ const PROBE_PNG = Uint8Array.from(
   (c) => c.charCodeAt(0),
 );
 const STALE_VERSION = "carrel-conformance-stale-version";
+/** A mention id no site should hold: the refused mention writes name nothing real. */
+export const MENTION_PROBE_ID = "carrel-conformance-probe";
 
 export async function runConformance(config: ConformanceConfig): Promise<ConformanceReport> {
   const doFetch = config.fetch ?? fetch;
@@ -299,6 +301,83 @@ export async function runConformance(config: ConformanceConfig): Promise<Conform
         MediaDeleteResult.parse(await del.json());
         expectStatus(await doFetch(path, { headers: auth }), 404, "after delete");
         return `uploaded and deleted ${item.id}`;
+      });
+    }
+  }
+
+  // ---------- mentions (v0.5.0): checked on every site, since a site without the group must say 501
+
+  const hasMentions = capabilities?.mentions === true;
+  const mentionPath = `${origin}${PREFIX}/mentions`;
+  const post = (url: string, payload: unknown, headers: Record<string, string> = auth) =>
+    doFetch(url, { method: "POST", headers: { ...headers, "content-type": "application/json" }, body: JSON.stringify(payload) });
+
+  await check("mentions: advertised in capabilities, or answered 501", async () => {
+    const response = await doFetch(`${mentionPath}?limit=1`, { headers: auth });
+    if (hasMentions) {
+      expectStatus(response, 200, "mentions list");
+      const list = MentionList.parse(await response.json());
+      return `${list.items.length} mention(s) on the first page`;
+    }
+    expectStatus(response, 501, "mentions list on a site without the group");
+    const code = await errorCode(response);
+    if (code !== "not-implemented") throw new Error(`error code ${code ?? "missing"}, expected not-implemented`);
+    return "501 not-implemented";
+  });
+
+  if (config.probeWrites !== false) {
+    // The writes below are all refused before any change: no key, an unknown id, a stale version, a body with no change id.
+    await check("mentions writes without a key or with a wrong key: refused", async () => {
+      const wrong = { authorization: `Bearer ${config.key}x` };
+      const body = { decision: "approve", expectedVersion: STALE_VERSION, changeId: "conformance-probe" };
+      for (const headers of [{}, wrong]) {
+        expectStatus(await post(`${mentionPath}/${MENTION_PROBE_ID}/decide`, body, headers), 401, "decide without the key");
+        expectStatus(await doFetch(`${mentionPath}/${MENTION_PROBE_ID}?expectedVersion=${STALE_VERSION}&changeId=conformance-probe`, { method: "DELETE", headers }), 401, "delete without the key");
+        expectStatus(await post(`${mentionPath}/sweep`, { changeId: "conformance-probe" }, headers), 401, "sweep without the key");
+      }
+      return "401";
+    });
+
+    await check("mention decide of an unknown id: refused, or not implemented where the site has no mentions", async () => {
+      const response = await post(`${mentionPath}/${MENTION_PROBE_ID}/decide`, { decision: "approve", expectedVersion: STALE_VERSION, changeId: "conformance-probe" });
+      expectStatus(response, hasMentions ? 404 : 501, hasMentions ? "unknown mention decide" : "mention decide on a site without mentions");
+      const expected = hasMentions ? "not-found" : "not-implemented";
+      const code = await errorCode(response);
+      if (code !== expected) throw new Error(`error code ${code ?? "missing"}, expected ${expected}`);
+      return hasMentions ? "404 not-found" : "501 not-implemented";
+    });
+
+    await check("mention delete of an unknown id: refused, or not implemented where the site has no mentions", async () => {
+      const response = await doFetch(`${mentionPath}/${MENTION_PROBE_ID}?expectedVersion=${STALE_VERSION}&changeId=conformance-probe`, { method: "DELETE", headers: auth });
+      expectStatus(response, hasMentions ? 404 : 501, hasMentions ? "unknown mention delete" : "mention delete on a site without mentions");
+      const expected = hasMentions ? "not-found" : "not-implemented";
+      const code = await errorCode(response);
+      if (code !== expected) throw new Error(`error code ${code ?? "missing"}, expected ${expected}`);
+      return hasMentions ? "404 not-found" : "501 not-implemented";
+    });
+
+    if (hasMentions) {
+      await check("mention decide on a stale version: refused, whatever mention is first", async () => {
+        const list = MentionList.parse(await (await doFetch(`${mentionPath}?limit=1`, { headers: auth })).json());
+        const first = list.items[0];
+        if (!first) return "no mentions to write against";
+        const response = await post(`${mentionPath}/${encodeURIComponent(first.id)}/decide`, { decision: "reject", expectedVersion: STALE_VERSION, changeId: "conformance-probe" });
+        expectStatus(response, 409, "stale mention decision");
+        const code = await errorCode(response);
+        if (code !== "version-conflict") throw new Error(`error code ${code ?? "missing"}, expected version-conflict`);
+        return `409 version-conflict on mention ${first.id}`;
+      });
+
+      await check("mention sweep with no change id: refused before anything is removed", async () => {
+        const response = await post(`${mentionPath}/sweep`, {});
+        expectStatus(response, 400, "sweep without a change id");
+        return "400 invalid";
+      });
+
+      await check("mentions list with an unknown status: refused", async () => {
+        const response = await doFetch(`${mentionPath}?status=carrel-conformance-probe`, { headers: auth });
+        expectStatus(response, 400, "unknown status");
+        return "400 invalid";
       });
     }
   }

@@ -75,6 +75,10 @@ All paths sit under `/api/carrel/v1`. Bodies are JSON, checked on the way in and
 | media | `POST /media/:id/restore` | `MediaTrashInput` | `MediaWriteResult` (v0.4.0, optional) |
 | media | `POST /media/trash/empty` | `MediaTrashEmptyInput` | `MediaTrashEmptyResult` (v0.4.0, optional) |
 | media | `POST /media/bulk` | `MediaBulkInput` | `MediaBulkResult` (v0.4.0, optional) |
+| mentions | `GET /mentions?status&cursor&limit` | | `MentionList` with the whole queue's `counts` and what a sweep would remove (v0.5.0, optional per site) |
+| mentions | `POST /mentions/:id/decide` | `MentionDecideInput` | `MentionWriteResult` (v0.5.0) |
+| mentions | `DELETE /mentions/:id?expectedVersion&changeId` | | `MentionDeleteResult` (v0.5.0) |
+| mentions | `POST /mentions/sweep` | `MentionSweepInput` | `MentionSweepResult` (v0.5.0) |
 | inbox, insight, publications | `/*` | | `501` until their stage |
 
 The media group arrived in v0.2.0. A site whose adapter has no `media` still answers it `501`, as in v0.1.0.
@@ -107,6 +111,20 @@ Additive: every v0.3.0 route and body is unchanged, and the schema hash and pack
 - **Optional per site.** An adapter that lacks `setAlt`, `setTags`, or `trash` with `restore` answers that route `501 not-implemented` whatever the body says, and `meta.capabilities` carries `mediaAlt`, `mediaTags` and `mediaTrash` only where true. A bulk op needs the matching adapter methods (`delete` needs only the delete every media site has).
 - **Folders are not in the contract.** dustinedwards.info's media table has no folder column and its keys are content-addressed, so there is nothing for a folder route to edit. Tags carry the organising.
 - **Conformance** adds, under `probeWrites`: each write on the probe id (`404` where the capability is declared, `501` where not), a malformed alt body, a bulk trash whose one unknown file must come back as that file's own `not-found` inside a `200`, a bulk tag op with no tags, and an empty-trash body outside the contract. It never trashes, restores, tags or deletes a real file.
+## Changes in v0.5.0
+
+Additive: every v0.4.0 route and body is unchanged, and the schema hash and package version move on purpose. A test (`test/contract-v0.4.0.test.ts`, against `test/fixtures/contract-v0.4.0.json` written from the v0.4.0 build) holds every v0.4.0 route and schema identical, except `Capabilities` and `Meta`, which gain one optional property.
+
+**The mentions group, optional per site.** A site that receives webmentions lets Carrel read and moderate its queue. A site whose adapter has no `mentions` answers every `/mentions` route `501 not-implemented` whatever the request says, and `meta.capabilities.mentions` is absent.
+
+- **A mention** is `{ id, status, sourceUrl, targetId, authorName, authorUrl, excerpt, failureReason, receivedAt, verifiedAt, decidedAt, version }`. `id` is the site's id as text (a row id such as `41`). `targetId` is the content id it is about, such as a post slug. The text fields come from a stranger and are the site's to bound, so Carrel draws them as text and never as a link.
+- **Statuses:** `unverified` (received, the sender's page not fetched yet), `pending` (the link is really there, waiting for a decision), `approved` (shown on the post), `rejected` (kept, so a re-sender does not reappear as new) and `failed` (verification found no link). Only a verified mention takes a decision: the adapter refuses `decide` on an `unverified` or `failed` one with `RefusedError` (`422 refused`).
+- **List.** `GET /mentions?status&cursor&limit` is newest first, filtered by one status, with an opaque cursor. Its answer carries `counts` (how many in each status, across the whole queue and not the page, so a filter can show its count) and `expiring` (how many failed and rejected mentions a sweep would remove now).
+- **Decide.** `POST /mentions/:id/decide` with `{ decision: "approve" | "reject", expectedVersion, changeId }`. A decision can be changed: an approved mention can be rejected and the other way round. The answer is `{ id, status, version, changeId, purged }`, where `purged` is whether the site cleared the post's cache (`false` when that failed, `null` when there was nothing to clear). The decision stands either way; the site writes and purges as one unit and reports the purge.
+- **Delete.** `DELETE /mentions/:id?expectedVersion&changeId` removes the only copy of what a stranger sent. Answer `{ id, deleted: true, changeId, purged }`.
+- **Sweep.** `POST /mentions/sweep` with `{ changeId }` removes the failed and rejected mentions past the site's own retention windows (dustinedwards.info: 30 days for failed, 90 for rejected; pending and approved ones never expire) and answers `{ changeId, removed: { failed, rejected } }`. It names no version because it is not about one mention, and the windows are the site's, not the package's.
+- **Versions.** A mention's `version` is opaque, like a content version, and must move whenever its status, its verification or its decision does, and not when another mention changes. A write with a version the site no longer holds is `409 version-conflict` with `currentVersion`; a missing mention is `404`. dustinedwards.info's table has no `updated_at` and no version column, so its adapter derives one: a hash of `status`, `received_at`, `verified_at` and `decided_at` (a re-send resets all three timestamps and the status, an approve or reject sets the status and `decided_at`). It checks the version and then writes with the same values in the `WHERE`, so a change between the check and the write matches no row and is reported as a conflict.
+- **Conformance** adds, for every site: the list in shape (or `501` where the site has no group), writes without the key or with a wrong one refused, a decide and a delete of an id no site holds refused (`404`, or `501` without the group), and, where the site has the group, a decide with a stale version refused on the first real mention, a sweep with no change id refused (`400`, before anything is removed), and an unknown status refused. It never decides, deletes or sweeps anything real.
 
 ## Media (v0.2.0)
 
@@ -159,6 +177,12 @@ interface SiteAdapter {
     delete?(id: string, input: { expectedVersion: string; changeId: string }): Promise<void>; // v0.3.0; omit and the route answers 501
   };
   preview: { render(input: PreviewInput): Promise<string> };
+  mentions?: {                                     // v0.5.0; omit for a site with no webmentions
+    list(query: MentionListQuery): Promise<MentionList>; // items, nextCursor, counts, expiring
+    decide(id: string, input: { decision: "approve" | "reject"; expectedVersion: string; changeId: string }): Promise<{ status: MentionStatus; version: string; purged: boolean | null }>;
+    delete(id: string, input: { expectedVersion: string; changeId: string }): Promise<{ purged: boolean | null }>;
+    sweep(input: { changeId: string }): Promise<{ failed: number; rejected: number }>;
+  };
   media?: {                                        // v0.2.0; omit for a site with no media manager
     limits: { maxBytes: number; types: string[] };
     list(query: MediaListQuery): Promise<MediaList>;
@@ -184,7 +208,7 @@ An adapter signals refusals by throwing these errors:
 
 The package computes diffs, and serves the source at a revision, from `revisionSource`, so a site only has to return old source. `content.delete` throws `VersionConflictError`, `NotFoundError` or `RefusedError` like the writes.
 
-`@dustinedwards/site-api/testing` exports `memoryAdapter()`, a conforming reference adapter held in memory, media included (its reference check scans each post's source for `/media/<id>`, as dustinedwards.info's does). `memoryAdapter({ media: false })` is a site with no media manager, `memoryAdapter({ contentDelete: false })` one with no content delete, and `memoryAdapter({ mediaWrites: false })` a v0.2.0 media manager with no alt, tag or trash writes. Its files carry a `version` that every metadata write moves. Carrel's tests run against it.
+`@dustinedwards/site-api/testing` exports `memoryAdapter()`, a conforming reference adapter held in memory, media included (its reference check scans each post's source for `/media/<id>`, as dustinedwards.info's does). `memoryAdapter({ media: false })` is a site with no media manager, `memoryAdapter({ contentDelete: false })` one with no content delete, `memoryAdapter({ mediaWrites: false })` a v0.2.0 media manager with no alt, tag or trash writes, and `memoryAdapter({ mentions: false })` one with no webmentions. Its files carry a `version` that every metadata write moves. Its mentions are seeded with `adapter.receiveMention({ sourceUrl, targetId, status?, ... })`, as the site's endpoint would write them. Carrel's tests run against it.
 
 ## Carrel's side
 
@@ -196,9 +220,9 @@ The package computes diffs, and serves the source at a revision, from `revisionS
   - an unknown route is refused;
   - the list answers in shape;
   - a stale write is refused;
-  - on a site that offers media (v0.2.0): the upload limits are declared, the media list answers in shape, a delete of an id no site holds is refused, and an upload of a type no site accepts is refused.
-
-  - on a site that offers media (v0.4.0): each media write is refused on the probe id (or answers 501 where the site lacks it), as above under Changes in v0.4.0.
+  - on a site that offers media (v0.2.0): the upload limits are declared, the media list answers in shape, a delete of an id no site holds is refused, and an upload of a type no site accepts is refused;
+  - on a site that offers media (v0.4.0): each media write is refused on the probe id (or answers 501 where the site lacks it), as above under Changes in v0.4.0;
+  - the mentions checks of v0.5.0, listed above under Changes in v0.5.0.
 
   Every write it sends must be refused, so it never changes a conforming site. `probeMediaUpload: true` adds one real round trip: it uploads a 1x1 PNG of its own, reads it back, and deletes that file and no other. It is off by default.
 
@@ -215,4 +239,6 @@ Tests run locally, with no Actions minutes. The planted tests send a request eac
 - `test/planted.test.ts`: the key off its prefix, a wrong key, a stale `expectedVersion`, an unknown route.
 - `test/media.test.ts`: a file a post uses (refused with the post named), an oversized or undeclared upload, bytes that are not their type, an id that climbs out.
 - `test/media-writes.test.ts`: alt, tags, trash, restore, empty trash and bulk, with stale versions, files in use, the 100-file limits and a site without the writes.
+- `test/mentions.test.ts`: a stale version, a missing mention, a site with no mentions, the site's own refusal, a missing key or a bad body for every mentions write, and the sweep route not read as a mention id.
+- `test/contract-v0.4.0.test.ts`: the v0.4.0 contract unchanged, against `test/fixtures/contract-v0.4.0.json`; only the four mentions routes and one optional capability are new.
 - `test/contract-v0.1.0.test.ts`: the v0.1.0 contract unchanged, against `test/fixtures/contract-v0.1.0.json`, written from the v0.1.0 build. Every v0.1.0 route and schema is identical, except three schemas that gain optional properties only (`Meta`, `Capabilities`, `ErrorBody`).

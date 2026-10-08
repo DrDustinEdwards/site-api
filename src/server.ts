@@ -39,6 +39,15 @@ import {
   MediaTrashInput,
   MediaUploadQuery,
   MediaWriteResult,
+  MentionDecideInput,
+  MentionDeleteQuery,
+  MentionDeleteResult,
+  MentionId,
+  MentionList,
+  MentionListQuery,
+  MentionSweepInput,
+  MentionSweepResult,
+  MentionWriteResult,
   Meta,
   PACKAGE_VERSION,
   PREFIX,
@@ -560,8 +569,65 @@ export function createSiteApi(config: SiteApiConfig): SiteApi {
     return { code: "internal", message: "The site failed to answer." };
   }
 
-  // Groups a site has not implemented. Media leaves this list when the adapter has it.
-  const LATER = media ? /^\/(inbox|insight|publications)(\/|$)/ : /^\/(media|inbox|insight|publications)(\/|$)/;
+
+  // ---------- mentions (v0.5.0), mounted only when the site's adapter has it
+
+  const mentions = adapter.mentions;
+
+  function mentionId(m: RegExpMatchArray): string {
+    let value: string;
+    try {
+      value = decodeURIComponent(m[1]!);
+    } catch {
+      throw new BadRequest("invalid", "The mention id is not valid.");
+    }
+    if (!MentionId.safeParse(value).success) throw new BadRequest("invalid", "The mention id is not valid.");
+    return value;
+  }
+
+  if (mentions) {
+    routes.push(
+      {
+        method: "GET",
+        pattern: /^\/mentions$/,
+        run: async (_m, url) => json(200, checked(MentionList, await mentions.list(readQuery(url, MentionListQuery)), "mentions list")),
+      },
+      {
+        method: "POST",
+        pattern: /^\/mentions\/sweep$/,
+        run: async (_m, _u, request) => {
+          const input = await readBody(request, MentionSweepInput);
+          const removed = await mentions.sweep(input);
+          return json(200, checked(MentionSweepResult, { changeId: input.changeId, removed }, "mentions sweep"));
+        },
+      },
+      {
+        method: "POST",
+        pattern: new RegExp(`^/mentions/${ID}/decide$`),
+        run: async (m, _u, request) => {
+          const id = mentionId(m);
+          const input = await readBody(request, MentionDecideInput);
+          const result = await mentions.decide(id, input);
+          return json(200, checked(MentionWriteResult, { id, ...result, changeId: input.changeId }, "mention decision"));
+        },
+      },
+      {
+        method: "DELETE",
+        pattern: new RegExp(`^/mentions/${ID}$`),
+        run: async (m, url) => {
+          const id = mentionId(m);
+          const query = readQuery(url, MentionDeleteQuery);
+          const result = await mentions.delete(id, query);
+          return json(200, checked(MentionDeleteResult, { id, deleted: true, changeId: query.changeId, purged: result.purged }, "mention delete"));
+        },
+      },
+    );
+  }
+
+  // Groups a site has not implemented. Media and mentions leave this list when the adapter has them.
+  const LATER = new RegExp(
+    `^/(${[...(media ? [] : ["media"]), ...(mentions ? [] : ["mentions"]), "inbox", "insight", "publications"].join("|")})(/|$)`,
+  );
 
   async function handle(request: Request): Promise<Response> {
     const url = new URL(request.url);

@@ -28,13 +28,20 @@ describe("conformance", () => {
       "media bulk: an unknown id is that file's own not-found, and the request answers 200",
       "media bulk tag op with no tags: refused, or not implemented where the site lacks tags",
       "media empty trash with a body outside the contract: refused, or not implemented where the site has no trash",
+      "mentions: advertised in capabilities, or answered 501",
+      "mentions writes without a key or with a wrong key: refused",
+      "mention decide of an unknown id: refused, or not implemented where the site has no mentions",
+      "mention delete of an unknown id: refused, or not implemented where the site has no mentions",
+      "mention decide on a stale version: refused, whatever mention is first",
+      "mention sweep with no change id: refused before anything is removed",
+      "mentions list with an unknown status: refused",
     ]);
   });
 
   it("runs only the content checks on a site with no media manager", async () => {
     const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: site(memoryAdapter({ media: false })).fetch });
     expect(failing(report)).toEqual([]);
-    expect(report.checks).toHaveLength(11);
+    expect(report.checks).toHaveLength(18);
   });
 
   it("expects 501 on a site with no content delete, and 404 where it has one", async () => {
@@ -43,6 +50,64 @@ describe("conformance", () => {
     expect(without.checks.find((c) => c.name.startsWith("content delete of an unknown id"))?.detail).toBe("501 not-implemented");
     const withDelete = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: site().fetch });
     expect(withDelete.checks.find((c) => c.name.startsWith("content delete of an unknown id"))?.detail).toBe("404 not-found");
+  });
+
+  it("expects 501 from every mentions check on a site without the group, and runs only the four that apply", async () => {
+    const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: site(memoryAdapter({ mentions: false })).fetch });
+    expect(failing(report)).toEqual([]);
+    const mentions = report.checks.filter((c) => c.name.startsWith("mention"));
+    expect(mentions.map((c) => c.detail)).toEqual(["501 not-implemented", "401", "501 not-implemented", "501 not-implemented"]);
+  });
+
+  it("with a real mention in the queue, the stale-version probe runs against it and changes nothing", async () => {
+    const adapter = memoryAdapter();
+    const id = adapter.receiveMention({ sourceUrl: "https://a.example/post", targetId: "first-post" });
+    const before = structuredClone(adapter.mentionStore.get(id));
+    const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: site(adapter).fetch });
+    expect(failing(report)).toEqual([]);
+    expect(report.checks.find((c) => c.name.startsWith("mention decide on a stale"))?.detail).toBe(`409 version-conflict on mention ${id}`);
+    expect(adapter.mentionStore.get(id)).toEqual(before);
+    expect(adapter.purged).toEqual([]);
+  });
+
+  it("PLANT: fails a site that decides a mention it does not hold", async () => {
+    const adapter = memoryAdapter();
+    adapter.mentions!.decide = async () => ({ status: "approved", version: "m9", purged: null });
+    const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: site(adapter).fetch });
+    expect(failing(report)).toEqual(["mention decide of an unknown id: refused, or not implemented where the site has no mentions"]);
+  });
+
+  it("PLANT: fails a site that deletes a mention it does not hold", async () => {
+    const adapter = memoryAdapter();
+    adapter.mentions!.delete = async () => ({ purged: null });
+    const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: site(adapter).fetch });
+    expect(failing(report)).toEqual(["mention delete of an unknown id: refused, or not implemented where the site has no mentions"]);
+  });
+
+  it("PLANT: fails a site that ignores the version on a mention decision", async () => {
+    const adapter = memoryAdapter();
+    adapter.receiveMention({ sourceUrl: "https://a.example/post", targetId: "first-post" });
+    const decide = adapter.mentions!.decide;
+    adapter.mentions!.decide = (id, input) => decide(id, { ...input, expectedVersion: adapter.mentionStore.get(id)?.version ?? input.expectedVersion });
+    const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: site(adapter).fetch });
+    expect(failing(report)).toEqual(["mention decide on a stale version: refused, whatever mention is first"]);
+  });
+
+  it("PLANT: fails a site that offers mentions but does not say so in its capabilities", async () => {
+    const s = site();
+    const silent = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const response = await s.fetch(input, init);
+      if (!new URL(new Request(input).url).pathname.endsWith("/meta") || !response.ok) return response;
+      const meta = await response.json();
+      const { mentions: _gone, ...capabilities } = meta.capabilities;
+      return Response.json({ ...meta, capabilities });
+    }) as typeof fetch;
+    const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: silent });
+    expect(failing(report)).toEqual([
+      "mentions: advertised in capabilities, or answered 501",
+      "mention decide of an unknown id: refused, or not implemented where the site has no mentions",
+      "mention delete of an unknown id: refused, or not implemented where the site has no mentions",
+    ]);
   });
 
   it("PLANT: fails a site that answers a delete of an item it does not hold as done", async () => {
@@ -80,7 +145,7 @@ describe("conformance", () => {
     await s.adapter.media!.upload({ bytes: new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), contentType: "image/png", filename: "real.png", alt: "", changeId: "seed" });
     const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: s.fetch, probeMediaUpload: true });
     expect(failing(report)).toEqual([]);
-    expect(report.checks.at(-1)).toMatchObject({ name: "media round trip: upload, read, delete its own file", ok: true });
+    expect(report.checks.find((c) => c.name.startsWith("media round trip"))).toMatchObject({ name: "media round trip: upload, read, delete its own file", ok: true });
     expect([...s.adapter.mediaStore.keys()]).toEqual(["uploads/1-real.png"]);
     expect(s.adapter.deleted).toEqual(["uploads/2-carrel-conformance-probe.png"]);
   });
