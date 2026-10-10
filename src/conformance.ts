@@ -356,6 +356,16 @@ export async function runConformance(config: ConformanceConfig): Promise<Conform
       return hasMentions ? "404 not-found" : "501 not-implemented";
     });
 
+    await check("mention reset of an unknown id: refused, or not implemented where the site has no reset", async () => {
+      const offered = hasMentions && capabilities?.mentionReset === true;
+      const response = await post(`${mentionPath}/${MENTION_PROBE_ID}/decide`, { decision: "reset", expectedVersion: STALE_VERSION, changeId: "conformance-probe" });
+      expectStatus(response, offered ? 404 : 501, offered ? "unknown mention reset" : "mention reset on a site without it");
+      const expected = offered ? "not-found" : "not-implemented";
+      const code = await errorCode(response);
+      if (code !== expected) throw new Error(`error code ${code ?? "missing"}, expected ${expected}`);
+      return offered ? "404 not-found" : "501 not-implemented";
+    });
+
     if (hasMentions) {
       await check("mention decide on a stale version: refused, whatever mention is first", async () => {
         const list = MentionList.parse(await (await doFetch(`${mentionPath}?limit=1`, { headers: auth })).json());

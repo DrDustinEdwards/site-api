@@ -50,11 +50,11 @@ describe("the v0.4.0 contract", () => {
     });
   }
 
-  it("extends Capabilities by one optional property, mentions, and Meta only through it", () => {
+  it("extends Capabilities by optional properties only (v0.5.0's mentions; later ones are named by the newer contract tests), and Meta only through it", () => {
     const before = V040.schemas.Capabilities!;
     const after = now("Capabilities");
     for (const [prop, schema] of Object.entries(before.properties ?? {})) expect(after.properties?.[prop], prop).toEqual(schema);
-    expect(Object.keys(after.properties ?? {}).filter((p) => !(p in (before.properties ?? {})))).toEqual(["mentions"]);
+    expect(Object.keys(after.properties ?? {}).filter((p) => !(p in (before.properties ?? {})))).toContain("mentions");
     expect(after.required).toEqual(before.required);
     const metaBefore = V040.schemas.Meta!;
     const metaAfter = now("Meta");

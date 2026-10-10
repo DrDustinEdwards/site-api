@@ -61,6 +61,8 @@ export const Capabilities = z.object({
   mediaTrash: z.boolean().optional(),
   /** True when the site receives webmentions and lets Carrel moderate them (v0.5.0). Absent or false: every mentions route answers 501. */
   mentions: z.boolean().optional(),
+  /** True when a decision can be taken back to pending (v0.6.0), the `reset` decision. Absent or false: a reset answers 501. */
+  mentionReset: z.boolean().optional(),
 });
 
 export const Meta = z.object({
@@ -424,7 +426,8 @@ export const MentionList = z.object({
   expiring: z.object({ failed: z.number().int().min(0), rejected: z.number().int().min(0) }),
 });
 
-export const MENTION_DECISIONS = ["approve", "reject"] as const;
+/** `reset` (v0.6.0, optional per site) takes an approved or rejected mention back to pending, so a decision can be undone. */
+export const MENTION_DECISIONS = ["approve", "reject", "reset"] as const;
 
 export const MentionDecideInput = z.object({
   decision: z.enum(MENTION_DECISIONS),

@@ -29,6 +29,7 @@ describe("client round trip", () => {
       mediaTags: true,
       mediaTrash: true,
       mentions: true,
+      mentionReset: true,
     });
   });
 

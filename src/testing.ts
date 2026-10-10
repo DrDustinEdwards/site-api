@@ -20,6 +20,8 @@ export interface MemoryAdapterOptions {
   mediaWrites?: boolean;
   /** false for a site that does not receive webmentions (its routes then answer 501). On by default. */
   mentions?: boolean;
+  /** false for a mentions group with no reset (a v0.5.0 site): a reset then answers 501. On by default. */
+  mentionReset?: boolean;
 }
 
 /** What the reference adapter's sweep keeps, like dustinedwards.info: failed rows 30 days, rejected rows 90. */
@@ -308,6 +310,16 @@ export function memoryAdapter(
             purged.push(current.targetId);
             return { status: next.status, version: next.version, purged: true };
           },
+          async reset(id, input) {
+            const current = heldMention(id, input.expectedVersion);
+            if (current.status !== "approved" && current.status !== "rejected") {
+              throw new RefusedError(`A ${current.status} mention has no decision to take back.`);
+            }
+            const next: MentionItem = { ...current, status: "pending", decidedAt: null, version: `m${++mentionVersion}` };
+            mentionStore.set(id, next);
+            purged.push(current.targetId);
+            return { status: next.status, version: next.version, purged: true };
+          },
           async delete(id, input) {
             const current = heldMention(id, input.expectedVersion);
             mentionStore.delete(id);
@@ -320,6 +332,9 @@ export function memoryAdapter(
             return { failed: gone.failed.length, rejected: gone.rejected.length };
           },
         };
+
+  // A v0.5.0 mentions group: no way back to pending.
+  if (mentionsAdapter && options.mentionReset === false) delete mentionsAdapter.reset;
 
   return {
     site,

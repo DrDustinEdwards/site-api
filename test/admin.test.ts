@@ -372,12 +372,13 @@ describe("mentions", () => {
     const pending = await loadMentions(source);
     expect(pending.filter).toBe("pending");
     expect(pending.counts).toMatchObject({ pending: 1, approved: 1 });
-    expect(pending.offers).toEqual({ mentions: true, reset: false });
+    expect(pending.offers).toEqual({ mentions: true, reset: true });
+    expect((await loadMentions(setup({ mentionReset: false }).source)).offers.reset).toBe(false);
     expect((await loadMentions(setup({ mentions: false }).source)).offers.mentions).toBe(false);
   });
 
-  it("Undo is the opposite decision between approved and rejected; a decision on a waiting mention has none", async () => {
-    const { adapter, source } = setup();
+  it("Undo is the opposite decision between approved and rejected; on a v0.5.0 site a decision on a waiting mention has none", async () => {
+    const { adapter, source } = setup({ mentionReset: false });
     const done = adapter.receiveMention({ sourceUrl: "https://a.example/1", targetId: "p", status: "approved" });
     const waiting = adapter.receiveMention({ sourceUrl: "https://a.example/2", targetId: "p" });
     const v = (id: string) => adapter.mentionStore.get(id)!.version;
@@ -388,6 +389,24 @@ describe("mentions", () => {
     await runMentionsIntent(source, { intent: rejected.undo!.intent, ...rejected.undo!.fields });
     expect(adapter.mentionStore.get(done)!.status).toBe("approved");
     expect(adapter.mentionStore.get(waiting)!.status).toBe("rejected");
+    expect(await runMentionsIntent(source, { intent: "reset", ids: [waiting], versions: [v(waiting)] })).toEqual({ ok: false, message: "This site does not take a mention decision back." });
+  });
+
+  it("with reset (v0.6.0), Undo takes a decision on a waiting mention back to waiting, and Undo of that decides again", async () => {
+    const { adapter, source } = setup();
+    const waiting = adapter.receiveMention({ sourceUrl: "https://a.example/1", targetId: "p" });
+    const v = (id: string) => adapter.mentionStore.get(id)!.version;
+    const approved = await runMentionsIntent(source, { intent: "approve", ids: [waiting], versions: [v(waiting)], statuses: ["pending"] });
+    expect(approved.undo).toEqual({ intent: "reset", fields: { ids: [waiting], versions: [v(waiting)], statuses: ["approved"] } });
+    const back = await runMentionsIntent(source, { intent: approved.undo!.intent, ...approved.undo!.fields });
+    expect(back).toMatchObject({ ok: true, message: "Took back the decision on 1 mention." });
+    expect(adapter.mentionStore.get(waiting)).toMatchObject({ status: "pending", decidedAt: null });
+    expect(back.undo).toEqual({ intent: "approve", fields: { ids: [waiting], versions: [v(waiting)], statuses: ["pending"] } });
+
+    const other = adapter.receiveMention({ sourceUrl: "https://a.example/2", targetId: "p", status: "approved" });
+    const mixed = await runMentionsIntent(source, { intent: "reject", ids: [waiting, other], versions: [v(waiting), v(other)], statuses: ["pending", "approved"] });
+    expect(mixed.undo).toBeUndefined();
+    expect(mixed.message).toContain("no single Undo");
   });
 
   it("refuses a stale version as a conflict, and an unverified mention with the site's own words", async () => {

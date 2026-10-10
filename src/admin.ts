@@ -950,7 +950,7 @@ const NO_COUNTS: MentionCounts = { unverified: 0, pending: 0, approved: 0, rejec
 /** One page of one site's mention queue, as MentionsList renders it. */
 export async function loadMentions(source: ContentSource, query: MentionsQuery = {}): Promise<MentionsData> {
   const capabilities = (await source.client.meta()).capabilities;
-  const base = { site: { id: source.site.id, name: source.site.name }, query, can: source.can, offers: { mentions: capabilities.mentions === true, reset: false } };
+  const base = { site: { id: source.site.id, name: source.site.name }, query, can: source.can, offers: { mentions: capabilities.mentions === true, reset: capabilities.mentions === true && capabilities.mentionReset === true } };
   if (capabilities.mentions !== true) {
     return { ...base, filter: query.status ?? "all", rows: [], page: { nextCursor: null }, counts: NO_COUNTS, expiring: { failed: 0, rejected: 0 } };
   }
@@ -972,14 +972,14 @@ export async function loadMentions(source: ContentSource, query: MentionsQuery =
   };
 }
 
-export const MENTION_INTENTS = ["approve", "reject", "delete", "sweep"] as const;
+export const MENTION_INTENTS = ["approve", "reject", "reset", "delete", "sweep"] as const;
 export type MentionIntent = (typeof MENTION_INTENTS)[number];
 
 /** Said when the write moved but the site could not clear its cache. */
 const PURGE_FAILED = " The site could not clear its cache, so the post's page may show the old mentions until its cache expires.";
 
 /**
- * Approves, rejects or deletes each mention, in order, each with its own change id and record, or
+ * Approves, rejects, resets (v0.6.0) or deletes each mention, in order, each with its own change id and record, or
  * sweeps the queue. Each write carries the version the person saw, so a mention the site changed since
  * is refused as stale and stays.
  */
@@ -987,7 +987,10 @@ export async function runMentionsIntent(source: ContentSource, input: IntentInpu
   const intent = text(input, "intent") as MentionIntent;
   if (!MENTION_INTENTS.includes(intent)) return refused("That is not something the mentions list can do.");
   if (!source.can.decideMentions) return refused(NOT_YOURS.decideMentions);
-  if ((await source.client.meta()).capabilities.mentions !== true) return refused("This site does not receive webmentions through the site API.");
+  const capabilities = (await source.client.meta()).capabilities;
+  if (capabilities.mentions !== true) return refused("This site does not receive webmentions through the site API.");
+  const canReset = capabilities.mentionReset === true;
+  if (intent === "reset" && !canReset) return refused("This site does not take a mention decision back.");
 
   if (intent === "sweep") {
     const change = changeId();
@@ -1010,36 +1013,52 @@ export async function runMentionsIntent(source: ContentSource, input: IntentInpu
   }
   const sendable = targets.filter((t): t is { id: string; version: string; status: string | null } => t.version !== null);
 
-  const undoIds: string[] = [];
-  const undoVersions: string[] = [];
-  let waiting = 0;
+  // Each done mention's inverse: the opposite decision between approved and rejected, a reset (v0.6.0)
+  // for a decision on a waiting mention, and the decision that was taken back for a reset.
+  const inverses: Array<{ id: string; version: string; intent: MentionIntent; status: MentionStatus }> = [];
+  let noUndo = 0;
   const { outcomes, conflict } = await eachItem(source, sendable, "mention", async ({ id, version, status }): Promise<Outcome> => {
     const change = changeId();
     if (intent === "delete") {
       const { purged } = await source.client.mentions.delete(id, { expectedVersion: version, changeId: change });
       return { id, ok: true, message: "Deleted." + (purged === false ? PURGE_FAILED : "") + (await recordDone(source, "mention-delete", id, change)) };
     }
-    const written = await source.client.mentions.decide(id, { decision: intent, expectedVersion: version, changeId: change });
-    // The opposite decision undoes a decision between approved and rejected; a waiting mention cannot go back yet.
-    const was = MentionStatus.safeParse(status).success ? status : null;
-    if (was === "approved" || was === "rejected") {
-      if (was !== written.status) {
-        undoIds.push(id);
-        undoVersions.push(written.version);
-      }
-    } else waiting++;
+    const written = await source.client.mentions.decide(id, { decision: intent as "approve" | "reject" | "reset", expectedVersion: version, changeId: change });
+    const parsed = MentionStatus.safeParse(status);
+    const was = parsed.success ? parsed.data : null;
+    const inverse: MentionIntent | null =
+      was === written.status
+        ? null
+        : was === "approved"
+          ? "approve"
+          : was === "rejected"
+            ? "reject"
+            : was === "pending" && canReset
+              ? "reset"
+              : null;
+    if (inverse) inverses.push({ id, version: written.version, intent: inverse, status: written.status });
+    else if (was !== written.status) noUndo++;
     const note = await recordDone(source, `mention-${intent}`, id, change);
-    return { id, ok: true, message: (intent === "approve" ? "Approved." : "Rejected.") + (written.purged === false ? PURGE_FAILED : "") + note };
+    return { id, ok: true, message: DECIDED[intent] + (written.purged === false ? PURGE_FAILED : "") + note };
   });
 
   const all = [...early, ...outcomes];
   const extra: Partial<IntentResult> = conflict ? { conflict } : {};
-  if (undoIds.length > 0) {
-    extra.undo = { intent: intent === "approve" ? "reject" : "approve", fields: { ids: undoIds, versions: undoVersions, statuses: undoIds.map(() => (intent === "approve" ? "approved" : "rejected")) } };
+  let tail = "";
+  if (inverses.length > 0 && inverses.every((i) => i.intent === inverses[0]!.intent)) {
+    extra.undo = {
+      intent: inverses[0]!.intent,
+      fields: { ids: inverses.map((i) => i.id), versions: inverses.map((i) => i.version), statuses: inverses.map((i) => i.status) },
+    };
+  } else if (inverses.length > 0) {
+    tail = " The mentions were in different states before, so there is no single Undo; change them one at a time to reverse it.";
   }
-  const tail = intent !== "delete" && waiting > 0 ? " A decision on a waiting mention has no Undo on this site." : "";
-  return result(all, summarise(all, intent === "approve" ? "Approved" : intent === "reject" ? "Rejected" : "Deleted", "mention") + tail, extra);
+  if (intent !== "delete" && noUndo > 0) tail += canReset ? "" : " A decision on a waiting mention has no Undo on this site.";
+  return result(all, summarise(all, DONE_MENTIONS[intent], "mention") + tail, extra);
 }
+
+const DECIDED: Record<MentionIntent, string> = { approve: "Approved.", reject: "Rejected.", reset: "Back to waiting.", delete: "Deleted.", sweep: "" };
+const DONE_MENTIONS: Record<MentionIntent, string> = { approve: "Approved", reject: "Rejected", reset: "Took back the decision on", delete: "Deleted", sweep: "Swept" };
 
 // ---------- many sites at once
 

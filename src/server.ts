@@ -607,7 +607,14 @@ export function createSiteApi(config: SiteApiConfig): SiteApi {
         run: async (m, _u, request) => {
           const id = mentionId(m);
           const input = await readBody(request, MentionDecideInput);
-          const result = await mentions.decide(id, input);
+          const { decision, ...rest } = input;
+          let result;
+          if (decision === "reset") {
+            if (!mentions.reset) return fail("not-implemented", "This site does not take a mention decision back.");
+            result = await mentions.reset(id, rest);
+          } else {
+            result = await mentions.decide(id, { ...rest, decision });
+          }
           return json(200, checked(MentionWriteResult, { id, ...result, changeId: input.changeId }, "mention decision"));
         },
       },

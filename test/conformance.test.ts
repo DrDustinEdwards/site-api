@@ -32,6 +32,7 @@ describe("conformance", () => {
       "mentions writes without a key or with a wrong key: refused",
       "mention decide of an unknown id: refused, or not implemented where the site has no mentions",
       "mention delete of an unknown id: refused, or not implemented where the site has no mentions",
+      "mention reset of an unknown id: refused, or not implemented where the site has no reset",
       "mention decide on a stale version: refused, whatever mention is first",
       "mention sweep with no change id: refused before anything is removed",
       "mentions list with an unknown status: refused",
@@ -41,7 +42,7 @@ describe("conformance", () => {
   it("runs only the content checks on a site with no media manager", async () => {
     const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: site(memoryAdapter({ media: false })).fetch });
     expect(failing(report)).toEqual([]);
-    expect(report.checks).toHaveLength(18);
+    expect(report.checks).toHaveLength(19);
   });
 
   it("expects 501 on a site with no content delete, and 404 where it has one", async () => {
@@ -52,11 +53,11 @@ describe("conformance", () => {
     expect(withDelete.checks.find((c) => c.name.startsWith("content delete of an unknown id"))?.detail).toBe("404 not-found");
   });
 
-  it("expects 501 from every mentions check on a site without the group, and runs only the four that apply", async () => {
+  it("expects 501 from every mentions check on a site without the group, and runs only the five that apply", async () => {
     const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: site(memoryAdapter({ mentions: false })).fetch });
     expect(failing(report)).toEqual([]);
     const mentions = report.checks.filter((c) => c.name.startsWith("mention"));
-    expect(mentions.map((c) => c.detail)).toEqual(["501 not-implemented", "401", "501 not-implemented", "501 not-implemented"]);
+    expect(mentions.map((c) => c.detail)).toEqual(["501 not-implemented", "401", "501 not-implemented", "501 not-implemented", "501 not-implemented"]);
   });
 
   it("with a real mention in the queue, the stale-version probe runs against it and changes nothing", async () => {
@@ -75,6 +76,21 @@ describe("conformance", () => {
     adapter.mentions!.decide = async () => ({ status: "approved", version: "m9", purged: null });
     const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: site(adapter).fetch });
     expect(failing(report)).toEqual(["mention decide of an unknown id: refused, or not implemented where the site has no mentions"]);
+  });
+
+  it("expects 501 from a reset on a v0.5.0 mentions group, and 404 where the site has reset", async () => {
+    const without = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: site(memoryAdapter({ mentionReset: false })).fetch });
+    expect(failing(without)).toEqual([]);
+    expect(without.checks.find((c) => c.name.startsWith("mention reset"))?.detail).toBe("501 not-implemented");
+    const withReset = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: site().fetch });
+    expect(withReset.checks.find((c) => c.name.startsWith("mention reset"))?.detail).toBe("404 not-found");
+  });
+
+  it("PLANT: fails a site that resets a mention it does not hold", async () => {
+    const adapter = memoryAdapter();
+    adapter.mentions!.reset = async () => ({ status: "pending", version: "m9", purged: null });
+    const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: site(adapter).fetch });
+    expect(failing(report)).toEqual(["mention reset of an unknown id: refused, or not implemented where the site has no reset"]);
   });
 
   it("PLANT: fails a site that deletes a mention it does not hold", async () => {
@@ -107,6 +123,7 @@ describe("conformance", () => {
       "mentions: advertised in capabilities, or answered 501",
       "mention decide of an unknown id: refused, or not implemented where the site has no mentions",
       "mention delete of an unknown id: refused, or not implemented where the site has no mentions",
+      "mention reset of an unknown id: refused, or not implemented where the site has no reset",
     ]);
   });
 

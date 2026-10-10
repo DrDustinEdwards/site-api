@@ -89,6 +89,40 @@ describe("mentions decide", () => {
     expect(rejected.status).toBe("rejected");
   });
 
+  it("resets a decision (v0.6.0): an approved mention goes back to pending, undecided, at a new version", async () => {
+    const { adapter, ids } = seededAdapter();
+    const { client: c } = client(adapter);
+    const approved = await c.mentions.decide(ids.pending, { decision: "approve", expectedVersion: adapter.mentionStore.get(ids.pending)!.version, changeId: "c1" });
+    const reset = await c.mentions.decide(ids.pending, { decision: "reset", expectedVersion: approved.version, changeId: "c2" });
+    expect(reset).toMatchObject({ id: ids.pending, status: "pending", changeId: "c2", purged: true });
+    expect(reset.version).not.toBe(approved.version);
+    expect(adapter.mentionStore.get(ids.pending)).toMatchObject({ status: "pending", decidedAt: null, version: reset.version });
+    expect((await c.meta()).capabilities.mentionReset).toBe(true);
+  });
+
+  it("PLANT: refuses a reset of a mention with no decision to take back, with the site's own words", async () => {
+    const { adapter, ids } = seededAdapter();
+    const { client: c } = client(adapter);
+    const before = snapshot(adapter);
+    for (const id of [ids.pending, ids.unverified]) {
+      const error = await c.mentions.decide(id, { decision: "reset", expectedVersion: adapter.mentionStore.get(id)!.version, changeId: "c1" }).catch((e) => e);
+      expect(error.status, id).toBe(422);
+      expect(error.body.message).toContain("no decision to take back");
+    }
+    expect(snapshot(adapter)).toEqual(before);
+  });
+
+  it("PLANT: answers a reset 501 on a mentions group with no reset (a v0.5.0 site), and decides as before", async () => {
+    const adapter = memoryAdapter({ mentionReset: false });
+    const id = adapter.receiveMention({ sourceUrl: "https://a.example/1", targetId: "p", status: "approved" });
+    const { client: c } = client(adapter);
+    const error = await c.mentions.decide(id, { decision: "reset", expectedVersion: adapter.mentionStore.get(id)!.version, changeId: "c1" }).catch((e) => e);
+    expect(error.status).toBe(501);
+    expect(adapter.mentionStore.get(id)!.status).toBe("approved");
+    expect((await c.meta()).capabilities.mentionReset).toBeUndefined();
+    expect((await c.mentions.decide(id, { decision: "reject", expectedVersion: adapter.mentionStore.get(id)!.version, changeId: "c2" })).status).toBe("rejected");
+  });
+
   it("PLANT: refuses a stale version with 409 and the current version, and changes nothing", async () => {
     const { adapter, ids } = seededAdapter();
     const { client: c } = client(adapter);

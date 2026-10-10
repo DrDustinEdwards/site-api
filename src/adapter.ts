@@ -113,6 +113,14 @@ export interface MentionsAdapter {
     id: string,
     input: { decision: "approve" | "reject"; expectedVersion: string; changeId: string },
   ): Promise<{ status: MentionStatus; version: string; purged: boolean | null }>;
+  /**
+   * Optional (v0.6.0): takes an approved or rejected mention back to pending, as it was before the
+   * decision, so a decision can be undone. Refuse (RefusedError) any other status. Absent: a reset answers 501.
+   */
+  reset?(
+    id: string,
+    input: { expectedVersion: string; changeId: string },
+  ): Promise<{ status: MentionStatus; version: string; purged: boolean | null }>;
   /** Removes the only copy of what a stranger sent. */
   delete(id: string, input: { expectedVersion: string; changeId: string }): Promise<{ purged: boolean | null }>;
   /** Removes failed and rejected mentions past the site's retention windows, and reports how many. */
@@ -147,6 +155,7 @@ export function capabilitiesOf(adapter: SiteAdapter): Capabilities {
     ...(adapter.media?.setTags ? { mediaTags: true } : {}),
     ...(adapter.media?.trash && adapter.media.restore ? { mediaTrash: true } : {}),
     ...(adapter.mentions ? { mentions: true } : {}),
+    ...(adapter.mentions?.reset ? { mentionReset: true } : {}),
   };
 }
 
