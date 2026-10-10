@@ -9,6 +9,7 @@ import type {
   MediaDetail,
   MediaItem,
   MediaList,
+  MediaLens,
   MediaListQuery,
   MediaUploadLimits,
   MediaUse,
@@ -80,6 +81,11 @@ export interface MediaUpload {
 export interface MediaAdapter {
   /** What the site accepts. The package refuses any other type, and anything larger, unread. */
   limits: MediaUploadLimits;
+  /**
+   * Optional (v0.6.0): the lenses `list` answers. A site that names any also sorts by `sort` and `dir`
+   * and says so in the answer's `sorted`. The package answers a lens not named here with 501.
+   */
+  lenses?: readonly MediaLens[];
   list(query: MediaListQuery): Promise<MediaList>;
   /** The file and every place it is used. null when the id does not exist. */
   get(id: string): Promise<MediaDetail | null>;
@@ -159,6 +165,7 @@ export function capabilitiesOf(adapter: SiteAdapter): Capabilities {
     ...(adapter.content.delete ? { contentDelete: true } : {}),
     ...(adapter.content.setTags ? { contentTags: true } : {}),
     ...(adapter.media?.setAlt ? { mediaAlt: true } : {}),
+    ...(adapter.media?.lenses?.length ? { mediaLenses: [...adapter.media.lenses] } : {}),
     ...(adapter.media?.setTags ? { mediaTags: true } : {}),
     ...(adapter.media?.trash && adapter.media.restore ? { mediaTrash: true } : {}),
     ...(adapter.mentions ? { mentions: true } : {}),

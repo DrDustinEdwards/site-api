@@ -19,6 +19,7 @@ describe("conformance", () => {
       "content tags of an unknown id: refused, or not implemented where the site keeps no tags",
       "media: upload limits declared",
       "media list: answers in the contract's shape",
+      "media lenses: each one the site names answers, and one it does not is not implemented",
       "media delete of an unknown id: refused",
       "media upload of a type the site does not accept: refused",
       "media alt of an unknown id: refused, or not implemented where the site lacks it",
@@ -77,6 +78,26 @@ describe("conformance", () => {
     adapter.mentions!.decide = async () => ({ status: "approved", version: "m9", purged: null });
     const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: site(adapter).fetch });
     expect(failing(report)).toEqual(["mention decide of an unknown id: refused, or not implemented where the site has no mentions"]);
+  });
+
+  it("expects 501 from every lens on a site that names none, and passes it", async () => {
+    const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: site(memoryAdapter({ mediaLenses: false })).fetch });
+    expect(failing(report)).toEqual([]);
+    expect(report.checks.find((c) => c.name.startsWith("media lenses"))?.detail).toBe("501 for every lens");
+  });
+
+  it("PLANT: fails a site that answers a lens it does not name with its whole library", async () => {
+    const adapter = memoryAdapter();
+    (adapter.media as { lenses?: readonly string[] }).lenses = ["unattached"];
+    const s = site(adapter);
+    // A site that serves every lens but names one: what it answers for the others is not what was asked.
+    const fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(String(input instanceof Request ? input.url : input));
+      if (url.searchParams.get("lens") && url.searchParams.get("lens") !== "unattached") url.searchParams.set("lens", "unattached");
+      return s.fetch(url, init);
+    }) as typeof globalThis.fetch;
+    const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch });
+    expect(failing(report)).toEqual(["media lenses: each one the site names answers, and one it does not is not implemented"]);
   });
 
   it("expects 501 from content tags on a site that keeps none, and 404 where it does", async () => {

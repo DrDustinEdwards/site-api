@@ -52,6 +52,14 @@ export const MediaUploadLimits = z.object({
   types: z.array(z.string().regex(/^[a-z]+\/[a-z0-9.+-]+$/)).min(1).max(50),
 });
 
+/**
+ * The ready-made views of a library (v0.6.0), each optional per site: files nothing uses (by the
+ * site's own reference check), files with no alt text, and files larger than LARGE_MEDIA_BYTES.
+ */
+export const MEDIA_LENSES = ["unattached", "no-alt", "large"] as const;
+export const MediaLens = z.enum(MEDIA_LENSES);
+export const LARGE_MEDIA_BYTES = 1024 * 1024;
+
 export const Capabilities = z.object({
   content: z.boolean(),
   preview: z.boolean(),
@@ -71,6 +79,8 @@ export const Capabilities = z.object({
   mediaTrash: z.boolean().optional(),
   /** True when the site keeps tags on posts and writes them through `PUT /content/:id/tags` (v0.6.0). Absent or false: that route answers 501. */
   contentTags: z.boolean().optional(),
+  /** The media lenses the site answers (v0.6.0); with any of them it also sorts the media list. Absent: a lens answers 501. */
+  mediaLenses: z.array(MediaLens).optional(),
   /** True when the site receives webmentions and lets Carrel moderate them (v0.5.0). Absent or false: every mentions route answers 501. */
   mentions: z.boolean().optional(),
   /** True when a decision can be taken back to pending (v0.6.0), the `reset` decision. Absent or false: a reset answers 501. */
@@ -272,8 +282,16 @@ export const MediaDetail = MediaItem.extend({
   usedBy: z.array(MediaUse),
 });
 
+/** What a media list can be sorted by (v0.6.0). added runs newest first, size largest first and name A to Z, unless `dir` says otherwise. */
+export const MEDIA_SORTS = ["added", "name", "size"] as const;
+
 export const MediaListQuery = z.object({
   q: z.string().max(200).optional(),
+  /** v0.6.0, on a site that lists the lens in capabilities.mediaLenses; any other site answers 501. */
+  lens: MediaLens.optional(),
+  /** v0.6.0. A site that sorts says so in the answer's `sorted`. */
+  sort: z.enum(MEDIA_SORTS).optional(),
+  dir: SortDir.optional(),
   /** Only files carrying this tag (v0.4.0). A site without tags ignores it. */
   tag: MediaTag.optional(),
   /** "only" lists the trash (v0.4.0). Without it the trash is left out. A site without a trash ignores it. */
@@ -285,6 +303,10 @@ export const MediaListQuery = z.object({
 export const MediaList = z.object({
   items: z.array(MediaItem),
   nextCursor: z.string().nullable(),
+  /** How many files match across every page (v0.6.0), where the site can count them. */
+  total: z.number().int().min(0).optional(),
+  /** The order the site applied (v0.6.0). Absent: the site did not sort as asked. */
+  sorted: z.object({ sort: z.enum(MEDIA_SORTS), dir: SortDir }).optional(),
 });
 
 /**
@@ -434,6 +456,10 @@ export const MentionItem = z.object({
 
 export const MentionListQuery = z.object({
   status: MentionStatus.optional(),
+  /** v0.6.0: words in the source address, the author or the excerpt. */
+  q: z.string().max(200).optional(),
+  /** v0.6.0: only the mentions of this content id, such as a post slug. */
+  targetId: z.string().min(1).max(300).optional(),
   cursor: z.string().max(500).optional(),
   limit: z.coerce.number().int().min(1).max(200).default(50),
 });
@@ -454,6 +480,8 @@ export const MentionList = z.object({
   counts: MentionCounts,
   /** What a sweep would remove now, by status (the site's retention windows). */
   expiring: z.object({ failed: z.number().int().min(0), rejected: z.number().int().min(0) }),
+  /** The filters of v0.6.0 the site applied, echoed. Absent: the site did not filter by q or targetId. */
+  filtered: z.object({ q: z.string().max(200).optional(), targetId: z.string().max(300).optional() }).optional(),
 });
 
 /** `reset` (v0.6.0, optional per site) takes an approved or rejected mention back to pending, so a decision can be undone. */
@@ -550,6 +578,8 @@ export type MediaUse = z.infer<typeof MediaUse>;
 export type MediaItem = z.infer<typeof MediaItem>;
 export type MediaDetail = z.infer<typeof MediaDetail>;
 export type MediaListQuery = z.infer<typeof MediaListQuery>;
+export type MediaLens = z.infer<typeof MediaLens>;
+export type MediaSort = (typeof MEDIA_SORTS)[number];
 export type MediaList = z.infer<typeof MediaList>;
 export type MediaUploadQuery = z.infer<typeof MediaUploadQuery>;
 export type MediaDeleteResult = z.infer<typeof MediaDeleteResult>;

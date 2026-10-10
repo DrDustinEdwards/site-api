@@ -379,7 +379,11 @@ export function createSiteApi(config: SiteApiConfig): SiteApi {
       {
         method: "GET",
         pattern: /^\/media$/,
-        run: async (_m, url) => json(200, checked(MediaList, await media.list(readQuery(url, MediaListQuery)), "media list")),
+        run: async (_m, url) => {
+          const query = readQuery(url, MediaListQuery);
+          if (query.lens && !(media.lenses ?? []).includes(query.lens)) return fail("not-implemented", `This site does not offer the ${query.lens} lens.`);
+          return json(200, checked(MediaList, await media.list(query), "media list"));
+        },
       },
       {
         method: "POST",

@@ -3,7 +3,7 @@
 // by it. The one exception is opt-in (probeMediaUpload): it uploads a file of its own, then deletes
 // that file and no other.
 
-import { MediaBulkResult, ContentList, ErrorBody, RevisionList, RevisionSource, MediaDeleteResult, MediaDetail, MediaItem, MediaList, MentionList, Meta, PREFIX, schemaHash, type Meta as MetaType } from "./contract.js";
+import { MEDIA_LENSES, MediaBulkResult, ContentList, ErrorBody, RevisionList, RevisionSource, MediaDeleteResult, MediaDetail, MediaItem, MediaList, MentionList, Meta, PREFIX, schemaHash, type Meta as MetaType } from "./contract.js";
 
 export interface ConformanceConfig {
   baseUrl: string;
@@ -211,6 +211,21 @@ export async function runConformance(config: ConformanceConfig): Promise<Conform
       expectStatus(response, 200, "media list");
       const list = MediaList.parse(await response.json());
       return `${list.items.length} file(s) on the first page`;
+    });
+
+    // v0.6.0 lenses: every one the site names answers in shape; one it does not name answers 501.
+    await check("media lenses: each one the site names answers, and one it does not is not implemented", async () => {
+      const named = capabilities.mediaLenses ?? [];
+      for (const lens of MEDIA_LENSES) {
+        const response = await doFetch(`${origin}${PREFIX}/media?lens=${lens}&limit=1`, { headers: auth });
+        if (named.includes(lens)) {
+          expectStatus(response, 200, `media lens ${lens}`);
+          MediaList.parse(await response.json());
+        } else {
+          expectStatus(response, 501, `media lens ${lens} on a site that does not name it`);
+        }
+      }
+      return named.length > 0 ? `answers ${named.join(", ")}` : "501 for every lens";
     });
 
     if (config.probeWrites !== false) {

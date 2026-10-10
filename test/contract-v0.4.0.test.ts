@@ -16,8 +16,8 @@ const V040 = JSON.parse(readFileSync(new URL("./fixtures/contract-v0.4.0.json", 
   schemas: Record<string, JsonSchema>;
 };
 
-/** The schemas later versions extend, by optional properties only: v0.5.0 Capabilities (and Meta through it), v0.6.0 the content list. */
-const EXTENDED = new Set(["Meta", "Capabilities", "ContentSummary", "ContentDoc", "ListQuery", "ContentList"]);
+/** The schemas later versions extend, by optional properties only: v0.5.0 Capabilities (and Meta through it), v0.6.0 the content and media lists. */
+const EXTENDED = new Set(["Meta", "Capabilities", "ContentSummary", "ContentDoc", "ListQuery", "ContentList", "MediaListQuery", "MediaList"]);
 
 
 describe("the v0.4.0 contract", () => {

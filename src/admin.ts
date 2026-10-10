@@ -17,7 +17,9 @@ import { SiteApiError, type SiteClient } from "./client.js";
 import {
   ContentId,
   ContentTag,
+  MEDIA_SORTS,
   MediaId,
+  MediaLens,
   MediaTag,
   MentionId,
   MentionStatus,
@@ -31,6 +33,7 @@ import {
   type SortDir,
   type MediaDetail,
   type MediaItem,
+  type MediaSort,
   type MediaUploadLimits,
   type MediaUse,
   type MentionCounts,
@@ -598,6 +601,10 @@ export interface MediaQuery {
   q?: string;
   tag?: string;
   view?: "library" | "trash";
+  /** v0.6.0, where the site names the lens; dropped, never sent, where it does not. */
+  lens?: MediaLens;
+  sort?: MediaSort;
+  dir?: SortDir;
   cursor?: string;
   /** The file open in the inspector. */
   inspect?: string;
@@ -610,7 +617,12 @@ export interface MediaData {
   site: { id: string; name: string };
   query: MediaQuery;
   rows: MediaRow[];
-  page: { nextCursor: string | null };
+  page: {
+    nextCursor: string | null;
+    total?: number;
+    /** True when the rows were sorted on this page only, because the site's list does not sort. */
+    sortedOnPage?: boolean;
+  };
   /** The file in the inspector with every place it is used; null when the site has no such file. */
   detail?: (MediaDetail & { src: string }) | null;
   offers: {
@@ -621,6 +633,8 @@ export interface MediaData {
     tags: boolean;
     trash: boolean;
     delete: boolean;
+    /** The lenses the site answers (v0.6.0); empty where it answers none. */
+    lenses: MediaLens[];
   };
   can: Permissions;
 }
@@ -630,8 +644,14 @@ export function readMediaQuery(search: URLSearchParams): MediaQuery {
   const tag = search.get("tag")?.trim().toLowerCase();
   const cursor = search.get("cursor")?.slice(0, 500);
   const inspect = search.get("inspect") ?? "";
+  const lens = MediaLens.safeParse(search.get("lens"));
+  const sort = search.get("sort");
+  const dir = search.get("dir");
   return {
     ...(q ? { q } : {}),
+    ...(lens.success ? { lens: lens.data } : {}),
+    ...(sort && (MEDIA_SORTS as readonly string[]).includes(sort) ? { sort: sort as MediaSort } : {}),
+    ...(dir === "asc" || dir === "desc" ? { dir } : {}),
     ...(tag && MediaTag.safeParse(tag).success ? { tag } : {}),
     ...(search.get("view") === "trash" ? { view: "trash" as const } : {}),
     ...(cursor ? { cursor } : {}),
@@ -648,8 +668,15 @@ function mediaOffers(capabilities: Capabilities): MediaData["offers"] {
     tags: media && capabilities.mediaTags === true,
     trash: media && capabilities.mediaTrash === true,
     delete: media,
+    lenses: media ? [...(capabilities.mediaLenses ?? [])] : [],
   };
 }
+
+const MEDIA_BY: Record<MediaSort, (a: MediaItem, b: MediaItem) => number> = {
+  added: (a, b) => (b.uploadedAt ?? "").localeCompare(a.uploadedAt ?? ""),
+  size: (a, b) => b.bytes - a.bytes,
+  name: (a, b) => (a.filename ?? a.id).localeCompare(b.filename ?? b.id),
+};
 
 /** One page of one site's media library, as MediaLibrary renders it. */
 export async function loadMedia(source: ContentSource, query: MediaQuery = {}): Promise<MediaData> {
@@ -661,15 +688,26 @@ export async function loadMedia(source: ContentSource, query: MediaQuery = {}): 
     ...(query.q ? { q: query.q } : {}),
     ...(query.tag && offers.tags ? { tag: query.tag } : {}),
     ...(query.view === "trash" && offers.trash ? { trashed: "only" as const } : {}),
+    ...(query.lens && offers.lenses.includes(query.lens) ? { lens: query.lens } : {}),
+    ...(query.sort ? { sort: query.sort, ...(query.dir ? { dir: query.dir } : {}) } : {}),
     ...(query.cursor ? { cursor: query.cursor } : {}),
   });
-  const rows = list.items.map((item) => ({ ...item, src: absolute(source.site.origin, item.url) }));
+  let items = list.items;
+  // A site that sorted says so (v0.6.0); otherwise the kit sorts the page it has and says that.
+  const sortedOnPage = query.sort !== undefined && list.sorted === undefined;
+  if (sortedOnPage) {
+    const natural = query.sort === "name" ? "asc" : "desc";
+    const flip = (query.dir ?? natural) === natural ? 1 : -1;
+    items = [...items].sort((a, b) => flip * MEDIA_BY[query.sort!](a, b));
+  }
+  const rows = items.map((item) => ({ ...item, src: absolute(source.site.origin, item.url) }));
   let detail: MediaData["detail"];
   if (query.inspect) {
     const found = await orNull(source.client.media.get(query.inspect));
     detail = found ? { ...found, src: absolute(source.site.origin, found.url) } : null;
   }
-  return { ...base, rows, page: { nextCursor: list.nextCursor }, ...(detail !== undefined ? { detail } : {}) };
+  const page = { nextCursor: list.nextCursor, ...(list.total !== undefined ? { total: list.total } : {}), ...(sortedOnPage ? { sortedOnPage } : {}) };
+  return { ...base, rows, page, ...(detail !== undefined ? { detail } : {}) };
 }
 
 export const MEDIA_INTENTS = ["upload", "alt", "tags", "tag-add", "tag-remove", "trash", "restore", "delete", "empty-trash"] as const;
@@ -938,6 +976,10 @@ export const MENTION_FILTERS: readonly MentionFilter[] = ["pending", "failed", "
 export interface MentionsQuery {
   /** Absent: open on pending, or on all when nothing is pending. */
   status?: MentionFilter;
+  /** v0.6.0: words in the source, the author or the excerpt. */
+  q?: string;
+  /** v0.6.0: only the mentions of this post. */
+  targetId?: string;
   cursor?: string;
 }
 
@@ -949,7 +991,11 @@ export interface MentionsData {
   filter: MentionFilter;
   query: MentionsQuery;
   rows: MentionRow[];
-  page: { nextCursor: string | null };
+  page: {
+    nextCursor: string | null;
+    /** True when q or targetId was applied to this page only, because the site's list does not filter by them. */
+    filteredOnPage?: boolean;
+  };
   /** Across the whole queue, not the page. */
   counts: MentionCounts;
   /** What a sweep would remove now. */
@@ -961,8 +1007,12 @@ export interface MentionsData {
 export function readMentionsQuery(search: URLSearchParams): MentionsQuery {
   const status = search.get("status");
   const cursor = search.get("cursor")?.slice(0, 500);
+  const q = search.get("q")?.trim().slice(0, 200);
+  const targetId = search.get("targetId")?.trim().slice(0, 300);
   return {
     ...(status && MENTION_FILTERS.includes(status as MentionFilter) ? { status: status as MentionFilter } : {}),
+    ...(q ? { q } : {}),
+    ...(targetId ? { targetId } : {}),
     ...(cursor ? { cursor } : {}),
   };
 }
@@ -977,18 +1027,35 @@ export async function loadMentions(source: ContentSource, query: MentionsQuery =
     return { ...base, filter: query.status ?? "all", rows: [], page: { nextCursor: null }, counts: NO_COUNTS, expiring: { failed: 0, rejected: 0 } };
   }
   const page = (filter: MentionFilter) =>
-    source.client.mentions.list({ limit: PER_PAGE, ...(filter === "all" ? {} : { status: filter }), ...(query.cursor ? { cursor: query.cursor } : {}) });
+    source.client.mentions.list({
+      limit: PER_PAGE,
+      ...(filter === "all" ? {} : { status: filter }),
+      ...(query.q ? { q: query.q } : {}),
+      ...(query.targetId ? { targetId: query.targetId } : {}),
+      ...(query.cursor ? { cursor: query.cursor } : {}),
+    });
   let filter: MentionFilter = query.status ?? "pending";
   let list = await page(filter);
   if (!query.status && list.items.length === 0 && list.counts.pending === 0) {
     filter = "all";
     list = await page("all");
   }
+  // A site that filtered echoes it (v0.6.0); otherwise the kit filters the page it has and says that.
+  let items = list.items;
+  const filteredOnPage = (query.q !== undefined || query.targetId !== undefined) && list.filtered === undefined;
+  if (filteredOnPage) {
+    const needle = query.q?.toLowerCase();
+    items = items.filter(
+      (m) =>
+        (!query.targetId || m.targetId === query.targetId) &&
+        (!needle || [m.sourceUrl, m.authorName ?? "", m.excerpt ?? ""].some((t) => t.toLowerCase().includes(needle))),
+    );
+  }
   return {
     ...base,
     filter,
-    rows: list.items.map((m) => ({ ...m, postHref: source.editorHref(m.targetId) })),
-    page: { nextCursor: list.nextCursor },
+    rows: items.map((m) => ({ ...m, postHref: source.editorHref(m.targetId) })),
+    page: { nextCursor: list.nextCursor, ...(filteredOnPage ? { filteredOnPage } : {}) },
     counts: list.counts,
     expiring: list.expiring,
   };
@@ -1098,10 +1165,15 @@ export interface SiteSummary {
 export async function summary(source: ContentSource): Promise<SiteSummary> {
   const capabilities = (await source.client.meta()).capabilities;
   const mentionsWaiting = capabilities.mentions === true ? (await source.client.mentions.list({ status: "pending", limit: 1 })).counts.pending : null;
+  // A site that answers the no-alt lens (v0.6.0) and counts can say how many files lack alt text.
+  const mediaWithoutAlt =
+    capabilities.media === true && (capabilities.mediaLenses ?? []).includes("no-alt")
+      ? ((await source.client.media.list({ lens: "no-alt", limit: 1 })).total ?? null)
+      : null;
   return {
     site: { id: source.site.id, name: source.site.name },
     mentionsWaiting,
     postsWaiting: source.waiting ? await source.waiting() : null,
-    mediaWithoutAlt: null,
+    mediaWithoutAlt,
   };
 }

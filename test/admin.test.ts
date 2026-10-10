@@ -291,6 +291,26 @@ describe("media", () => {
     expect(await loadMedia(setup({ media: false }).source)).toMatchObject({ rows: [], offers: { media: false, upload: null } });
   });
 
+  it("sends a lens and a sort the site answers (v0.6.0), drops a lens it does not, and sorts the page itself where the site did not", async () => {
+    const { client, source } = setup();
+    const small = await upload(client, "b.png");
+    await client.media.setAlt(small.id, { alt: "Described", expectedVersion: small.version!, changeId: "s1" });
+    await upload(client, "a.png");
+    const lensed = await loadMedia(source, { lens: "no-alt", sort: "name" });
+    expect(lensed.rows.map((r) => r.filename)).toEqual(["a.png"]);
+    expect(lensed.page).toEqual({ nextCursor: null, total: 1 });
+    expect(lensed.offers.lenses).toEqual(["unattached", "no-alt", "large"]);
+    expect((await loadMedia(source, { sort: "name" })).rows.map((r) => r.filename)).toEqual(["a.png", "b.png"]);
+
+    const old = setup({ mediaLenses: false });
+    await upload(old.client, "b.png");
+    await upload(old.client, "a.png");
+    const fallback = await loadMedia(old.source, { lens: "no-alt", sort: "name", dir: "desc" });
+    expect(fallback.offers.lenses).toEqual([]);
+    expect(fallback.rows.map((r) => r.filename)).toEqual(["b.png", "a.png"]);
+    expect(fallback.page.sortedOnPage).toBe(true);
+  });
+
   it("trashes in one bulk request, and Undo restores at the versions the trash made", async () => {
     const { adapter, client, source } = setup();
     const a = await upload(client, "a.png");
@@ -420,6 +440,18 @@ describe("mentions", () => {
     expect(await runMentionsIntent(source, { intent: "reset", ids: [waiting], versions: [v(waiting)] })).toEqual({ ok: false, message: "This site does not take a mention decision back." });
   });
 
+  it("searches and narrows to one post through the site (v0.6.0), and filters the page itself where the site did not", async () => {
+    for (const [options, onPage] of [[{}, undefined], [{ mentionFilters: false }, true]] as const) {
+      const { adapter, source } = setup(options);
+      adapter.receiveMention({ sourceUrl: "https://a.example/kind-words", targetId: "post-a", excerpt: "Kind words" });
+      adapter.receiveMention({ sourceUrl: "https://b.example/other", targetId: "post-b", excerpt: "Kind too" });
+      adapter.receiveMention({ sourceUrl: "https://c.example/third", targetId: "post-a", excerpt: "Unrelated" });
+      const data = await loadMentions(source, { status: "all", q: "kind", targetId: "post-a" });
+      expect(data.rows.map((r) => r.sourceUrl), JSON.stringify(options)).toEqual(["https://a.example/kind-words"]);
+      expect(data.page.filteredOnPage).toBe(onPage);
+    }
+  });
+
   it("with reset (v0.6.0), Undo takes a decision on a waiting mention back to waiting, and Undo of that decides again", async () => {
     const { adapter, source } = setup();
     const waiting = adapter.receiveMention({ sourceUrl: "https://a.example/1", targetId: "p" });
@@ -460,9 +492,10 @@ describe("mentions", () => {
 
 describe("summary", () => {
   it("counts what waits on one site, and null for what it cannot say", async () => {
-    const { adapter, source } = setup({}, { waiting: async () => 3 });
+    const { adapter, client, source } = setup({}, { waiting: async () => 3 });
     adapter.receiveMention({ sourceUrl: "https://a.example/1", targetId: "p" });
-    expect(await summary(source)).toEqual({ site: { id: "memory", name: "Memory site" }, mentionsWaiting: 1, postsWaiting: 3, mediaWithoutAlt: null });
-    expect(await summary(setup({ mentions: false }).source)).toMatchObject({ mentionsWaiting: null, postsWaiting: null });
+    await upload(client, "a.png");
+    expect(await summary(source)).toEqual({ site: { id: "memory", name: "Memory site" }, mentionsWaiting: 1, postsWaiting: 3, mediaWithoutAlt: 1 });
+    expect(await summary(setup({ mentions: false, mediaLenses: false }).source)).toMatchObject({ mentionsWaiting: null, postsWaiting: null, mediaWithoutAlt: null });
   });
 });

@@ -3,7 +3,8 @@
 
 import { MediaInUseError, NotFoundError, RefusedError, VersionConflictError, type MediaAdapter, type MentionsAdapter, type SiteAdapter } from "./adapter.js";
 import { joinSource, setTags as writeTags, splitSource, tagsOf } from "./frontmatter.js";
-import type { ContentDoc, ContentStatus, ContentSummary, MediaItem, MediaUploadLimits, MediaUse, MentionItem, MentionStatus, Revision, SiteInfo, WriteResult } from "./contract.js";
+import { LARGE_MEDIA_BYTES, MEDIA_LENSES } from "./contract.js";
+import type { ContentDoc, ContentStatus, ContentSummary, MediaLens, MediaItem, MediaUploadLimits, MediaUse, MentionItem, MentionStatus, Revision, SiteInfo, WriteResult } from "./contract.js";
 
 interface Stored {
   doc: ContentDoc;
@@ -21,6 +22,10 @@ export interface MemoryAdapterOptions {
   contentTags?: boolean;
   /** false for a media manager with no alt, tag or trash writes (a v0.2.0 site): those routes then answer 501. On by default. */
   mediaWrites?: boolean;
+  /** false for a media manager with no lenses and no sort (a v0.5.0 site): a lens then answers 501. On by default. */
+  mediaLenses?: boolean;
+  /** false for a mentions group that ignores q and targetId (a v0.5.0 site) and so echoes no `filtered`. On by default. */
+  mentionFilters?: boolean;
   /** false for a site that does not receive webmentions (its routes then answer 501). On by default. */
   mentions?: boolean;
   /** false for a mentions group with no reset (a v0.5.0 site): a reset then answers 501. On by default. */
@@ -166,6 +171,13 @@ export function memoryAdapter(
     return { version };
   }
 
+  /** The lenses, as the site would answer them: nothing uses it, it has no alt text, it is over the size line. */
+  const LENS: Record<MediaLens, (i: MediaItem) => boolean> = {
+    unattached: (i) => usesOf(i.id).length === 0,
+    "no-alt": (i) => i.alt.trim() === "",
+    large: (i) => i.bytes > LARGE_MEDIA_BYTES,
+  };
+
   /** The site's reference check: every post whose source carries the file's URL, as the real site scans. */
   function usesOf(id: string): MediaUse[] {
     const url = `/media/${id}`;
@@ -184,17 +196,36 @@ export function memoryAdapter(
       ? undefined
       : {
           limits: options.media ?? MEMORY_MEDIA_LIMITS,
+          ...(options.mediaLenses === false ? {} : { lenses: MEDIA_LENSES }),
           async list(query) {
             const needle = query.q?.toLowerCase();
+            const lensed = options.mediaLenses !== false;
             const all = [...mediaStore.values()]
               .map((m) => m.item)
               .filter((i) => (query.trashed === "only" ? Boolean(i.trashedAt) : !i.trashedAt))
               .filter((i) => !query.tag || (i.tags ?? []).includes(query.tag))
               .filter((i) => !needle || [i.id, i.filename ?? "", i.alt].some((t) => t.toLowerCase().includes(needle)))
+              .filter((i) => !lensed || !query.lens || LENS[query.lens](i))
               .reverse();
+            // v0.6.0: sorted as asked, newest, largest or A to Z first unless dir says otherwise.
+            const sorted = lensed && query.sort ? { sort: query.sort, dir: query.dir ?? (query.sort === "name" ? "asc" : "desc") } : undefined;
+            if (sorted) {
+              const key = (i: MediaItem): string | number => (sorted.sort === "size" ? i.bytes : sorted.sort === "name" ? (i.filename ?? i.id).toLowerCase() : (i.uploadedAt ?? ""));
+              const order = [...all];
+              all.sort((a, b) => {
+                const [x, y] = [key(a), key(b)];
+                const by = typeof x === "number" ? x - (y as number) : x.localeCompare(y as string);
+                return (sorted.dir === "asc" ? 1 : -1) * by || order.indexOf(a) - order.indexOf(b);
+              });
+            }
             const start = query.cursor ? Number(query.cursor) : 0;
             const page = all.slice(start, start + query.limit);
-            return { items: page, nextCursor: start + query.limit < all.length ? String(start + query.limit) : null };
+            return {
+              items: page,
+              nextCursor: start + query.limit < all.length ? String(start + query.limit) : null,
+              ...(lensed ? { total: all.length } : {}),
+              ...(sorted ? { sorted } : {}),
+            };
           },
           async get(id) {
             const stored = mediaStore.get(id);
@@ -296,8 +327,12 @@ export function memoryAdapter(
       ? undefined
       : {
           async list(query) {
+            const filters = options.mentionFilters !== false;
+            const needle = filters ? query.q?.toLowerCase() : undefined;
             const all = [...mentionStore.values()]
               .filter((m) => !query.status || m.status === query.status)
+              .filter((m) => !needle || [m.sourceUrl, m.authorName ?? "", m.excerpt ?? ""].some((t) => t.toLowerCase().includes(needle)))
+              .filter((m) => !filters || !query.targetId || m.targetId === query.targetId)
               .sort((a, b) => Date.parse(b.receivedAt) - Date.parse(a.receivedAt) || Number(b.id) - Number(a.id));
             const start = query.cursor ? Number(query.cursor) : 0;
             const counts = { unverified: 0, pending: 0, approved: 0, rejected: 0, failed: 0 };
@@ -308,6 +343,7 @@ export function memoryAdapter(
               nextCursor: start + query.limit < all.length ? String(start + query.limit) : null,
               counts,
               expiring: { failed: soon.failed.length, rejected: soon.rejected.length },
+              ...(filters && (query.q || query.targetId) ? { filtered: { ...(query.q ? { q: query.q } : {}), ...(query.targetId ? { targetId: query.targetId } : {}) } } : {}),
             };
           },
           async decide(id, input) {
