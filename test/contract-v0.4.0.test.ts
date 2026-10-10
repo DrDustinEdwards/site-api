@@ -6,10 +6,8 @@
 
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { z } from "zod";
 import * as contract from "../src/contract.js";
-
-type JsonSchema = { properties?: Record<string, unknown>; required?: string[]; [k: string]: unknown };
+import { additiveOnly, added, now, type JsonSchema } from "./additive.js";
 
 const V040 = JSON.parse(readFileSync(new URL("./fixtures/contract-v0.4.0.json", import.meta.url), "utf8")) as {
   version: string;
@@ -18,10 +16,9 @@ const V040 = JSON.parse(readFileSync(new URL("./fixtures/contract-v0.4.0.json", 
   schemas: Record<string, JsonSchema>;
 };
 
-/** The one schema v0.5.0 extends, by an optional property only (capabilities.mentions). */
-const EXTENDED = new Set(["Meta", "Capabilities"]);
+/** The schemas later versions extend, by optional properties only: v0.5.0 Capabilities (and Meta through it), v0.6.0 the content list. */
+const EXTENDED = new Set(["Meta", "Capabilities", "ContentSummary", "ContentDoc", "ListQuery", "ContentList"]);
 
-const now = (name: string) => z.toJSONSchema((contract as unknown as Record<string, z.ZodType>)[name]!, { io: "input" }) as JsonSchema;
 
 describe("the v0.4.0 contract", () => {
   it("is the recorded v0.4.0, and the fixture holds every schema it names", () => {
@@ -34,9 +31,10 @@ describe("the v0.4.0 contract", () => {
     for (const route of V040.routes) expect(contract.ROUTES, JSON.stringify(route)).toContainEqual(route);
   });
 
-  it("adds only the four mentions routes", () => {
-    const added = contract.ROUTES.filter((r) => !V040.routes.some((old) => JSON.stringify(old) === JSON.stringify(r)));
-    expect(added.map((r) => `${r.method} ${r.path}`)).toEqual([
+  it("adds only the four mentions routes of v0.5.0 and the content tags route of v0.6.0", () => {
+    const fresh = contract.ROUTES.filter((r) => !V040.routes.some((old) => JSON.stringify(old) === JSON.stringify(r)));
+    expect(fresh.map((r) => `${r.method} ${r.path}`)).toEqual([
+      "PUT /content/:id/tags",
       "GET /mentions",
       "POST /mentions/sweep",
       "POST /mentions/:id/decide",
@@ -50,16 +48,14 @@ describe("the v0.4.0 contract", () => {
     });
   }
 
-  it("extends Capabilities by optional properties only (v0.5.0's mentions; later ones are named by the newer contract tests), and Meta only through it", () => {
-    const before = V040.schemas.Capabilities!;
-    const after = now("Capabilities");
-    for (const [prop, schema] of Object.entries(before.properties ?? {})) expect(after.properties?.[prop], prop).toEqual(schema);
-    expect(Object.keys(after.properties ?? {}).filter((p) => !(p in (before.properties ?? {})))).toContain("mentions");
-    expect(after.required).toEqual(before.required);
-    const metaBefore = V040.schemas.Meta!;
-    const metaAfter = now("Meta");
-    expect(metaAfter.required).toEqual(metaBefore.required);
-    expect(Object.keys(metaAfter.properties ?? {})).toEqual(Object.keys(metaBefore.properties ?? {}));
+  for (const name of EXTENDED) {
+    it(`extends ${name} by optional properties only`, () => {
+      additiveOnly(V040.schemas[name]!, now(name), name);
+    });
+  }
+
+  it("names v0.5.0's addition to Capabilities", () => {
+    expect(added(V040.schemas.Capabilities!, now("Capabilities"))).toContain("mentions");
   });
 
   it("parses a v0.4.0 meta with the v0.5.0 schema", () => {

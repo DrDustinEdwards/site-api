@@ -2,7 +2,7 @@
 // admin drives the kit through localClient; Carrel drives it through createSiteClient, which one test
 // below runs too, so both hosts meet the same code.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   loadMedia,
   loadMentions,
@@ -92,26 +92,36 @@ describe("posts", () => {
     expect((await loadPosts(setup({ contentDelete: false }).source)).offers.delete).toBe(false);
   });
 
-  it("sorts and filters the page in the kit, says so, and reads a host index in place of the site's list", async () => {
+  it("asks the site to sort and count (v0.6.0), and counts each status tab for the same search", async () => {
     const { client, source } = setup();
-    await post(client, "a", "title: Zed");
+    await post(client, "a", "title: Zed", true);
     await post(client, "b", "title: Ant");
     const sorted = await loadPosts(source, { sort: "title" });
     expect(sorted.rows.map((r) => r.id)).toEqual(["b", "a"]);
-    expect(sorted.page.sortedOnPage).toBe(true);
+    expect(sorted.page).toEqual({ nextCursor: null, total: 2 });
+    expect(sorted.counts).toEqual({ all: 2, draft: 1, scheduled: 0, published: 1 });
+    expect(sorted.rows[0]).toMatchObject({ version: (await client.get("b")).version, tags: [] });
+    expect((await loadPosts(source, { sort: "title", dir: "desc" })).rows.map((r) => r.id)).toEqual(["a", "b"]);
     expect((await loadPosts(source, { kind: "episode" })).rows).toEqual([]);
+  });
+
+  it("sorts the page itself, and says so, when the list it reads did not sort; and reads a host index in place of the site's list", async () => {
+    const { source } = setup();
     const asked: unknown[] = [];
+    const row = (id: string, title: string) => ({ id, kind: "post", title, status: "draft" as const, path: null, publishAt: null, publishedAt: null, updatedAt: null });
     const indexed = await loadPosts({
       ...source,
       postIndex: {
         list: async (q) => {
           asked.push(q);
-          return { items: [], nextCursor: null };
+          return { items: [row("z", "Zed"), row("a", "Ant")], nextCursor: null };
         },
       },
-    }, { q: "ant" });
-    expect(indexed.rows).toEqual([]);
-    expect(asked).toEqual([{ limit: 50, q: "ant" }]);
+    }, { q: "an", sort: "title" });
+    expect(indexed.rows.map((r) => r.id)).toEqual(["a", "z"]);
+    expect(indexed.page.sortedOnPage).toBe(true);
+    expect(indexed.counts).toBeUndefined();
+    expect(asked).toEqual([{ limit: 50, q: "an", sort: "title" }]);
   });
 
   it("adds a tag to each post that lacks it, leaves the rest, and Undo removes it from those only", async () => {
@@ -131,6 +141,24 @@ describe("posts", () => {
     expect(undone.ok).toBe(true);
     expect((await client.get("a")).source).toContain("tags: [x]\n");
     expect((await client.get("b")).source).toContain("tags: [x, keep]");
+  });
+
+  it("writes tags through the site's tags route where it offers one (v0.6.0), and through the frontmatter where it does not", async () => {
+    const routed = setup();
+    await post(routed.client, "a", "title: A\ntags: []");
+    const viaRoute = vi.spyOn(routed.adapter.content, "setTags");
+    const viaSave = vi.spyOn(routed.adapter.content, "saveDraft");
+    expect((await runPostsIntent(routed.source, { intent: "tag-add", ids: ["a"], tag: "t" })).ok).toBe(true);
+    expect(viaRoute).toHaveBeenCalledTimes(1);
+    expect(viaSave).not.toHaveBeenCalled();
+    expect((await routed.client.get("a")).tags).toEqual(["t"]);
+
+    const plain = setup({ contentTags: false });
+    await post(plain.client, "a", "title: A\ntags: []");
+    const saved = vi.spyOn(plain.adapter.content, "saveDraft");
+    expect((await runPostsIntent(plain.source, { intent: "tag-add", ids: ["a"], tag: "t" })).ok).toBe(true);
+    expect(saved).toHaveBeenCalledTimes(1);
+    expect((await plain.client.get("a")).source).toContain("tags: [t]");
   });
 
   it("refuses an Undo when the post changed since, and names the conflict", async () => {

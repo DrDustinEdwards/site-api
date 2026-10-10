@@ -16,6 +16,7 @@ describe("conformance", () => {
     expect(failing(report)).toEqual([]);
     expect(report.ok).toBe(true);
     expect(report.checks.map((c) => c.name).slice(11)).toEqual([
+      "content tags of an unknown id: refused, or not implemented where the site keeps no tags",
       "media: upload limits declared",
       "media list: answers in the contract's shape",
       "media delete of an unknown id: refused",
@@ -42,7 +43,7 @@ describe("conformance", () => {
   it("runs only the content checks on a site with no media manager", async () => {
     const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: site(memoryAdapter({ media: false })).fetch });
     expect(failing(report)).toEqual([]);
-    expect(report.checks).toHaveLength(19);
+    expect(report.checks).toHaveLength(20);
   });
 
   it("expects 501 on a site with no content delete, and 404 where it has one", async () => {
@@ -76,6 +77,21 @@ describe("conformance", () => {
     adapter.mentions!.decide = async () => ({ status: "approved", version: "m9", purged: null });
     const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: site(adapter).fetch });
     expect(failing(report)).toEqual(["mention decide of an unknown id: refused, or not implemented where the site has no mentions"]);
+  });
+
+  it("expects 501 from content tags on a site that keeps none, and 404 where it does", async () => {
+    const without = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: site(memoryAdapter({ contentTags: false })).fetch });
+    expect(failing(without)).toEqual([]);
+    expect(without.checks.find((c) => c.name.startsWith("content tags"))?.detail).toBe("501 not-implemented");
+    const withTags = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: site().fetch });
+    expect(withTags.checks.find((c) => c.name.startsWith("content tags"))?.detail).toBe("404 not-found");
+  });
+
+  it("PLANT: fails a site that tags a post it does not hold", async () => {
+    const adapter = memoryAdapter();
+    adapter.content.setTags = async (id, input) => ({ id, version: "v9", status: "draft", changeId: input.changeId });
+    const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: site(adapter).fetch });
+    expect(failing(report)).toEqual(["content tags of an unknown id: refused, or not implemented where the site keeps no tags"]);
   });
 
   it("expects 501 from a reset on a v0.5.0 mentions group, and 404 where the site has reset", async () => {

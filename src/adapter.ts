@@ -50,6 +50,12 @@ export interface ContentAdapter {
    * site must do afterward (its cache purge, say) are one unit, so the site runs them together here.
    */
   delete?(id: string, input: { expectedVersion: string; changeId: string }): Promise<void>;
+  /**
+   * Optional (v0.6.0): sets the item's whole tag set, already unique, and returns the write like a
+   * save does. Throws VersionConflictError, NotFoundError (checked first, for a missing id) or
+   * RefusedError like the writes. A site without it answers `PUT /content/:id/tags` with 501.
+   */
+  setTags?(id: string, input: { tags: string[]; expectedVersion: string; changeId: string }): Promise<WriteResult>;
 }
 
 export interface PreviewAdapter {
@@ -151,6 +157,7 @@ export function capabilitiesOf(adapter: SiteAdapter): Capabilities {
     publications: false,
     ...(adapter.media ? { mediaUpload: adapter.media.limits } : {}),
     ...(adapter.content.delete ? { contentDelete: true } : {}),
+    ...(adapter.content.setTags ? { contentTags: true } : {}),
     ...(adapter.media?.setAlt ? { mediaAlt: true } : {}),
     ...(adapter.media?.setTags ? { mediaTags: true } : {}),
     ...(adapter.media?.trash && adapter.media.restore ? { mediaTrash: true } : {}),

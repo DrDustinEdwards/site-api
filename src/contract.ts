@@ -24,6 +24,16 @@ const Source = z.string().max(2_000_000);
 
 export const ContentStatus = z.enum(["draft", "scheduled", "published"]);
 
+/** A post tag (v0.6.0): one short piece of text, trimmed, with nothing that would break a frontmatter list. */
+export const ContentTag = z.string().min(1).max(40).regex(/^[^\s,[\]"'#:\\](?:[^\r\n,[\]"'#:\\]*[^\s,[\]"'#:\\])?$/);
+
+/** A post's whole tag set (v0.6.0). */
+export const ContentTags = z.array(ContentTag).max(50);
+
+/** What a list can be sorted by (v0.6.0). updated and published run newest first unless `dir` says otherwise; title runs A to Z. */
+export const CONTENT_SORTS = ["updated", "published", "title"] as const;
+export const SortDir = z.enum(["asc", "desc"]);
+
 export const SiteInfo = z.object({
   id: z.string().regex(/^[a-z0-9-]{1,64}$/),
   name: z.string().min(1).max(200),
@@ -59,6 +69,8 @@ export const Capabilities = z.object({
   mediaTags: z.boolean().optional(),
   /** True when the site has a media trash: soft delete and restore (v0.4.0). Absent or false: those routes answer 501. */
   mediaTrash: z.boolean().optional(),
+  /** True when the site keeps tags on posts and writes them through `PUT /content/:id/tags` (v0.6.0). Absent or false: that route answers 501. */
+  contentTags: z.boolean().optional(),
   /** True when the site receives webmentions and lets Carrel moderate them (v0.5.0). Absent or false: every mentions route answers 501. */
   mentions: z.boolean().optional(),
   /** True when a decision can be taken back to pending (v0.6.0), the `reset` decision. Absent or false: a reset answers 501. */
@@ -83,6 +95,10 @@ export const ContentSummary = z.object({
   publishAt: Timestamp.nullable(),
   publishedAt: Timestamp.nullable(),
   updatedAt: Timestamp.nullable(),
+  /** The item's version (v0.6.0), so a row's action needs no read first. Optional: a v0.5.0 site leaves it out. */
+  version: Version.optional(),
+  /** The item's tags (v0.6.0), on a site that keeps them. */
+  tags: ContentTags.optional(),
 });
 
 export const ContentDoc = ContentSummary.extend({
@@ -94,6 +110,9 @@ export const ContentDoc = ContentSummary.extend({
 export const ListQuery = z.object({
   status: ContentStatus.optional(),
   q: z.string().max(200).optional(),
+  /** v0.6.0. A site that sorts says so in the answer's `sorted`; one that does not leaves its own order. */
+  sort: z.enum(CONTENT_SORTS).optional(),
+  dir: SortDir.optional(),
   cursor: z.string().max(500).optional(),
   limit: z.coerce.number().int().min(1).max(200).default(50),
 });
@@ -101,6 +120,17 @@ export const ListQuery = z.object({
 export const ContentList = z.object({
   items: z.array(ContentSummary),
   nextCursor: z.string().nullable(),
+  /** How many items match the query across every page (v0.6.0), where the site can count them. */
+  total: z.number().int().min(0).optional(),
+  /** The order the site applied (v0.6.0). Absent: the site did not sort as asked, so a caller sorts the page itself. */
+  sorted: z.object({ sort: z.enum(CONTENT_SORTS), dir: SortDir }).optional(),
+});
+
+/** A post's whole tag set after the write (v0.6.0, optional per site). */
+export const ContentTagsInput = z.object({
+  tags: ContentTags,
+  expectedVersion: Version,
+  changeId: ChangeId,
 });
 
 /** expectedVersion null means "this id must not exist yet": the create case. */
@@ -499,6 +529,9 @@ export type ContentSummary = z.infer<typeof ContentSummary>;
 export type ContentDoc = z.infer<typeof ContentDoc>;
 export type ListQuery = z.infer<typeof ListQuery>;
 export type ContentList = z.infer<typeof ContentList>;
+export type ContentTagsInput = z.infer<typeof ContentTagsInput>;
+export type ContentSort = (typeof CONTENT_SORTS)[number];
+export type SortDir = z.infer<typeof SortDir>;
 export type SaveDraftInput = z.infer<typeof SaveDraftInput>;
 export type PublishInput = z.infer<typeof PublishInput>;
 export type ScheduleInput = z.infer<typeof ScheduleInput>;
@@ -566,6 +599,7 @@ export const ROUTES = [
   { group: "content", method: "GET", path: "/content/:id/diff", query: "DiffQuery", response: "Diff" },
   { group: "content", method: "GET", path: "/content/:id/revisions/:version", response: "RevisionSource" },
   { group: "content", method: "DELETE", path: "/content/:id", query: "ContentDeleteQuery", response: "ContentDeleteResult" },
+  { group: "content", method: "PUT", path: "/content/:id/tags", request: "ContentTagsInput", response: "WriteResult" },
   { group: "preview", method: "POST", path: "/preview", request: "PreviewInput", response: "text/html" },
   { group: "media", method: "GET", path: "/media", query: "MediaListQuery", response: "MediaList" },
   { group: "media", method: "POST", path: "/media", query: "MediaUploadQuery", request: "the file's bytes", response: "MediaItem" },
@@ -595,6 +629,7 @@ const HASHED = {
   MediaTrashEmptyInput, MediaTrashEmptyResult,
   MentionItem, MentionListQuery, MentionList, MentionDecideInput, MentionWriteResult, MentionDeleteQuery,
   MentionDeleteResult, MentionSweepInput, MentionSweepResult,
+  ContentTagsInput,
 };
 
 /** JSON with sorted keys, so the hash depends on the contract and not on property order. */

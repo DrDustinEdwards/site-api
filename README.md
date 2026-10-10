@@ -54,7 +54,7 @@ All paths sit under `/api/carrel/v1`. Bodies are JSON, checked on the way in and
 | Group | Route | Body in | Answer |
 |---|---|---|---|
 | meta | `GET /meta` | | `Meta`: package version, schema hash, site, capabilities |
-| content | `GET /content?status&q&cursor&limit` | | `ContentList` |
+| content | `GET /content?status&q&sort&dir&cursor&limit` | | `ContentList`, with `total` and `sorted` where the site gives them (`sort` and `dir` are v0.6.0) |
 | content | `GET /content/:id` | | `ContentDoc`: summary, markdown source, version |
 | content | `PUT /content/:id/draft` | `SaveDraftInput` | `WriteResult` |
 | content | `POST /content/:id/publish` | `PublishInput` | `WriteResult` |
@@ -64,6 +64,7 @@ All paths sit under `/api/carrel/v1`. Bodies are JSON, checked on the way in and
 | content | `GET /content/:id/diff?from&to` | | `Diff`: a unified patch; `to` defaults to current |
 | content | `GET /content/:id/revisions/:version` | | `RevisionSource`: the source as it was at that version (v0.3.0) |
 | content | `DELETE /content/:id?expectedVersion&changeId` | | `ContentDeleteResult` (v0.3.0, optional per site: `501` where the adapter has no `delete`) |
+| content | `PUT /content/:id/tags` | `ContentTagsInput` | `WriteResult` (v0.6.0, optional per site: `501` where the adapter has no `setTags`) |
 | preview | `POST /preview` | `PreviewInput` | the full page HTML from the site's own pipeline |
 | media | `GET /media?q&tag&trashed&cursor&limit` | | `MediaList` (`tag` and `trashed=only` are v0.4.0) |
 | media | `POST /media?filename&alt&changeId` | the file's own bytes, typed by `Content-Type` | `201 MediaItem` |
@@ -131,6 +132,9 @@ Additive: every v0.4.0 route and body is unchanged, and the schema hash and pack
 Additive: every v0.5.0 route and body still works as it did.
 
 - **Mention reset, optional per site.** `POST /mentions/:id/decide` takes a third decision, `reset`, which takes an approved or rejected mention back to `pending`, with `decidedAt` cleared and a new version. It is how a decision is undone. A mention with no decision to take back is refused with the site's own words (`422 refused`). The adapter's optional `mentions.reset` serves it; a site whose adapter lacks it answers a reset `501 not-implemented`, and `meta.capabilities.mentionReset` is absent. Conformance adds a reset of the probe id: `404` where the site offers reset, `501` where it does not.
+- **Each list row carries its `version` and `tags`** (both optional on `ContentSummary`, so a v0.5.0 site's rows still parse). A row's action then needs no read first. `ContentDoc` carries `tags` too.
+- **Sort and count.** `GET /content` takes `sort` (`updated`, `published` or `title`) and `dir` (`asc` or `desc`; the dates run newest first and titles A to Z unless `dir` says otherwise). A site that sorted says so in the answer's `sorted: { sort, dir }`; one that did not leaves it out, and the caller sorts the page itself. `total` is how many items match across every page, where the site can count them.
+- **Post tags, optional per site.** `PUT /content/:id/tags` `{ tags, expectedVersion, changeId }` sets a post's whole tag set and answers `WriteResult`, the post keeping its status. A tag is 1 to 40 characters, trimmed, with no commas, brackets, quotes, `#`, `:`, backslashes or line breaks, so it fits a frontmatter list; at most 50 per post. The package keeps one spelling per tag (the first given) before the adapter sees it. A stale version is `409`, a missing post `404`, the site's own rules `422`. A site whose adapter has no `content.setTags` answers `501`, and `meta.capabilities.contentTags` is absent. Conformance adds a tags write on the probe id: `404` where the site keeps tags, `501` where it does not.
 
 ## Media (v0.2.0)
 
@@ -181,6 +185,7 @@ interface SiteAdapter {
     revisions(id: string): Promise<Revision[] | null>;
     revisionSource(id: string, version: string): Promise<string | null>;
     delete?(id: string, input: { expectedVersion: string; changeId: string }): Promise<void>; // v0.3.0; omit and the route answers 501
+    setTags?(id: string, input: { tags: string[]; expectedVersion: string; changeId: string }): Promise<WriteResult>; // v0.6.0; omit and the route answers 501
   };
   preview: { render(input: PreviewInput): Promise<string> };
   mentions?: {                                     // v0.5.0; omit for a site with no webmentions
@@ -215,7 +220,7 @@ An adapter signals refusals by throwing these errors:
 
 The package computes diffs, and serves the source at a revision, from `revisionSource`, so a site only has to return old source. `content.delete` throws `VersionConflictError`, `NotFoundError` or `RefusedError` like the writes.
 
-`@dustinedwards/site-api/testing` exports `memoryAdapter()`, a conforming reference adapter held in memory, media included (its reference check scans each post's source for `/media/<id>`, as dustinedwards.info's does). `memoryAdapter({ media: false })` is a site with no media manager, `memoryAdapter({ contentDelete: false })` one with no content delete, `memoryAdapter({ mediaWrites: false })` a v0.2.0 media manager with no alt, tag or trash writes, and `memoryAdapter({ mentions: false })` one with no webmentions, and `memoryAdapter({ mentionReset: false })` a v0.5.0 mentions group with no reset. Its files carry a `version` that every metadata write moves. Its mentions are seeded with `adapter.receiveMention({ sourceUrl, targetId, status?, ... })`, as the site's endpoint would write them. Carrel's tests run against it.
+`@dustinedwards/site-api/testing` exports `memoryAdapter()`, a conforming reference adapter held in memory, media included (its reference check scans each post's source for `/media/<id>`, as dustinedwards.info's does). `memoryAdapter({ media: false })` is a site with no media manager, `memoryAdapter({ contentDelete: false })` one with no content delete, `memoryAdapter({ contentTags: false })` one that keeps no post tags through the API, `memoryAdapter({ mediaWrites: false })` a v0.2.0 media manager with no alt, tag or trash writes, `memoryAdapter({ mentions: false })` one with no webmentions, and `memoryAdapter({ mentionReset: false })` a v0.5.0 mentions group with no reset. Its files carry a `version` that every metadata write moves. Its mentions are seeded with `adapter.receiveMention({ sourceUrl, targetId, status?, ... })`, as the site's endpoint would write them. Carrel's tests run against it.
 
 ## Carrel's side
 
@@ -244,7 +249,7 @@ The shared posts, media and mentions screens (Capsomer's `PostsList`, `MediaLibr
   - `summary(source)` counts what waits on one site (mentions waiting, posts the host has something waiting on), for an inbox line.
 - **The host supplies a `ContentSource`:** the site, its client (`createSiteClient` in Carrel, `localClient` in the site), what this person `can` do (`edit`, `publish`, `deleteContent`, `deleteMedia`, `decideMentions`), `editorHref`, and optional `postIndex`, `notes`, `waiting`, `hold`, `taken` and `record` hooks. The kit refuses an intent the person may not run whatever the form says, before the site is asked anything; a post that is not a draft needs `publish` for any write.
 - **Undo.** Tag add and remove undo on the items that changed, and only those. Unpublish undoes by publishing again, and only a post that has been public before (`publishedAt` set): never a first publication, which is made from the editor. A post that was only scheduled has no Undo. Duplicate undoes by deleting the copy at the version the duplicate made, only where the site offers `contentDelete` and the person may delete; otherwise the message says how to remove the copy. Media trash and restore undo each other, a tag set puts back the set it held. Approve and reject undo each other between approved and rejected. A decision on a waiting mention undoes by `reset` where the site offers it (v0.6.0), and the Undo of a reset is the decision it took back; on a site without reset it has no Undo. When the chosen mentions would need different inverses, there is no single Undo and the message says so. An Undo is a new write with its own change id and the version the action made, so if someone changed the item since, it is refused as a conflict and never retried.
-- **Until the contract carries them** the kit keeps Carrel's ways: post tags are rewritten in the frontmatter (a post without frontmatter is refused), and the kind filter and sort work on the page the site sent (`page.sortedOnPage`). A media delete on a site with a trash is only from the trash.
+- **Where the site cannot** the kit keeps Carrel's ways. Post tags go through `PUT /content/:id/tags` where the site offers `contentTags` (v0.6.0), and are rewritten in the frontmatter where it does not (a post without frontmatter is then refused). The sort goes to the site, and where the answer has no `sorted` the kit sorts the page it has and says so (`page.sortedOnPage`). Where the site gives a `total`, each status tab gets its count for the same search. The kind and tag filters work on the page the site sent. A media delete on a site with a trash is only from the trash.
 
 Tested once, where it lives: `test/admin.test.ts`, against `memoryAdapter()` through `localClient`, and once through `createSiteClient` as Carrel drives it.
 
@@ -263,5 +268,6 @@ Tests run locally, with no Actions minutes. The planted tests send a request eac
 - `test/media.test.ts`: a file a post uses (refused with the post named), an oversized or undeclared upload, bytes that are not their type, an id that climbs out.
 - `test/media-writes.test.ts`: alt, tags, trash, restore, empty trash and bulk, with stale versions, files in use, the 100-file limits and a site without the writes.
 - `test/mentions.test.ts`: a stale version, a missing mention, a site with no mentions, the site's own refusal, a missing key or a bad body for every mentions write, and the sweep route not read as a mention id.
+- `test/content-tags.test.ts`: a stale version, a missing post, a post with no frontmatter and a site without tags, each changing nothing, and a tag, sort or direction outside the contract refused before the adapter.
 - `test/contract-v0.4.0.test.ts`: the v0.4.0 contract unchanged, against `test/fixtures/contract-v0.4.0.json`; only the four mentions routes and one optional capability are new.
 - `test/contract-v0.1.0.test.ts`: the v0.1.0 contract unchanged, against `test/fixtures/contract-v0.1.0.json`, written from the v0.1.0 build. Every v0.1.0 route and schema is identical, except three schemas that gain optional properties only (`Meta`, `Capabilities`, `ErrorBody`).

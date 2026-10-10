@@ -25,6 +25,7 @@ import {
   RevisionList,
   RevisionSource,
   WriteResult,
+  type ContentTagsInput,
   type ListQuery,
   type MediaAltInput,
   type MediaBulkInput,
@@ -111,6 +112,8 @@ export function createSiteClient(config: SiteClientConfig) {
     /** Optional per site (v0.3.0): a site with no delete answers SiteApiError with status 501. */
     delete: (id: string, input: { expectedVersion: string; changeId: string }) =>
       get(ContentDeleteResult, "DELETE", `/content/${enc(id)}${query(input)}`),
+    /** Optional per site (v0.6.0): sets a post's whole tag set. A site without it answers SiteApiError with status 501. */
+    setTags: (id: string, input: ContentTagsInput) => get(WriteResult, "PUT", `/content/${enc(id)}/tags`, input),
     diff: (id: string, from: string, to?: string) => get(Diff, "GET", `/content/${enc(id)}/diff${query({ from, to })}`),
     preview: async (input: PreviewInput) => (await call("POST", "/preview", input)).text(),
     /** The media group (v0.2.0). A refused delete throws SiteApiError whose body carries `usedBy`. */

@@ -19,6 +19,7 @@ import {
   ContentDoc,
   ContentId,
   ContentList,
+  ContentTagsInput,
   Diff,
   DiffQuery,
   ListQuery,
@@ -310,6 +311,20 @@ export function createSiteApi(config: SiteApiConfig): SiteApi {
         const query = readQuery(url, ContentDeleteQuery);
         await adapter.content.delete(contentId, query);
         return json(200, checked(ContentDeleteResult, { id: contentId, deleted: true, changeId: query.changeId }, "content delete"));
+      },
+    },
+    {
+      method: "PUT",
+      pattern: new RegExp(`^/content/${ID}/tags$`),
+      run: async (m, _u, request) => {
+        const contentId = id(m);
+        const setTags = adapter.content.setTags;
+        if (!setTags) return fail("not-implemented", "This site does not keep tags on posts through the API.");
+        const input = await readBody(request, ContentTagsInput);
+        // One spelling per tag: the first one given wins, so "News" and "news" are one tag.
+        const seen = new Set<string>();
+        const tags = input.tags.filter((t) => !seen.has(t.toLowerCase()) && seen.add(t.toLowerCase()));
+        return json(200, checked(WriteResult, await setTags.call(adapter.content, contentId, { ...input, tags }), "content tags"));
       },
     },
     {

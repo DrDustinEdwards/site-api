@@ -16,6 +16,7 @@
 import { SiteApiError, type SiteClient } from "./client.js";
 import {
   ContentId,
+  ContentTag,
   MediaId,
   MediaTag,
   MentionId,
@@ -24,8 +25,10 @@ import {
   type Capabilities,
   type ContentDoc,
   type ContentList,
+  type ListQuery,
   type ContentStatus,
   type ContentSummary,
+  type SortDir,
   type MediaDetail,
   type MediaItem,
   type MediaUploadLimits,
@@ -65,7 +68,7 @@ export interface ContentSource {
   /** Where a row's title links: Carrel's editor, or the site's own. */
   editorHref(id: string): string;
   /** Optional: a faster list than the site's own, such as Carrel's search index. Same answer as client.list. */
-  postIndex?: { list(query: { q?: string; status?: ContentStatus; cursor?: string; limit: number }): Promise<ContentList> };
+  postIndex?: { list(query: Partial<ListQuery> & { limit: number }): Promise<ContentList> };
   /** Optional: notes per post id, for the rows on this page. */
   notes?(ids: string[]): Promise<Record<string, RowNote[]>>;
   /** Optional: how many posts the host has something waiting on (Carrel's AI drafts), for summary(). */
@@ -266,6 +269,7 @@ export interface PostQuery {
   kind?: string;
   tag?: string;
   sort?: PostSort;
+  dir?: SortDir;
   cursor?: string;
 }
 
@@ -309,8 +313,10 @@ export function readPostQuery(search: URLSearchParams): PostQuery {
   const kind = search.get("kind")?.trim().slice(0, 64);
   const tag = search.get("tag")?.trim().slice(0, 40);
   const sort = search.get("sort");
+  const dir = search.get("dir");
   const cursor = search.get("cursor")?.slice(0, 500);
   return {
+    ...(dir === "asc" || dir === "desc" ? { dir } : {}),
     ...(q ? { q } : {}),
     ...(status && (["draft", "scheduled", "published"] as const).includes(status as ContentStatus) ? { status: status as ContentStatus } : {}),
     ...(kind ? { kind } : {}),
@@ -346,15 +352,28 @@ const BY: Record<PostSort, (a: PostRow, b: PostRow) => number> = {
 /** One page of one site's posts, as PostsList renders it. */
 export async function loadPosts(source: ContentSource, query: PostQuery = {}): Promise<PostsData> {
   const meta = await source.client.meta();
-  const ask = { limit: PER_PAGE, ...(query.q ? { q: query.q } : {}), ...(query.status ? { status: query.status } : {}), ...(query.cursor ? { cursor: query.cursor } : {}) };
-  const list = source.postIndex ? await source.postIndex.list(ask) : await source.client.list(ask);
+  const lister = source.postIndex ?? source.client;
+  const base = { ...(query.q ? { q: query.q } : {}), ...(query.sort ? { sort: query.sort, ...(query.dir ? { dir: query.dir } : {}) } : {}) };
+  const list = await lister.list({ limit: PER_PAGE, ...base, ...(query.status ? { status: query.status } : {}), ...(query.cursor ? { cursor: query.cursor } : {}) });
   let rows = list.items.map((item) => postRow(source, item));
   const kinds = [...new Set(rows.map((r) => r.kind))].sort();
-  // The contract has no kind or tag filter and no sort yet, so these work on the page the site sent.
+  // The contract has no kind or tag filter, so these work on the page the site sent.
   if (query.kind) rows = rows.filter((r) => r.kind === query.kind);
-  if (query.tag) rows = rows.filter((r) => (r.tags ?? []).includes(query.tag!));
-  const sortedOnPage = query.sort !== undefined;
-  if (query.sort) rows = [...rows].sort(BY[query.sort]);
+  if (query.tag) rows = rows.filter((r) => (r.tags ?? []).some((t) => sameTag(t, query.tag!)));
+  // A site that sorted says so (v0.6.0); otherwise the kit sorts the page it has and says that.
+  const sortedOnPage = query.sort !== undefined && list.sorted === undefined;
+  if (sortedOnPage) {
+    const dir = query.dir ?? (query.sort === "title" ? "asc" : "desc");
+    rows = [...rows].sort((a, b) => (dir === (query.sort === "title" ? "asc" : "desc") ? 1 : -1) * BY[query.sort!](a, b));
+  }
+  // Where the site counts (v0.6.0), each status tab gets its count for the same search.
+  let counts: PostsData["counts"];
+  if (list.total !== undefined) {
+    const statuses = ["draft", "scheduled", "published"] as const;
+    const totals = await Promise.all(statuses.map((status) => lister.list({ limit: 1, ...(query.q ? { q: query.q } : {}), status })));
+    counts = { all: query.status ? totals.reduce((n, t) => n + (t.total ?? 0), 0) : list.total };
+    statuses.forEach((status, i) => (counts![status] = totals[i]!.total ?? 0));
+  }
   if (source.notes && rows.length > 0) {
     const notes = await source.notes(rows.map((r) => r.id));
     rows = rows.map((r) => (notes[r.id]?.length ? { ...r, notes: notes[r.id] } : r));
@@ -363,7 +382,8 @@ export async function loadPosts(source: ContentSource, query: PostQuery = {}): P
     site: { id: source.site.id, name: source.site.name },
     query,
     rows,
-    page: { nextCursor: list.nextCursor, ...(sortedOnPage ? { sortedOnPage } : {}) },
+    page: { nextCursor: list.nextCursor, ...(list.total !== undefined ? { total: list.total } : {}), ...(sortedOnPage ? { sortedOnPage } : {}) },
+    ...(counts ? { counts } : {}),
     kinds,
     offers: { delete: meta.capabilities.contentDelete === true, schedule: true, tags: true, duplicate: true },
     can: source.can,
@@ -376,9 +396,7 @@ export type PostIntent = (typeof POST_INTENTS)[number];
 /** A tag as a post's frontmatter list can hold it: one short piece of text with nothing that would break the list. */
 export function cleanPostTag(raw: string): string | null {
   const tag = raw.trim();
-  if (tag.length === 0 || tag.length > 40) return null;
-  if (/[,\[\]"'#:\r\n\\]/.test(tag)) return null;
-  return tag;
+  return ContentTag.safeParse(tag).success ? tag : null;
 }
 
 const sameTag = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
@@ -407,7 +425,7 @@ export async function runPostsIntent(source: ContentSource, input: IntentInput):
     if (tag === null) return refused("A tag is one short piece of text, with no commas, brackets, quotes or colons.");
   }
   let capabilities: Capabilities | null = null;
-  if (intent === "delete" || intent === "duplicate") capabilities = (await source.client.meta()).capabilities;
+  if (intent !== "unpublish" && intent !== "republish") capabilities = (await source.client.meta()).capabilities;
   if (intent === "delete" && capabilities?.contentDelete !== true) return refused("This site does not delete posts through the site API.");
 
   const client = source.client;
@@ -429,15 +447,19 @@ export async function runPostsIntent(source: ContentSource, input: IntentInput):
       case "tag-remove": {
         const doc = await read(id, version);
         if (doc.status !== "draft" && !source.can.publish) return { id, ok: false, message: LIVE_POST };
+        // A site that keeps tags (v0.6.0) writes them through its own route; otherwise the frontmatter is rewritten, as Carrel did.
+        const viaRoute = capabilities?.contentTags === true;
         const parts = splitSource(doc.source);
-        if (parts.front === null) return { id, ok: false, message: "This post has no frontmatter, so it has no tags to change." };
-        const tags = tagsOf(parts.front);
+        if (!viaRoute && parts.front === null) return { id, ok: false, message: "This post has no frontmatter, so it has no tags to change." };
+        const tags = viaRoute ? (doc.tags ?? []) : tagsOf(parts.front);
         const has = tags.some((t) => sameTag(t, tag!));
         if (intent === "tag-add" && has) return { id, ok: true, message: `Already tagged "${tag}". Not changed.` };
         if (intent === "tag-remove" && !has) return { id, ok: true, message: `Did not have the tag "${tag}". Not changed.` };
         const next = intent === "tag-add" ? [...tags, tag!] : tags.filter((t) => !sameTag(t, tag!));
         const change = changeId();
-        const written = await client.saveDraft(id, { source: joinSource({ ...parts, front: setTags(parts.front, next) }), expectedVersion: doc.version, changeId: change });
+        const written = viaRoute
+          ? await client.setTags(id, { tags: next, expectedVersion: doc.version, changeId: change })
+          : await client.saveDraft(id, { source: joinSource({ ...parts, front: setTags(parts.front!, next) }), expectedVersion: doc.version, changeId: change });
         undoIds.push(id);
         undoVersions.push(written.version);
         const note = await recordDone(source, `post-${intent}`, id, change);

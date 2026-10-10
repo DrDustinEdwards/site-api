@@ -181,6 +181,19 @@ export async function runConformance(config: ConformanceConfig): Promise<Conform
       if (code !== expected) throw new Error(`error code ${code ?? "missing"}, expected ${expected}`);
       return offered ? "404 not-found" : "501 not-implemented";
     });
+    await check("content tags of an unknown id: refused, or not implemented where the site keeps no tags", async () => {
+      const response = await doFetch(`${origin}${PREFIX}/content/${PROBE_ID}/tags`, {
+        method: "PUT",
+        headers: { ...auth, "content-type": "application/json" },
+        body: JSON.stringify({ tags: ["conformance-probe"], expectedVersion: STALE_VERSION, changeId: "conformance-probe" }),
+      });
+      const offered = (meta as MetaType | null)?.capabilities.contentTags === true;
+      expectStatus(response, offered ? 404 : 501, offered ? "unknown content tags" : "content tags on a site without them");
+      const code = await errorCode(response);
+      const expected = offered ? "not-found" : "not-implemented";
+      if (code !== expected) throw new Error(`error code ${code ?? "missing"}, expected ${expected}`);
+      return offered ? "404 not-found" : "501 not-implemented";
+    });
   }
 
   // ---------- media (v0.2.0), only for a site that offers it

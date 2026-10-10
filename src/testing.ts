@@ -2,7 +2,8 @@
 // sitting. Carrel's tests run against it, and the conformance suite is proven on it.
 
 import { MediaInUseError, NotFoundError, RefusedError, VersionConflictError, type MediaAdapter, type MentionsAdapter, type SiteAdapter } from "./adapter.js";
-import type { ContentDoc, ContentStatus, MediaItem, MediaUploadLimits, MediaUse, MentionItem, MentionStatus, Revision, SiteInfo, WriteResult } from "./contract.js";
+import { joinSource, setTags as writeTags, splitSource, tagsOf } from "./frontmatter.js";
+import type { ContentDoc, ContentStatus, ContentSummary, MediaItem, MediaUploadLimits, MediaUse, MentionItem, MentionStatus, Revision, SiteInfo, WriteResult } from "./contract.js";
 
 interface Stored {
   doc: ContentDoc;
@@ -16,6 +17,8 @@ export interface MemoryAdapterOptions {
   media?: MediaUploadLimits | false;
   /** false for a site whose adapter has no content delete (its route then answers 501). On by default. */
   contentDelete?: boolean;
+  /** false for a site that keeps no post tags through the API (a v0.5.0 site): the tags route then answers 501. On by default. */
+  contentTags?: boolean;
   /** false for a media manager with no alt, tag or trash writes (a v0.2.0 site): those routes then answer 501. On by default. */
   mediaWrites?: boolean;
   /** false for a site that does not receive webmentions (its routes then answer 501). On by default. */
@@ -58,6 +61,18 @@ const EXTENSIONS: Record<string, string> = {
 interface StoredMedia {
   item: MediaItem;
   bytes: Uint8Array;
+}
+
+/** The item with its tags (v0.6.0), where its frontmatter can hold them. */
+function withTags(doc: ContentDoc): ContentDoc {
+  const front = splitSource(doc.source).front;
+  return front !== null ? { ...doc, tags: tagsOf(front) } : doc;
+}
+
+/** A list row: the item without its source, with its version and tags. */
+function summaryOf(doc: ContentDoc): ContentSummary {
+  const { source: _s, format: _f, ...summary } = withTags(doc);
+  return summary;
 }
 
 function titleOf(source: string, id: string): string {
@@ -355,16 +370,25 @@ export function memoryAdapter(
           .filter((d) => !query.status || d.status === query.status)
           .filter((d) => !needle || d.title.toLowerCase().includes(needle) || d.source.toLowerCase().includes(needle))
           .sort((a, b) => a.id.localeCompare(b.id));
+        // v0.6.0: sorted as asked, newest first for the dates and A to Z for titles unless dir says otherwise.
+        const sorted = query.sort ? { sort: query.sort, dir: query.dir ?? (query.sort === "title" ? "asc" : "desc") } : undefined;
+        if (sorted) {
+          const key = (d: ContentDoc) => (sorted.sort === "title" ? d.title.toLowerCase() : sorted.sort === "published" ? (d.publishedAt ?? d.publishAt ?? "") : (d.updatedAt ?? ""));
+          all.sort((a, b) => (sorted.dir === "asc" ? 1 : -1) * key(a).localeCompare(key(b)) || a.id.localeCompare(b.id));
+        }
         const start = query.cursor ? Number(query.cursor) : 0;
         const page = all.slice(start, start + query.limit);
         const next = start + query.limit < all.length ? String(start + query.limit) : null;
         return {
-          items: page.map(({ source: _s, version: _v, format: _f, ...summary }) => summary),
+          items: page.map(summaryOf),
           nextCursor: next,
+          total: all.length,
+          ...(sorted ? { sorted } : {}),
         };
       },
       async get(id) {
-        return store.get(id)?.doc ?? null;
+        const doc = store.get(id)?.doc;
+        return doc ? withTags(doc) : null;
       },
       async saveDraft(id, input) {
         const previous = expect(id, input.expectedVersion);
@@ -389,6 +413,18 @@ export function memoryAdapter(
       async revisionSource(id, version) {
         return store.get(id)?.history.find((h) => h.revision.version === version)?.source ?? null;
       },
+      ...(options.contentTags === false
+        ? {}
+        : {
+            async setTags(id: string, input: { tags: string[]; expectedVersion: string; changeId: string }) {
+              if (!store.has(id)) throw new NotFoundError();
+              const previous = existing(id, input.expectedVersion);
+              const parts = splitSource(previous.doc.source);
+              if (parts.front === null) throw new RefusedError("This post has no frontmatter, so it has nowhere to keep tags.");
+              const source = joinSource({ ...parts, front: writeTags(parts.front, input.tags) });
+              return commit(id, previous, { source, status: previous.doc.status, publishAt: previous.doc.publishAt }, input.changeId, "Tags");
+            },
+          }),
       ...(options.contentDelete === false
         ? {}
         : {
