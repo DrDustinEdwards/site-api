@@ -1,0 +1,2610 @@
+[
+  {
+    "file": "test/admin.test.ts",
+    "name": "localClient answers as the HTTP client does, through the same handler: meta, reads, and refusals as SiteApiError",
+    "kills": 201,
+    "unique": 0,
+    "kind": "covered",
+    "protected": false
+  },
+  {
+    "file": "test/admin.test.ts",
+    "name": "localClient runs the package's upload checks: bytes that are not their type are refused before the adapter",
+    "kills": 132,
+    "unique": 0,
+    "kind": "covered",
+    "protected": false
+  },
+  {
+    "file": "test/admin.test.ts",
+    "name": "posts loads a page as rows: editor and live links, kinds, notes, and the site's delete offer",
+    "kills": 264,
+    "unique": 20,
+    "kind": "",
+    "protected": false
+  },
+  {
+    "file": "test/admin.test.ts",
+    "name": "posts asks the site to sort and count (v0.6.0), and counts each status tab for the same search",
+    "kills": 297,
+    "unique": 20,
+    "kind": "",
+    "protected": false
+  },
+  {
+    "file": "test/admin.test.ts",
+    "name": "posts sorts the page itself, and says so, when the list it reads did not sort; and reads a host index in place of the site's list",
+    "kills": 137,
+    "unique": 20,
+    "kind": "",
+    "protected": false
+  },
+  {
+    "file": "test/admin.test.ts",
+    "name": "posts adds a tag to each post that lacks it, leaves the rest, and Undo removes it from those only",
+    "kills": 388,
+    "unique": 22,
+    "kind": "",
+    "protected": false
+  },
+  {
+    "file": "test/admin.test.ts",
+    "name": "posts writes tags through the site's tags route where it offers one (v0.6.0), and through the frontmatter where it does not",
+    "kills": 354,
+    "unique": 9,
+    "kind": "",
+    "protected": false
+  },
+  {
+    "file": "test/admin.test.ts",
+    "name": "posts refuses an Undo when the post changed since, and names the conflict",
+    "kills": 327,
+    "unique": 2,
+    "kind": "",
+    "protected": false
+  },
+  {
+    "file": "test/admin.test.ts",
+    "name": "posts refuses a live post to someone who may not publish, alone, and refuses outright what they may not run",
+    "kills": 306,
+    "unique": 15,
+    "kind": "",
+    "protected": false
+  },
+  {
+    "file": "test/admin.test.ts",
+    "name": "posts reports an id the site could not hold, a host's hold, and more than 100 posts, without sending them",
+    "kills": 232,
+    "unique": 29,
+    "kind": "",
+    "protected": false
+  },
+  {
+    "file": "test/admin.test.ts",
+    "name": "posts duplicates as a draft with a free id, and Undo deletes the copy at the version the duplicate made",
+    "kills": 422,
+    "unique": 43,
+    "kind": "",
+    "protected": false
+  },
+  {
+    "file": "test/admin.test.ts",
+    "name": "posts offers no Undo for a duplicate where the site has no delete, or the person may not delete, and says how to remove it",
+    "kills": 309,
+    "unique": 14,
+    "kind": "",
+    "protected": false
+  },
+  {
+    "file": "test/admin.test.ts",
+    "name": "posts unpublishes, and Undo republishes; a post never published is never published by Undo",
+    "kills": 314,
+    "unique": 38,
+    "kind": "",
+    "protected": false
+  },
+  {
+    "file": "test/admin.test.ts",
+    "name": "posts deletes where the site offers it, and refuses on a site that does not, before asking",
+    "kills": 296,
+    "unique": 3,
+    "kind": "",
+    "protected": false
+  },
+  {
+    "file": "test/admin.test.ts",
+    "name": "posts says when the record of a done write could not be saved",
+    "kills": 288,
+    "unique": 3,
+    "kind": "",
+    "protected": false
+  },
+  {
+    "file": "test/admin.test.ts",
+    "name": "posts runs the same over the HTTP client, as Carrel drives it",
+    "kills": 276,
+    "unique": 0,
+    "kind": "covered",
+    "protected": false
+  },
+  {
+    "file": "test/admin.test.ts",
+    "name": "media loads the library and the trash with absolute addresses, the inspector's uses, and the site's offers",
+    "kills": 385,
+    "unique": 16,
+    "kind": "",
+    "protected": false
+  },
+  {
+    "file": "test/admin.test.ts",
+    "name": "media sends a lens and a sort the site answers (v0.6.0), drops a lens it does not, and sorts the page itself where the site did not",
+    "kills": 359,
+    "unique": 40,
+    "kind": "",
+    "protected": false
+  },
+  {
+    "file": "test/admin.test.ts",
+    "name": "media trashes in one bulk request, and Undo restores at the versions the trash made",
+    "kills": 407,
+    "unique": 20,
+    "kind": "",
+    "protected": false
+  },
+  {
+    "file": "test/admin.test.ts",
+    "name": "media refuses a write with no version the person saw, and names a stale one as a conflict",
+    "kills": 444,
+    "unique": 17,
+    "kind": "",
+    "protected": false
+  },
+  {
+    "file": "test/admin.test.ts",
+    "name": "media adds a tag only to the files that lack it, and Undo removes it from those only",
+    "kills": 520,
+    "unique": 79,
+    "kind": "",
+    "protected": false
+  },
+  {
+    "file": "test/admin.test.ts",
+    "name": "media sets a file's whole tag set, and Undo puts back the set it held",
+    "kills": 368,
+    "unique": 29,
+    "kind": "",
+    "protected": false
+  },
+  {
+    "file": "test/admin.test.ts",
+    "name": "media deletes for good only from the trash, and a file in use is refused with its uses named",
+    "kills": 483,
+    "unique": 26,
+    "kind": "",
+    "protected": false
+  },
+  {
+    "file": "test/admin.test.ts",
+    "name": "media empties the trash: deletes what nothing uses, keeps what a post uses, says which, and records each under the site's change id",
+    "kills": 450,
+    "unique": 43,
+    "kind": "",
+    "protected": false
+  },
+  {
+    "file": "test/admin.test.ts",
+    "name": "media checks an upload against the site's limits before sending a byte, then uploads with its alt text",
+    "kills": 275,
+    "unique": 45,
+    "kind": "",
+    "protected": false
+  },
+  {
+    "file": "test/admin.test.ts",
+    "name": "media refuses what the site does not offer, before asking it",
+    "kills": 232,
+    "unique": 14,
+    "kind": "",
+    "protected": false
+  },
+  {
+    "file": "test/admin.test.ts",
+    "name": "mentions opens on pending, or on all when nothing waits, with the counts of the whole queue and each post's editor link",
+    "kills": 219,
+    "unique": 29,
+    "kind": "",
+    "protected": false
+  },
+  {
+    "file": "test/admin.test.ts",
+    "name": "mentions Undo is the opposite decision between approved and rejected; on a v0.5.0 site a decision on a waiting mention has none",
+    "kills": 287,
+    "unique": 18,
+    "kind": "",
+    "protected": false
+  },
+  {
+    "file": "test/admin.test.ts",
+    "name": "mentions searches and narrows to one post through the site (v0.6.0), and filters the page itself where the site did not",
+    "kills": 223,
+    "unique": 32,
+    "kind": "",
+    "protected": false
+  },
+  {
+    "file": "test/admin.test.ts",
+    "name": "mentions with reset (v0.6.0), Undo takes a decision on a waiting mention back to waiting, and Undo of that decides again",
+    "kills": 314,
+    "unique": 11,
+    "kind": "",
+    "protected": false
+  },
+  {
+    "file": "test/admin.test.ts",
+    "name": "mentions refuses a stale version as a conflict, and an unverified mention with the site's own words",
+    "kills": 277,
+    "unique": 22,
+    "kind": "",
+    "protected": false
+  },
+  {
+    "file": "test/admin.test.ts",
+    "name": "mentions deletes and sweeps for someone who may decide, and refuses both to someone who may not",
+    "kills": 292,
+    "unique": 20,
+    "kind": "",
+    "protected": false
+  },
+  {
+    "file": "test/admin.test.ts",
+    "name": "summary counts what waits on one site, and null for what it cannot say",
+    "kills": 292,
+    "unique": 17,
+    "kind": "",
+    "protected": false
+  },
+  {
+    "file": "test/conformance.test.ts",
+    "name": "conformance passes a conforming site, with the media checks when it offers media",
+    "kills": 612,
+    "unique": 4,
+    "kind": "",
+    "protected": true
+  },
+  {
+    "file": "test/conformance.test.ts",
+    "name": "conformance runs only the content checks on a site with no media manager",
+    "kills": 377,
+    "unique": 0,
+    "kind": "covered",
+    "protected": true
+  },
+  {
+    "file": "test/conformance.test.ts",
+    "name": "conformance expects 501 on a site with no content delete, and 404 where it has one",
+    "kills": 567,
+    "unique": 3,
+    "kind": "",
+    "protected": true
+  },
+  {
+    "file": "test/conformance.test.ts",
+    "name": "conformance expects 501 from every mentions check on a site without the group, and runs only the five that apply",
+    "kills": 520,
+    "unique": 11,
+    "kind": "",
+    "protected": true
+  },
+  {
+    "file": "test/conformance.test.ts",
+    "name": "conformance with a real mention in the queue, the stale-version probe runs against it and changes nothing",
+    "kills": 602,
+    "unique": 8,
+    "kind": "",
+    "protected": true
+  },
+  {
+    "file": "test/conformance.test.ts",
+    "name": "conformance PLANT: fails a site that decides a mention it does not hold",
+    "kills": 557,
+    "unique": 0,
+    "kind": "covered",
+    "protected": true
+  },
+  {
+    "file": "test/conformance.test.ts",
+    "name": "conformance expects 501 from every lens on a site that names none, and passes it",
+    "kills": 566,
+    "unique": 5,
+    "kind": "",
+    "protected": true
+  },
+  {
+    "file": "test/conformance.test.ts",
+    "name": "conformance PLANT: fails a site that answers a lens it does not name with its whole library",
+    "kills": 558,
+    "unique": 4,
+    "kind": "",
+    "protected": true
+  },
+  {
+    "file": "test/conformance.test.ts",
+    "name": "conformance expects 501 from content tags on a site that keeps none, and 404 where it does",
+    "kills": 567,
+    "unique": 4,
+    "kind": "",
+    "protected": true
+  },
+  {
+    "file": "test/conformance.test.ts",
+    "name": "conformance PLANT: fails a site that tags a post it does not hold",
+    "kills": 537,
+    "unique": 0,
+    "kind": "covered",
+    "protected": true
+  },
+  {
+    "file": "test/conformance.test.ts",
+    "name": "conformance expects 501 from a reset on a v0.5.0 mentions group, and 404 where the site has reset",
+    "kills": 577,
+    "unique": 2,
+    "kind": "",
+    "protected": true
+  },
+  {
+    "file": "test/conformance.test.ts",
+    "name": "conformance PLANT: fails a site that resets a mention it does not hold",
+    "kills": 550,
+    "unique": 0,
+    "kind": "covered",
+    "protected": true
+  },
+  {
+    "file": "test/conformance.test.ts",
+    "name": "conformance PLANT: fails a site that deletes a mention it does not hold",
+    "kills": 553,
+    "unique": 0,
+    "kind": "covered",
+    "protected": true
+  },
+  {
+    "file": "test/conformance.test.ts",
+    "name": "conformance PLANT: fails a site that ignores the version on a mention decision",
+    "kills": 594,
+    "unique": 0,
+    "kind": "covered",
+    "protected": true
+  },
+  {
+    "file": "test/conformance.test.ts",
+    "name": "conformance PLANT: fails a site that offers mentions but does not say so in its capabilities",
+    "kills": 500,
+    "unique": 0,
+    "kind": "covered",
+    "protected": true
+  },
+  {
+    "file": "test/conformance.test.ts",
+    "name": "conformance PLANT: fails a site that answers a delete of an item it does not hold as done",
+    "kills": 542,
+    "unique": 0,
+    "kind": "covered",
+    "protected": true
+  },
+  {
+    "file": "test/conformance.test.ts",
+    "name": "conformance PLANT: fails a site that offers a delete but does not say so in its capabilities",
+    "kills": 549,
+    "unique": 0,
+    "kind": "covered",
+    "protected": true
+  },
+  {
+    "file": "test/conformance.test.ts",
+    "name": "conformance changes nothing on a conforming site: no content, no file stored, no file deleted",
+    "kills": 33,
+    "unique": 0,
+    "kind": "covered",
+    "protected": true
+  },
+  {
+    "file": "test/conformance.test.ts",
+    "name": "conformance with probeMediaUpload, uploads a file of its own and deletes that file and no other",
+    "kills": 659,
+    "unique": 23,
+    "kind": "",
+    "protected": true
+  },
+  {
+    "file": "test/conformance.test.ts",
+    "name": "conformance PLANT: fails a site that accepts a type it never declared",
+    "kills": 564,
+    "unique": 2,
+    "kind": "",
+    "protected": true
+  },
+  {
+    "file": "test/conformance.test.ts",
+    "name": "conformance PLANT: fails a site that answers a delete of a file it does not hold as done",
+    "kills": 557,
+    "unique": 1,
+    "kind": "",
+    "protected": true
+  },
+  {
+    "file": "test/conformance.test.ts",
+    "name": "conformance expects 501 from every media write on a v0.2.0 site, and passes it",
+    "kills": 549,
+    "unique": 14,
+    "kind": "",
+    "protected": true
+  },
+  {
+    "file": "test/conformance.test.ts",
+    "name": "conformance PLANT: fails a site whose alt write accepts a stale version on a file it does not hold",
+    "kills": 567,
+    "unique": 0,
+    "kind": "covered",
+    "protected": true
+  },
+  {
+    "file": "test/conformance.test.ts",
+    "name": "conformance PLANT: fails a site that offers a trash but does not say so in its capabilities",
+    "kills": 532,
+    "unique": 0,
+    "kind": "covered",
+    "protected": true
+  },
+  {
+    "file": "test/conformance.test.ts",
+    "name": "conformance changes no file on a conforming site when the write probes run",
+    "kills": 11,
+    "unique": 0,
+    "kind": "covered",
+    "protected": true
+  },
+  {
+    "file": "test/conformance.test.ts",
+    "name": "conformance PLANT: fails a site that offers media without declaring its limits",
+    "kills": 558,
+    "unique": 1,
+    "kind": "",
+    "protected": true
+  },
+  {
+    "file": "test/conformance.test.ts",
+    "name": "conformance PLANT: fails a site that ignores expectedVersion",
+    "kills": 18,
+    "unique": 2,
+    "kind": "",
+    "protected": true
+  },
+  {
+    "file": "test/conformance.test.ts",
+    "name": "conformance PLANT: fails a site that serves the key off its prefix",
+    "kills": 552,
+    "unique": 6,
+    "kind": "",
+    "protected": true
+  },
+  {
+    "file": "test/conformance.test.ts",
+    "name": "conformance PLANT: fails a site on a different contract",
+    "kills": 556,
+    "unique": 2,
+    "kind": "",
+    "protected": true
+  },
+  {
+    "file": "test/conformance.test.ts",
+    "name": "conformance PLANT: fails a site with the wrong key configured",
+    "kills": 25,
+    "unique": 4,
+    "kind": "",
+    "protected": true
+  },
+  {
+    "file": "test/conformance.test.ts",
+    "name": "conformance skips the write probe when told to",
+    "kills": 6,
+    "unique": 2,
+    "kind": "",
+    "protected": true
+  },
+  {
+    "file": "test/conformance.test.ts",
+    "name": "schema hash is stable across calls and is 64 hex characters",
+    "kills": 2,
+    "unique": 0,
+    "kind": "covered",
+    "protected": true
+  },
+  {
+    "file": "test/media-writes.test.ts",
+    "name": "alt text changes the alt, moves the version, and refuses the old version after",
+    "kills": 236,
+    "unique": 0,
+    "kind": "covered",
+    "protected": false
+  },
+  {
+    "file": "test/media-writes.test.ts",
+    "name": "alt text answers 404 for a missing file and 400 for a malformed body",
+    "kills": 125,
+    "unique": 0,
+    "kind": "covered",
+    "protected": false
+  },
+  {
+    "file": "test/media-writes.test.ts",
+    "name": "tags stores the set sorted and without duplicates, and filters the list by tag",
+    "kills": 258,
+    "unique": 4,
+    "kind": "",
+    "protected": false
+  },
+  {
+    "file": "test/media-writes.test.ts",
+    "name": "tags refuses a stale version, a badly spelled tag and more than 12 tags, changing nothing",
+    "kills": 217,
+    "unique": 0,
+    "kind": "covered",
+    "protected": false
+  },
+  {
+    "file": "test/media-writes.test.ts",
+    "name": "trash, restore and empty hides a trashed file from the list, shows it in the trash, and brings it back on restore",
+    "kills": 266,
+    "unique": 4,
+    "kind": "",
+    "protected": false
+  },
+  {
+    "file": "test/media-writes.test.ts",
+    "name": "trash, restore and empty empties the trash for good and leaves the library alone",
+    "kills": 256,
+    "unique": 0,
+    "kind": "covered",
+    "protected": false
+  },
+  {
+    "file": "test/media-writes.test.ts",
+    "name": "trash, restore and empty keeps a trashed file a post still uses, and names the post",
+    "kills": 296,
+    "unique": 0,
+    "kind": "covered",
+    "protected": false
+  },
+  {
+    "file": "test/media-writes.test.ts",
+    "name": "trash, restore and empty deletes at most 100 per request and says when more remain",
+    "kills": 257,
+    "unique": 2,
+    "kind": "",
+    "protected": false
+  },
+  {
+    "file": "test/media-writes.test.ts",
+    "name": "trash, restore and empty gives each deleted file its own change id, built from the request's",
+    "kills": 250,
+    "unique": 3,
+    "kind": "",
+    "protected": false
+  },
+  {
+    "file": "test/media-writes.test.ts",
+    "name": "bulk applies the op to every file and reports each file on its own",
+    "kills": 253,
+    "unique": 2,
+    "kind": "",
+    "protected": false
+  },
+  {
+    "file": "test/media-writes.test.ts",
+    "name": "bulk adds and removes tags from each file's current set, and refuses past 12 for that file alone",
+    "kills": 271,
+    "unique": 10,
+    "kind": "",
+    "protected": false
+  },
+  {
+    "file": "test/media-writes.test.ts",
+    "name": "bulk deletes through the site's reference check without a version, and names a refusal",
+    "kills": 253,
+    "unique": 0,
+    "kind": "covered",
+    "protected": false
+  },
+  {
+    "file": "test/media-writes.test.ts",
+    "name": "bulk rejects a tag op with no tags, more than 100 files and an empty list as 400, running nothing",
+    "kills": 98,
+    "unique": 1,
+    "kind": "",
+    "protected": false
+  },
+  {
+    "file": "test/media-writes.test.ts",
+    "name": "a site without the writes answers 501 to each route whatever the body says, and declares none of the capabilities",
+    "kills": 183,
+    "unique": 0,
+    "kind": "covered",
+    "protected": false
+  },
+  {
+    "file": "test/media-writes.test.ts",
+    "name": "a site without the writes still allows a bulk delete, which needs only the delete every media site has",
+    "kills": 210,
+    "unique": 2,
+    "kind": "",
+    "protected": false
+  },
+  {
+    "file": "test/media-writes.test.ts",
+    "name": "a site without the writes a site with trash but no tags refuses tag ops with 501 and allows trash ops",
+    "kills": 258,
+    "unique": 0,
+    "kind": "covered",
+    "protected": false
+  },
+  {
+    "file": "test/mentions.test.ts",
+    "name": "mentions list lists newest first with the whole queue's counts and what a sweep would remove",
+    "kills": 152,
+    "unique": 0,
+    "kind": "covered",
+    "protected": false
+  },
+  {
+    "file": "test/mentions.test.ts",
+    "name": "mentions list filters by status and pages, with counts that ignore the filter",
+    "kills": 141,
+    "unique": 6,
+    "kind": "",
+    "protected": false
+  },
+  {
+    "file": "test/mentions.test.ts",
+    "name": "mentions list PLANT: refuses an unknown status or an out of range limit before the adapter runs",
+    "kills": 78,
+    "unique": 0,
+    "kind": "covered",
+    "protected": false
+  },
+  {
+    "file": "test/mentions.test.ts",
+    "name": "mentions decide approves a pending mention at the version the caller saw, and reports status, version and the purge",
+    "kills": 178,
+    "unique": 1,
+    "kind": "",
+    "protected": false
+  },
+  {
+    "file": "test/mentions.test.ts",
+    "name": "mentions decide changes a decision: an approved mention can be rejected, at its new version",
+    "kills": 134,
+    "unique": 0,
+    "kind": "covered",
+    "protected": false
+  },
+  {
+    "file": "test/mentions.test.ts",
+    "name": "mentions decide resets a decision (v0.6.0): an approved mention goes back to pending, undecided, at a new version",
+    "kills": 181,
+    "unique": 1,
+    "kind": "",
+    "protected": false
+  },
+  {
+    "file": "test/mentions.test.ts",
+    "name": "mentions decide PLANT: refuses a reset of a mention with no decision to take back, with the site's own words",
+    "kills": 142,
+    "unique": 4,
+    "kind": "",
+    "protected": false
+  },
+  {
+    "file": "test/mentions.test.ts",
+    "name": "mentions decide PLANT: answers a reset 501 on a mentions group with no reset (a v0.5.0 site), and decides as before",
+    "kills": 165,
+    "unique": 0,
+    "kind": "covered",
+    "protected": false
+  },
+  {
+    "file": "test/mentions.test.ts",
+    "name": "mentions decide PLANT: refuses a stale version with 409 and the current version, and changes nothing",
+    "kills": 148,
+    "unique": 0,
+    "kind": "covered",
+    "protected": false
+  },
+  {
+    "file": "test/mentions.test.ts",
+    "name": "mentions decide PLANT: answers 404 for a mention the site does not hold",
+    "kills": 106,
+    "unique": 0,
+    "kind": "covered",
+    "protected": false
+  },
+  {
+    "file": "test/mentions.test.ts",
+    "name": "mentions decide PLANT: the site's own refusal of an unverified or failed mention comes back 422 refused, and the queue is unchanged",
+    "kills": 133,
+    "unique": 0,
+    "kind": "covered",
+    "protected": false
+  },
+  {
+    "file": "test/mentions.test.ts",
+    "name": "mentions decide PLANT: a refusal the adapter words itself reaches the caller as 422 with those words",
+    "kills": 118,
+    "unique": 0,
+    "kind": "covered",
+    "protected": false
+  },
+  {
+    "file": "test/mentions.test.ts",
+    "name": "mentions decide PLANT: answers 501 on a site with no mentions group, whatever the body says",
+    "kills": 70,
+    "unique": 0,
+    "kind": "covered",
+    "protected": false
+  },
+  {
+    "file": "test/mentions.test.ts",
+    "name": "mentions decide PLANT: refuses without the key, with a wrong one, or with an invalid body or id, before the adapter runs",
+    "kills": 94,
+    "unique": 2,
+    "kind": "",
+    "protected": true
+  },
+  {
+    "file": "test/mentions.test.ts",
+    "name": "mentions delete deletes a mention at the version the caller saw, and reports the change id and the purge",
+    "kills": 112,
+    "unique": 1,
+    "kind": "",
+    "protected": false
+  },
+  {
+    "file": "test/mentions.test.ts",
+    "name": "mentions delete PLANT: refuses a stale version with 409, and the mention stays",
+    "kills": 165,
+    "unique": 0,
+    "kind": "covered",
+    "protected": false
+  },
+  {
+    "file": "test/mentions.test.ts",
+    "name": "mentions delete PLANT: answers 404 for a missing mention and 501 on a site without the group",
+    "kills": 109,
+    "unique": 0,
+    "kind": "covered",
+    "protected": false
+  },
+  {
+    "file": "test/mentions.test.ts",
+    "name": "mentions delete PLANT: refuses without the key, or with no version or change id, before the adapter runs",
+    "kills": 81,
+    "unique": 0,
+    "kind": "covered",
+    "protected": true
+  },
+  {
+    "file": "test/mentions.test.ts",
+    "name": "mentions sweep removes failed mentions past 30 days and rejected ones past 90, and nothing else",
+    "kills": 133,
+    "unique": 3,
+    "kind": "",
+    "protected": false
+  },
+  {
+    "file": "test/mentions.test.ts",
+    "name": "mentions sweep PLANT: refused without the key, or with no change id, before the adapter runs, and nothing is removed",
+    "kills": 84,
+    "unique": 0,
+    "kind": "covered",
+    "protected": true
+  },
+  {
+    "file": "test/mentions.test.ts",
+    "name": "mentions sweep PLANT: answers 501 on a site without the group",
+    "kills": 70,
+    "unique": 0,
+    "kind": "covered",
+    "protected": false
+  },
+  {
+    "file": "test/mentions.test.ts",
+    "name": "mentions sweep PLANT: does not read the sweep path as a mention id: a delete of 'sweep' is a missing mention, not a sweep",
+    "kills": 71,
+    "unique": 0,
+    "kind": "covered",
+    "protected": false
+  },
+  {
+    "file": "test/mentions.test.ts",
+    "name": "mentions capability is advertised in meta, and absent on a site without the group",
+    "kills": 96,
+    "unique": 0,
+    "kind": "covered",
+    "protected": false
+  },
+  {
+    "file": "test/mentions.test.ts",
+    "name": "mentions capability answers 501 for every mentions route on a site without the group, including the list",
+    "kills": 49,
+    "unique": 0,
+    "kind": "covered",
+    "protected": false
+  },
+  {
+    "file": "test/mentions.test.ts",
+    "name": "mentions capability PLANT: a site that answers a mention outside the contract is a site failure, and the body is not passed on",
+    "kills": 89,
+    "unique": 0,
+    "kind": "covered",
+    "protected": false
+  },
+  {
+    "file": "test/media.test.ts",
+    "name": "media round trip uploads, lists, searches, reads and deletes a file through the client",
+    "kills": 265,
+    "unique": 13,
+    "kind": "",
+    "protected": false
+  },
+  {
+    "file": "test/media.test.ts",
+    "name": "media round trip strips a type's parameters and accepts the site's type in any case",
+    "kills": 131,
+    "unique": 0,
+    "kind": "covered",
+    "protected": false
+  },
+  {
+    "file": "test/media.test.ts",
+    "name": "PLANT: deleting a file a post uses is refused with the post named, and deletes once the post stops using it",
+    "kills": 267,
+    "unique": 11,
+    "kind": "",
+    "protected": false
+  },
+  {
+    "file": "test/media.test.ts",
+    "name": "PLANT: deleting a file a post uses names every post that uses it",
+    "kills": 222,
+    "unique": 0,
+    "kind": "covered",
+    "protected": false
+  },
+  {
+    "file": "test/media.test.ts",
+    "name": "PLANT: an upload the site does not accept refuses a file over the site's limit, and never hands it to the site",
+    "kills": 105,
+    "unique": 4,
+    "kind": "",
+    "protected": false
+  },
+  {
+    "file": "test/media.test.ts",
+    "name": "PLANT: an upload the site does not accept refuses a file that declares a length over the limit, before reading it",
+    "kills": 99,
+    "unique": 4,
+    "kind": "",
+    "protected": false
+  },
+  {
+    "file": "test/media.test.ts",
+    "name": "PLANT: an upload the site does not accept refuses a type the site did not declare, and never hands it to the site",
+    "kills": 80,
+    "unique": 0,
+    "kind": "covered",
+    "protected": false
+  },
+  {
+    "file": "test/media.test.ts",
+    "name": "PLANT: an upload the site does not accept refuses bytes that are not the type they were sent as",
+    "kills": 126,
+    "unique": 7,
+    "kind": "",
+    "protected": false
+  },
+  {
+    "file": "test/media.test.ts",
+    "name": "PLANT: an upload the site does not accept refuses an empty file, and a file name carrying a path",
+    "kills": 88,
+    "unique": 4,
+    "kind": "",
+    "protected": false
+  },
+  {
+    "file": "test/media.test.ts",
+    "name": "PLANT: a media id that climbs out refuses \"../secret\" for get and delete, before the site sees it",
+    "kills": 81,
+    "unique": 0,
+    "kind": "covered",
+    "protected": true
+  },
+  {
+    "file": "test/media.test.ts",
+    "name": "PLANT: a media id that climbs out refuses \"a/../../b\" for get and delete, before the site sees it",
+    "kills": 81,
+    "unique": 0,
+    "kind": "covered",
+    "protected": false
+  },
+  {
+    "file": "test/media.test.ts",
+    "name": "PLANT: a media id that climbs out refuses \"/etc/passwd\" for get and delete, before the site sees it",
+    "kills": 81,
+    "unique": 0,
+    "kind": "covered",
+    "protected": false
+  },
+  {
+    "file": "test/media.test.ts",
+    "name": "PLANT: a media id that climbs out refuses \"a//b\" for get and delete, before the site sees it",
+    "kills": 81,
+    "unique": 0,
+    "kind": "covered",
+    "protected": false
+  },
+  {
+    "file": "test/media.test.ts",
+    "name": "PLANT: a media id that climbs out refuses \".hidden\" for get and delete, before the site sees it",
+    "kills": 81,
+    "unique": 0,
+    "kind": "covered",
+    "protected": false
+  },
+  {
+    "file": "test/media.test.ts",
+    "name": "PLANT: a media id that climbs out refuses \"%00\" for get and delete, before the site sees it",
+    "kills": 81,
+    "unique": 0,
+    "kind": "covered",
+    "protected": false
+  },
+  {
+    "file": "test/media.test.ts",
+    "name": "PLANT: a media id that climbs out refuses a delete with no changeId",
+    "kills": 71,
+    "unique": 0,
+    "kind": "covered",
+    "protected": false
+  },
+  {
+    "file": "test/media.test.ts",
+    "name": "PLANT: a site answering outside the media contract is reported as a site failure, and its answer is never passed on",
+    "kills": 93,
+    "unique": 1,
+    "kind": "",
+    "protected": false
+  },
+  {
+    "file": "test/content-tags.test.ts",
+    "name": "content list (v0.6.0) carries each row's version and tags, and the total across pages",
+    "kills": 202,
+    "unique": 1,
+    "kind": "",
+    "protected": false
+  },
+  {
+    "file": "test/content-tags.test.ts",
+    "name": "content list (v0.6.0) sorts as asked and says so; without a sort it says nothing",
+    "kills": 204,
+    "unique": 2,
+    "kind": "",
+    "protected": false
+  },
+  {
+    "file": "test/content-tags.test.ts",
+    "name": "content list (v0.6.0) refuses a sort or a direction the contract does not name, before the adapter",
+    "kills": 70,
+    "unique": 0,
+    "kind": "covered",
+    "protected": false
+  },
+  {
+    "file": "test/content-tags.test.ts",
+    "name": "content tags (v0.6.0) sets a post's whole tag set at the version the caller saw, one spelling per tag, and keeps it live",
+    "kills": 272,
+    "unique": 5,
+    "kind": "",
+    "protected": false
+  },
+  {
+    "file": "test/content-tags.test.ts",
+    "name": "content tags (v0.6.0) PLANT: refuses a stale version with 409, a missing post with 404, and a post with no frontmatter with the site's words",
+    "kills": 189,
+    "unique": 1,
+    "kind": "",
+    "protected": false
+  },
+  {
+    "file": "test/content-tags.test.ts",
+    "name": "content tags (v0.6.0) PLANT: refuses a tag that would break a frontmatter list, before the adapter",
+    "kills": 77,
+    "unique": 0,
+    "kind": "covered",
+    "protected": false
+  },
+  {
+    "file": "test/content-tags.test.ts",
+    "name": "content tags (v0.6.0) PLANT: answers 501 on a site that keeps no tags through the API, whatever the body says",
+    "kills": 150,
+    "unique": 0,
+    "kind": "covered",
+    "protected": false
+  },
+  {
+    "file": "test/client.test.ts",
+    "name": "client round trip reads meta with this contract's hash and the capabilities, media and its limits included",
+    "kills": 147,
+    "unique": 0,
+    "kind": "covered",
+    "protected": false
+  },
+  {
+    "file": "test/client.test.ts",
+    "name": "client round trip reads a site with no media manager and no content delete as the v0.1.0 capabilities, with no limits",
+    "kills": 112,
+    "unique": 0,
+    "kind": "covered",
+    "protected": false
+  },
+  {
+    "file": "test/client.test.ts",
+    "name": "client round trip creates, edits, publishes, schedules, unpublishes, lists, and diffs",
+    "kills": 273,
+    "unique": 17,
+    "kind": "",
+    "protected": false
+  },
+  {
+    "file": "test/client.test.ts",
+    "name": "client round trip renders a preview as full page HTML",
+    "kills": 98,
+    "unique": 15,
+    "kind": "",
+    "protected": false
+  },
+  {
+    "file": "test/client.test.ts",
+    "name": "client round trip pages the list with a cursor",
+    "kills": 163,
+    "unique": 0,
+    "kind": "covered",
+    "protected": false
+  },
+  {
+    "file": "test/client.test.ts",
+    "name": "client round trip raises the site's refusal with its error body",
+    "kills": 87,
+    "unique": 0,
+    "kind": "covered",
+    "protected": false
+  },
+  {
+    "file": "test/content-delete.test.ts",
+    "name": "the source at a revision opens each revision in the list with the source it had",
+    "kills": 157,
+    "unique": 3,
+    "kind": "",
+    "protected": false
+  },
+  {
+    "file": "test/content-delete.test.ts",
+    "name": "the source at a revision answers 404 for a version or an item the site does not hold",
+    "kills": 147,
+    "unique": 1,
+    "kind": "",
+    "protected": false
+  },
+  {
+    "file": "test/content-delete.test.ts",
+    "name": "the source at a revision refuses an id or a version that could not be one, before the site sees it",
+    "kills": 78,
+    "unique": 3,
+    "kind": "",
+    "protected": false
+  },
+  {
+    "file": "test/content-delete.test.ts",
+    "name": "the source at a revision is refused without the key",
+    "kills": 24,
+    "unique": 0,
+    "kind": "covered",
+    "protected": true
+  },
+  {
+    "file": "test/content-delete.test.ts",
+    "name": "content delete deletes an item at the version the caller saw, and reports the change id",
+    "kills": 164,
+    "unique": 0,
+    "kind": "covered",
+    "protected": false
+  },
+  {
+    "file": "test/content-delete.test.ts",
+    "name": "content delete advertises the delete in meta, and not on a site without one",
+    "kills": 106,
+    "unique": 0,
+    "kind": "covered",
+    "protected": false
+  },
+  {
+    "file": "test/content-delete.test.ts",
+    "name": "content delete PLANT: refuses a stale version with 409 and the current version, and deletes nothing",
+    "kills": 158,
+    "unique": 0,
+    "kind": "covered",
+    "protected": false
+  },
+  {
+    "file": "test/content-delete.test.ts",
+    "name": "content delete PLANT: answers 404 for an item the site does not hold",
+    "kills": 95,
+    "unique": 0,
+    "kind": "covered",
+    "protected": false
+  },
+  {
+    "file": "test/content-delete.test.ts",
+    "name": "content delete PLANT: answers 501 on a site whose adapter has no delete, and the item stays",
+    "kills": 135,
+    "unique": 0,
+    "kind": "covered",
+    "protected": false
+  },
+  {
+    "file": "test/content-delete.test.ts",
+    "name": "content delete PLANT: the site's own refusal comes back as 422 refused with its words, and the item stays",
+    "kills": 146,
+    "unique": 0,
+    "kind": "covered",
+    "protected": false
+  },
+  {
+    "file": "test/content-delete.test.ts",
+    "name": "content delete PLANT: refused without the key or with a wrong one, before the adapter runs",
+    "kills": 36,
+    "unique": 0,
+    "kind": "covered",
+    "protected": true
+  },
+  {
+    "file": "test/content-delete.test.ts",
+    "name": "content delete PLANT: refuses a delete with no expectedVersion or change id, or a bad id, before the adapter runs",
+    "kills": 74,
+    "unique": 0,
+    "kind": "covered",
+    "protected": false
+  },
+  {
+    "file": "test/lists.test.ts",
+    "name": "media lenses and sort (v0.6.0) answers each lens with the files it names, the total across pages, and the order it applied",
+    "kills": 335,
+    "unique": 26,
+    "kind": "",
+    "protected": false
+  },
+  {
+    "file": "test/lists.test.ts",
+    "name": "media lenses and sort (v0.6.0) PLANT: answers a lens the site does not name with 501, and an unknown lens or sort with 400, before the adapter",
+    "kills": 94,
+    "unique": 0,
+    "kind": "covered",
+    "protected": false
+  },
+  {
+    "file": "test/lists.test.ts",
+    "name": "mention search and the one-post filter (v0.6.0) filters by words and by post, keeps the whole queue's counts, and echoes what it applied",
+    "kills": 167,
+    "unique": 7,
+    "kind": "",
+    "protected": false
+  },
+  {
+    "file": "test/lists.test.ts",
+    "name": "mention search and the one-post filter (v0.6.0) PLANT: refuses a search too long or an empty post id before the adapter",
+    "kills": 78,
+    "unique": 0,
+    "kind": "covered",
+    "protected": false
+  },
+  {
+    "file": "test/planted.test.ts",
+    "name": "PLANT: the key off its prefix is not served at /api/carrel/v2/meta",
+    "kills": 16,
+    "unique": 1,
+    "kind": "",
+    "protected": true
+  },
+  {
+    "file": "test/planted.test.ts",
+    "name": "PLANT: the key off its prefix is not served at /api/carrel/v1x/meta",
+    "kills": 14,
+    "unique": 0,
+    "kind": "covered",
+    "protected": true
+  },
+  {
+    "file": "test/planted.test.ts",
+    "name": "PLANT: the key off its prefix is not served at /api/carrel/meta",
+    "kills": 14,
+    "unique": 0,
+    "kind": "covered",
+    "protected": true
+  },
+  {
+    "file": "test/planted.test.ts",
+    "name": "PLANT: the key off its prefix is not served at /admin/posts",
+    "kills": 14,
+    "unique": 0,
+    "kind": "covered",
+    "protected": true
+  },
+  {
+    "file": "test/planted.test.ts",
+    "name": "PLANT: the key off its prefix is not served at /api/carrel/v1/../../admin/posts",
+    "kills": 14,
+    "unique": 0,
+    "kind": "covered",
+    "protected": true
+  },
+  {
+    "file": "test/planted.test.ts",
+    "name": "PLANT: the key off its prefix is not served at /api/carrel/v1/%2e%2e/%2e%2e/admin",
+    "kills": 14,
+    "unique": 0,
+    "kind": "covered",
+    "protected": true
+  },
+  {
+    "file": "test/planted.test.ts",
+    "name": "PLANT: the wrong key refuses no header",
+    "kills": 30,
+    "unique": 0,
+    "kind": "covered",
+    "protected": true
+  },
+  {
+    "file": "test/planted.test.ts",
+    "name": "PLANT: the wrong key refuses a different key",
+    "kills": 40,
+    "unique": 0,
+    "kind": "covered",
+    "protected": true
+  },
+  {
+    "file": "test/planted.test.ts",
+    "name": "PLANT: the wrong key refuses the key with one character more",
+    "kills": 40,
+    "unique": 0,
+    "kind": "covered",
+    "protected": true
+  },
+  {
+    "file": "test/planted.test.ts",
+    "name": "PLANT: the wrong key refuses the key with one character less",
+    "kills": 40,
+    "unique": 0,
+    "kind": "covered",
+    "protected": true
+  },
+  {
+    "file": "test/planted.test.ts",
+    "name": "PLANT: the wrong key refuses an empty bearer",
+    "kills": 29,
+    "unique": 0,
+    "kind": "covered",
+    "protected": true
+  },
+  {
+    "file": "test/planted.test.ts",
+    "name": "PLANT: the wrong key refuses the key under another scheme",
+    "kills": 29,
+    "unique": 0,
+    "kind": "covered",
+    "protected": true
+  },
+  {
+    "file": "test/planted.test.ts",
+    "name": "PLANT: the wrong key refuses every request, even the right one, while the site's key is unset or short",
+    "kills": 21,
+    "unique": 4,
+    "kind": "",
+    "protected": true
+  },
+  {
+    "file": "test/planted.test.ts",
+    "name": "PLANT: a stale expectedVersion refuses a draft save against a version the site no longer holds",
+    "kills": 107,
+    "unique": 0,
+    "kind": "covered",
+    "protected": true
+  },
+  {
+    "file": "test/planted.test.ts",
+    "name": "PLANT: a stale expectedVersion refuses publish, schedule and unpublish on a stale version, and changes nothing",
+    "kills": 125,
+    "unique": 0,
+    "kind": "covered",
+    "protected": true
+  },
+  {
+    "file": "test/planted.test.ts",
+    "name": "PLANT: a stale expectedVersion refuses a create over an id that exists, and a non-null version for an id that does not",
+    "kills": 112,
+    "unique": 0,
+    "kind": "covered",
+    "protected": true
+  },
+  {
+    "file": "test/planted.test.ts",
+    "name": "PLANT: a stale expectedVersion refuses a write with no expectedVersion or no change id before the site sees it",
+    "kills": 73,
+    "unique": 0,
+    "kind": "covered",
+    "protected": true
+  },
+  {
+    "file": "test/planted.test.ts",
+    "name": "PLANT: an unknown route refuses a path inside the prefix that the contract does not name",
+    "kills": 92,
+    "unique": 0,
+    "kind": "covered",
+    "protected": true
+  },
+  {
+    "file": "test/planted.test.ts",
+    "name": "PLANT: an unknown route refuses a known path with the wrong method",
+    "kills": 53,
+    "unique": 2,
+    "kind": "",
+    "protected": true
+  },
+  {
+    "file": "test/planted.test.ts",
+    "name": "PLANT: an unknown route answers 501 for the groups declared for later stages, and for media on a site without it",
+    "kills": 51,
+    "unique": 2,
+    "kind": "",
+    "protected": true
+  },
+  {
+    "file": "test/planted.test.ts",
+    "name": "PLANT: an unknown route does not tell a caller without the key which routes exist",
+    "kills": 24,
+    "unique": 0,
+    "kind": "covered",
+    "protected": true
+  },
+  {
+    "file": "test/planted.test.ts",
+    "name": "PLANT: an unknown route refuses an id that could be a path",
+    "kills": 70,
+    "unique": 0,
+    "kind": "covered",
+    "protected": true
+  },
+  {
+    "file": "test/planted.test.ts",
+    "name": "rate limit refuses before the key is checked when the limiter says no",
+    "kills": 20,
+    "unique": 2,
+    "kind": "",
+    "protected": true
+  },
+  {
+    "file": "test/planted.test.ts",
+    "name": "rate limit fails closed when the limiter throws",
+    "kills": 18,
+    "unique": 2,
+    "kind": "",
+    "protected": true
+  },
+  {
+    "file": "test/planted.test.ts",
+    "name": "rate limit limits by the caller's address",
+    "kills": 25,
+    "unique": 2,
+    "kind": "",
+    "protected": true
+  },
+  {
+    "file": "test/planted.test.ts",
+    "name": "a site that answers outside the contract is reported as a site failure, and the malformed body is not passed on",
+    "kills": 80,
+    "unique": 0,
+    "kind": "covered",
+    "protected": true
+  },
+  {
+    "file": "test/contract-v0.5.0.test.ts",
+    "name": "the v0.5.0 contract is the recorded v0.5.0",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.5.0.test.ts",
+    "name": "the v0.5.0 contract keeps every v0.5.0 route exactly, and adds only the content tags route",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.5.0.test.ts",
+    "name": "the v0.5.0 contract keeps ChangeId identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.5.0.test.ts",
+    "name": "the v0.5.0 contract keeps ContentDeleteQuery identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.5.0.test.ts",
+    "name": "the v0.5.0 contract keeps ContentDeleteResult identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.5.0.test.ts",
+    "name": "the v0.5.0 contract keeps ContentId identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.5.0.test.ts",
+    "name": "the v0.5.0 contract keeps ContentStatus identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.5.0.test.ts",
+    "name": "the v0.5.0 contract keeps Diff identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.5.0.test.ts",
+    "name": "the v0.5.0 contract keeps DiffQuery identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.5.0.test.ts",
+    "name": "the v0.5.0 contract keeps ErrorBody identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.5.0.test.ts",
+    "name": "the v0.5.0 contract keeps ErrorCode identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.5.0.test.ts",
+    "name": "the v0.5.0 contract keeps MediaAltInput identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.5.0.test.ts",
+    "name": "the v0.5.0 contract keeps MediaBulkInput identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.5.0.test.ts",
+    "name": "the v0.5.0 contract keeps MediaBulkItem identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.5.0.test.ts",
+    "name": "the v0.5.0 contract keeps MediaBulkOutcome identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.5.0.test.ts",
+    "name": "the v0.5.0 contract keeps MediaBulkResult identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.5.0.test.ts",
+    "name": "the v0.5.0 contract keeps MediaDeleteQuery identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.5.0.test.ts",
+    "name": "the v0.5.0 contract keeps MediaDeleteResult identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.5.0.test.ts",
+    "name": "the v0.5.0 contract keeps MediaDetail identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.5.0.test.ts",
+    "name": "the v0.5.0 contract keeps MediaId identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.5.0.test.ts",
+    "name": "the v0.5.0 contract keeps MediaItem identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.5.0.test.ts",
+    "name": "the v0.5.0 contract keeps MediaTag identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.5.0.test.ts",
+    "name": "the v0.5.0 contract keeps MediaTags identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.5.0.test.ts",
+    "name": "the v0.5.0 contract keeps MediaTagsInput identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.5.0.test.ts",
+    "name": "the v0.5.0 contract keeps MediaTrashEmptyInput identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.5.0.test.ts",
+    "name": "the v0.5.0 contract keeps MediaTrashEmptyResult identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.5.0.test.ts",
+    "name": "the v0.5.0 contract keeps MediaTrashInput identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.5.0.test.ts",
+    "name": "the v0.5.0 contract keeps MediaUploadLimits identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.5.0.test.ts",
+    "name": "the v0.5.0 contract keeps MediaUploadQuery identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.5.0.test.ts",
+    "name": "the v0.5.0 contract keeps MediaUse identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.5.0.test.ts",
+    "name": "the v0.5.0 contract keeps MediaWriteResult identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.5.0.test.ts",
+    "name": "the v0.5.0 contract keeps MentionCounts identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.5.0.test.ts",
+    "name": "the v0.5.0 contract keeps MentionDeleteQuery identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.5.0.test.ts",
+    "name": "the v0.5.0 contract keeps MentionDeleteResult identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.5.0.test.ts",
+    "name": "the v0.5.0 contract keeps MentionId identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.5.0.test.ts",
+    "name": "the v0.5.0 contract keeps MentionItem identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.5.0.test.ts",
+    "name": "the v0.5.0 contract keeps MentionStatus identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.5.0.test.ts",
+    "name": "the v0.5.0 contract keeps MentionSweepInput identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.5.0.test.ts",
+    "name": "the v0.5.0 contract keeps MentionSweepResult identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.5.0.test.ts",
+    "name": "the v0.5.0 contract keeps MentionWriteResult identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.5.0.test.ts",
+    "name": "the v0.5.0 contract keeps PreviewInput identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.5.0.test.ts",
+    "name": "the v0.5.0 contract keeps PublishInput identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.5.0.test.ts",
+    "name": "the v0.5.0 contract keeps Revision identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.5.0.test.ts",
+    "name": "the v0.5.0 contract keeps RevisionList identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.5.0.test.ts",
+    "name": "the v0.5.0 contract keeps RevisionSource identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.5.0.test.ts",
+    "name": "the v0.5.0 contract keeps SaveDraftInput identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.5.0.test.ts",
+    "name": "the v0.5.0 contract keeps ScheduleInput identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.5.0.test.ts",
+    "name": "the v0.5.0 contract keeps SiteInfo identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.5.0.test.ts",
+    "name": "the v0.5.0 contract keeps UnpublishInput identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.5.0.test.ts",
+    "name": "the v0.5.0 contract keeps Version identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.5.0.test.ts",
+    "name": "the v0.5.0 contract keeps WriteResult identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.5.0.test.ts",
+    "name": "the v0.5.0 contract extends Capabilities by optional properties only: contentTags, mediaLenses, mentionReset",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.5.0.test.ts",
+    "name": "the v0.5.0 contract extends Meta by optional properties only: none of its own",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.5.0.test.ts",
+    "name": "the v0.5.0 contract extends ContentSummary by optional properties only: tags, version",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.5.0.test.ts",
+    "name": "the v0.5.0 contract extends ContentDoc by optional properties only: tags",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.5.0.test.ts",
+    "name": "the v0.5.0 contract extends ListQuery by optional properties only: dir, sort",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.5.0.test.ts",
+    "name": "the v0.5.0 contract extends ContentList by optional properties only: sorted, total",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.5.0.test.ts",
+    "name": "the v0.5.0 contract extends MediaListQuery by optional properties only: dir, lens, sort",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.5.0.test.ts",
+    "name": "the v0.5.0 contract extends MediaList by optional properties only: sorted, total",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.5.0.test.ts",
+    "name": "the v0.5.0 contract extends MentionListQuery by optional properties only: q, targetId",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.5.0.test.ts",
+    "name": "the v0.5.0 contract extends MentionList by optional properties only: filtered",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.5.0.test.ts",
+    "name": "the v0.5.0 contract widens the mention decision by reset, and nothing else",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.5.0.test.ts",
+    "name": "the v0.5.0 contract adds only the new schemas v0.6.0 names",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.5.0.test.ts",
+    "name": "the v0.5.0 contract parses v0.5.0 bodies with the v0.6.0 schemas",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.5.0.test.ts",
+    "name": "the v0.5.0 contract changes the schema hash on purpose, and moves the package version to 0.6.0",
+    "kills": 6,
+    "unique": 0,
+    "kind": "covered",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.4.0.test.ts",
+    "name": "the v0.4.0 contract is the recorded v0.4.0, and the fixture holds every schema it names",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": true
+  },
+  {
+    "file": "test/contract-v0.4.0.test.ts",
+    "name": "the v0.4.0 contract keeps every v0.4.0 route exactly",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.4.0.test.ts",
+    "name": "the v0.4.0 contract adds only the four mentions routes of v0.5.0 and the content tags route of v0.6.0",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.4.0.test.ts",
+    "name": "the v0.4.0 contract keeps ChangeId identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.4.0.test.ts",
+    "name": "the v0.4.0 contract keeps ContentDeleteQuery identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.4.0.test.ts",
+    "name": "the v0.4.0 contract keeps ContentDeleteResult identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.4.0.test.ts",
+    "name": "the v0.4.0 contract keeps ContentId identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.4.0.test.ts",
+    "name": "the v0.4.0 contract keeps ContentStatus identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.4.0.test.ts",
+    "name": "the v0.4.0 contract keeps Diff identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.4.0.test.ts",
+    "name": "the v0.4.0 contract keeps DiffQuery identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.4.0.test.ts",
+    "name": "the v0.4.0 contract keeps ErrorBody identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.4.0.test.ts",
+    "name": "the v0.4.0 contract keeps ErrorCode identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.4.0.test.ts",
+    "name": "the v0.4.0 contract keeps MediaAltInput identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.4.0.test.ts",
+    "name": "the v0.4.0 contract keeps MediaBulkInput identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.4.0.test.ts",
+    "name": "the v0.4.0 contract keeps MediaBulkItem identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.4.0.test.ts",
+    "name": "the v0.4.0 contract keeps MediaBulkOutcome identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.4.0.test.ts",
+    "name": "the v0.4.0 contract keeps MediaBulkResult identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.4.0.test.ts",
+    "name": "the v0.4.0 contract keeps MediaDeleteQuery identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.4.0.test.ts",
+    "name": "the v0.4.0 contract keeps MediaDeleteResult identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.4.0.test.ts",
+    "name": "the v0.4.0 contract keeps MediaDetail identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.4.0.test.ts",
+    "name": "the v0.4.0 contract keeps MediaId identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.4.0.test.ts",
+    "name": "the v0.4.0 contract keeps MediaItem identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.4.0.test.ts",
+    "name": "the v0.4.0 contract keeps MediaTag identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.4.0.test.ts",
+    "name": "the v0.4.0 contract keeps MediaTags identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.4.0.test.ts",
+    "name": "the v0.4.0 contract keeps MediaTagsInput identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.4.0.test.ts",
+    "name": "the v0.4.0 contract keeps MediaTrashEmptyInput identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.4.0.test.ts",
+    "name": "the v0.4.0 contract keeps MediaTrashEmptyResult identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.4.0.test.ts",
+    "name": "the v0.4.0 contract keeps MediaTrashInput identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.4.0.test.ts",
+    "name": "the v0.4.0 contract keeps MediaUploadLimits identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.4.0.test.ts",
+    "name": "the v0.4.0 contract keeps MediaUploadQuery identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.4.0.test.ts",
+    "name": "the v0.4.0 contract keeps MediaUse identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.4.0.test.ts",
+    "name": "the v0.4.0 contract keeps MediaWriteResult identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.4.0.test.ts",
+    "name": "the v0.4.0 contract keeps PreviewInput identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.4.0.test.ts",
+    "name": "the v0.4.0 contract keeps PublishInput identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.4.0.test.ts",
+    "name": "the v0.4.0 contract keeps Revision identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.4.0.test.ts",
+    "name": "the v0.4.0 contract keeps RevisionList identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.4.0.test.ts",
+    "name": "the v0.4.0 contract keeps RevisionSource identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.4.0.test.ts",
+    "name": "the v0.4.0 contract keeps SaveDraftInput identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.4.0.test.ts",
+    "name": "the v0.4.0 contract keeps ScheduleInput identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.4.0.test.ts",
+    "name": "the v0.4.0 contract keeps SiteInfo identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.4.0.test.ts",
+    "name": "the v0.4.0 contract keeps UnpublishInput identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.4.0.test.ts",
+    "name": "the v0.4.0 contract keeps Version identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.4.0.test.ts",
+    "name": "the v0.4.0 contract keeps WriteResult identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.4.0.test.ts",
+    "name": "the v0.4.0 contract extends Meta by optional properties only",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.4.0.test.ts",
+    "name": "the v0.4.0 contract extends Capabilities by optional properties only",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.4.0.test.ts",
+    "name": "the v0.4.0 contract extends ContentSummary by optional properties only",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.4.0.test.ts",
+    "name": "the v0.4.0 contract extends ContentDoc by optional properties only",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.4.0.test.ts",
+    "name": "the v0.4.0 contract extends ListQuery by optional properties only",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.4.0.test.ts",
+    "name": "the v0.4.0 contract extends ContentList by optional properties only",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.4.0.test.ts",
+    "name": "the v0.4.0 contract extends MediaListQuery by optional properties only",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.4.0.test.ts",
+    "name": "the v0.4.0 contract extends MediaList by optional properties only",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.4.0.test.ts",
+    "name": "the v0.4.0 contract names v0.5.0's addition to Capabilities",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.4.0.test.ts",
+    "name": "the v0.4.0 contract parses a v0.4.0 meta with the v0.5.0 schema",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.4.0.test.ts",
+    "name": "the v0.4.0 contract changes the schema hash on purpose, and moves the package version on (0.6.0 now)",
+    "kills": 6,
+    "unique": 0,
+    "kind": "covered",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.1.0.test.ts",
+    "name": "the v0.1.0 contract is the recorded v0.1.0 (the fixture's own hash is the one Carrel's design names)",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": true
+  },
+  {
+    "file": "test/contract-v0.1.0.test.ts",
+    "name": "the v0.1.0 contract keeps every v0.1.0 route exactly, and replaces only the media placeholder",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.1.0.test.ts",
+    "name": "the v0.1.0 contract keeps SiteInfo identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.1.0.test.ts",
+    "name": "the v0.1.0 contract keeps SaveDraftInput identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.1.0.test.ts",
+    "name": "the v0.1.0 contract keeps PublishInput identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.1.0.test.ts",
+    "name": "the v0.1.0 contract keeps ScheduleInput identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.1.0.test.ts",
+    "name": "the v0.1.0 contract keeps UnpublishInput identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.1.0.test.ts",
+    "name": "the v0.1.0 contract keeps WriteResult identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.1.0.test.ts",
+    "name": "the v0.1.0 contract keeps Revision identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.1.0.test.ts",
+    "name": "the v0.1.0 contract keeps RevisionList identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.1.0.test.ts",
+    "name": "the v0.1.0 contract keeps DiffQuery identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.1.0.test.ts",
+    "name": "the v0.1.0 contract keeps Diff identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.1.0.test.ts",
+    "name": "the v0.1.0 contract keeps PreviewInput identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.1.0.test.ts",
+    "name": "the v0.1.0 contract keeps ErrorCode identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.1.0.test.ts",
+    "name": "the v0.1.0 contract keeps ContentId identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.1.0.test.ts",
+    "name": "the v0.1.0 contract keeps ChangeId identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.1.0.test.ts",
+    "name": "the v0.1.0 contract keeps Version identical",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.1.0.test.ts",
+    "name": "the v0.1.0 contract extends Meta by optional properties only",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.1.0.test.ts",
+    "name": "the v0.1.0 contract extends Capabilities by optional properties only",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.1.0.test.ts",
+    "name": "the v0.1.0 contract extends ErrorBody by optional properties only",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.1.0.test.ts",
+    "name": "the v0.1.0 contract extends ContentSummary by optional properties only",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.1.0.test.ts",
+    "name": "the v0.1.0 contract extends ContentDoc by optional properties only",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.1.0.test.ts",
+    "name": "the v0.1.0 contract extends ListQuery by optional properties only",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.1.0.test.ts",
+    "name": "the v0.1.0 contract extends ContentList by optional properties only",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.1.0.test.ts",
+    "name": "the v0.1.0 contract names what v0.2.0 added to the extended schemas",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.1.0.test.ts",
+    "name": "the v0.1.0 contract parses a v0.1.0 body with the v0.2.0 schemas, and a v0.2.0 meta with the v0.1.0 shape",
+    "kills": 0,
+    "unique": 0,
+    "kind": "zero-kill",
+    "protected": false
+  },
+  {
+    "file": "test/contract-v0.1.0.test.ts",
+    "name": "the v0.1.0 contract bumps the schema hash and the package version",
+    "kills": 6,
+    "unique": 0,
+    "kind": "covered",
+    "protected": false
+  },
+  {
+    "file": "test/keys-match.test.ts",
+    "name": "keysMatch hands two 32-byte digests to the runtime's timingSafeEqual and trusts its answer",
+    "kills": 5,
+    "unique": 1,
+    "kind": "",
+    "protected": true
+  },
+  {
+    "file": "test/keys-match.test.ts",
+    "name": "keysMatch without the runtime method, still tells equal, different and different-length keys apart",
+    "kills": 11,
+    "unique": 0,
+    "kind": "covered",
+    "protected": true
+  }
+]
