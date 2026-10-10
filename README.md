@@ -226,6 +226,21 @@ The package computes diffs, and serves the source at a revision, from `revisionS
 
   Every write it sends must be refused, so it never changes a conforming site. `probeMediaUpload: true` adds one real round trip: it uploads a 1x1 PNG of its own, reads it back, and deletes that file and no other. It is off by default.
 
+## A site's own admin, and the content kit
+
+The shared posts, media and mentions screens (Capsomer's `PostsList`, `MediaLibrary` and `MentionsList`) run in Carrel and in each site's own admin. Their server half lives here, so it changes in step with the contract.
+
+- **`localClient(adapter)`** (from `@dustinedwards/site-api/client`) answers every method `createSiteClient` does, with the same types and the same `SiteApiError`. It hands each request straight to `createSiteApi`'s handler in process: no network and no configured key. Every route rule, version check, upload check and zod parse is the one Carrel's requests meet. A site's admin passes the same `SiteAdapter` it already mounts; its own sign-in guards the door, so no rate limit applies.
+- **`@dustinedwards/site-api/admin`** is the content kit, server only (it holds the client, so the key never reaches a browser):
+  - `loadPosts`, `loadMedia` and `loadMentions` turn one site's client into the plain view data a component renders, one page of 50. `readPostQuery`, `readMediaQuery` and `readMentionsQuery` read that query from the address.
+  - `runPostsIntent`, `runMediaIntent` and `runMentionsIntent` run one posted intent (a form's `intent`, `ids` and, where the page knew them, `versions` in the same order), each item its own write with the version the person saw and a fresh change id. One item failing never stops the rest. Each returns an `IntentResult`: `ok`, one sentence, an outcome per item, the item that hit a version conflict, and `undo`, the inverse intent with the versions its writes made.
+  - `summary(source)` counts what waits on one site (mentions waiting, posts the host has something waiting on), for an inbox line.
+- **The host supplies a `ContentSource`:** the site, its client (`createSiteClient` in Carrel, `localClient` in the site), what this person `can` do (`edit`, `publish`, `deleteContent`, `deleteMedia`, `decideMentions`), `editorHref`, and optional `postIndex`, `notes`, `waiting`, `hold`, `taken` and `record` hooks. The kit refuses an intent the person may not run whatever the form says, before the site is asked anything; a post that is not a draft needs `publish` for any write.
+- **Undo.** Tag add and remove undo on the items that changed, and only those. Unpublish undoes by publishing again, and only a post that has been public before (`publishedAt` set): never a first publication, which is made from the editor. A post that was only scheduled has no Undo. Duplicate undoes by deleting the copy at the version the duplicate made, only where the site offers `contentDelete` and the person may delete; otherwise the message says how to remove the copy. Media trash and restore undo each other, a tag set puts back the set it held. Approve and reject undo each other between approved and rejected; a decision on a waiting mention has no Undo (v0.5.0 has no way back to pending). An Undo is a new write with its own change id and the version the action made, so if someone changed the item since, it is refused as a conflict and never retried.
+- **Until the contract carries them** the kit keeps Carrel's ways: post tags are rewritten in the frontmatter (a post without frontmatter is refused), and the kind filter and sort work on the page the site sent (`page.sortedOnPage`). A media delete on a site with a trash is only from the trash.
+
+Tested once, where it lives: `test/admin.test.ts`, against `memoryAdapter()` through `localClient`, and once through `createSiteClient` as Carrel drives it.
+
 ## Development
 
 ```sh
@@ -237,6 +252,7 @@ npm test
 Tests run locally, with no Actions minutes. The planted tests send a request each guard must refuse, and each also checks that the adapter never ran:
 
 - `test/planted.test.ts`: the key off its prefix, a wrong key, a stale `expectedVersion`, an unknown route.
+- `test/admin.test.ts`: the content kit refusing what the person may not run, a live post for someone who may not publish, a stale Undo, a first publication by Undo, an id that could not be a post, a host's hold, a media delete outside the trash, and an upload over the site's limits, each before the site is asked.
 - `test/media.test.ts`: a file a post uses (refused with the post named), an oversized or undeclared upload, bytes that are not their type, an id that climbs out.
 - `test/media-writes.test.ts`: alt, tags, trash, restore, empty trash and bulk, with stale versions, files in use, the 100-file limits and a site without the writes.
 - `test/mentions.test.ts`: a stale version, a missing mention, a site with no mentions, the site's own refusal, a missing key or a bad body for every mentions write, and the sweep route not read as a mention id.
