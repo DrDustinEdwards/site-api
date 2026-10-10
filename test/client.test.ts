@@ -25,15 +25,18 @@ describe("client round trip", () => {
       publications: false,
       mediaUpload: MEMORY_MEDIA_LIMITS,
       contentDelete: true,
+      contentTags: true,
       mediaAlt: true,
+      mediaLenses: ["unattached", "no-alt", "large"],
       mediaTags: true,
       mediaTrash: true,
       mentions: true,
+      mentionReset: true,
     });
   });
 
   it("reads a site with no media manager and no content delete as the v0.1.0 capabilities, with no limits", async () => {
-    const { client: c } = client(memoryAdapter({ media: false, contentDelete: false, mentions: false }));
+    const { client: c } = client(memoryAdapter({ media: false, contentDelete: false, contentTags: false, mentions: false }));
     expect((await c.meta()).capabilities).toEqual({
       content: true,
       preview: true,
@@ -104,7 +107,7 @@ describe("client round trip", () => {
     const first = await c.list({ limit: 2 });
     expect(first.items.map((i) => i.id)).toEqual(["a", "b"]);
     const second = await c.list({ limit: 2, cursor: first.nextCursor! });
-    expect(second).toEqual({ items: [expect.objectContaining({ id: "c" })], nextCursor: null });
+    expect(second).toEqual({ items: [expect.objectContaining({ id: "c" })], nextCursor: null, total: 3 });
   });
 
   it("raises the site's refusal with its error body", async () => {

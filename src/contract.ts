@@ -5,7 +5,7 @@
 
 import { z } from "zod";
 
-export const PACKAGE_VERSION = "0.5.0";
+export const PACKAGE_VERSION = "0.6.0";
 export const PREFIX = "/api/carrel/v1";
 
 /** Opaque to Carrel: each site decides what a version is. It should identify the item's own content (dustinedwards.info uses the git blob sha of the item's own file). */
@@ -23,6 +23,16 @@ const Timestamp = z.iso.datetime({ offset: true });
 const Source = z.string().max(2_000_000);
 
 export const ContentStatus = z.enum(["draft", "scheduled", "published"]);
+
+/** A post tag (v0.6.0): one short piece of text, trimmed, with nothing that would break a frontmatter list. */
+export const ContentTag = z.string().min(1).max(40).regex(/^[^\s,[\]"'#:\\](?:[^\r\n,[\]"'#:\\]*[^\s,[\]"'#:\\])?$/);
+
+/** A post's whole tag set (v0.6.0). */
+export const ContentTags = z.array(ContentTag).max(50);
+
+/** What a list can be sorted by (v0.6.0). updated and published run newest first unless `dir` says otherwise; title runs A to Z. */
+export const CONTENT_SORTS = ["updated", "published", "title"] as const;
+export const SortDir = z.enum(["asc", "desc"]);
 
 export const SiteInfo = z.object({
   id: z.string().regex(/^[a-z0-9-]{1,64}$/),
@@ -42,6 +52,14 @@ export const MediaUploadLimits = z.object({
   types: z.array(z.string().regex(/^[a-z]+\/[a-z0-9.+-]+$/)).min(1).max(50),
 });
 
+/**
+ * The ready-made views of a library (v0.6.0), each optional per site: files nothing uses (by the
+ * site's own reference check), files with no alt text, and files larger than LARGE_MEDIA_BYTES.
+ */
+export const MEDIA_LENSES = ["unattached", "no-alt", "large"] as const;
+export const MediaLens = z.enum(MEDIA_LENSES);
+export const LARGE_MEDIA_BYTES = 1024 * 1024;
+
 export const Capabilities = z.object({
   content: z.boolean(),
   preview: z.boolean(),
@@ -59,8 +77,14 @@ export const Capabilities = z.object({
   mediaTags: z.boolean().optional(),
   /** True when the site has a media trash: soft delete and restore (v0.4.0). Absent or false: those routes answer 501. */
   mediaTrash: z.boolean().optional(),
+  /** True when the site keeps tags on posts and writes them through `PUT /content/:id/tags` (v0.6.0). Absent or false: that route answers 501. */
+  contentTags: z.boolean().optional(),
+  /** The media lenses the site answers (v0.6.0); with any of them it also sorts the media list. Absent: a lens answers 501. */
+  mediaLenses: z.array(MediaLens).optional(),
   /** True when the site receives webmentions and lets Carrel moderate them (v0.5.0). Absent or false: every mentions route answers 501. */
   mentions: z.boolean().optional(),
+  /** True when a decision can be taken back to pending (v0.6.0), the `reset` decision. Absent or false: a reset answers 501. */
+  mentionReset: z.boolean().optional(),
 });
 
 export const Meta = z.object({
@@ -81,6 +105,10 @@ export const ContentSummary = z.object({
   publishAt: Timestamp.nullable(),
   publishedAt: Timestamp.nullable(),
   updatedAt: Timestamp.nullable(),
+  /** The item's version (v0.6.0), so a row's action needs no read first. Optional: a v0.5.0 site leaves it out. */
+  version: Version.optional(),
+  /** The item's tags (v0.6.0), on a site that keeps them. */
+  tags: ContentTags.optional(),
 });
 
 export const ContentDoc = ContentSummary.extend({
@@ -92,6 +120,9 @@ export const ContentDoc = ContentSummary.extend({
 export const ListQuery = z.object({
   status: ContentStatus.optional(),
   q: z.string().max(200).optional(),
+  /** v0.6.0. A site that sorts says so in the answer's `sorted`; one that does not leaves its own order. */
+  sort: z.enum(CONTENT_SORTS).optional(),
+  dir: SortDir.optional(),
   cursor: z.string().max(500).optional(),
   limit: z.coerce.number().int().min(1).max(200).default(50),
 });
@@ -99,6 +130,17 @@ export const ListQuery = z.object({
 export const ContentList = z.object({
   items: z.array(ContentSummary),
   nextCursor: z.string().nullable(),
+  /** How many items match the query across every page (v0.6.0), where the site can count them. */
+  total: z.number().int().min(0).optional(),
+  /** The order the site applied (v0.6.0). Absent: the site did not sort as asked, so a caller sorts the page itself. */
+  sorted: z.object({ sort: z.enum(CONTENT_SORTS), dir: SortDir }).optional(),
+});
+
+/** A post's whole tag set after the write (v0.6.0, optional per site). */
+export const ContentTagsInput = z.object({
+  tags: ContentTags,
+  expectedVersion: Version,
+  changeId: ChangeId,
 });
 
 /** expectedVersion null means "this id must not exist yet": the create case. */
@@ -240,8 +282,16 @@ export const MediaDetail = MediaItem.extend({
   usedBy: z.array(MediaUse),
 });
 
+/** What a media list can be sorted by (v0.6.0). added runs newest first, size largest first and name A to Z, unless `dir` says otherwise. */
+export const MEDIA_SORTS = ["added", "name", "size"] as const;
+
 export const MediaListQuery = z.object({
   q: z.string().max(200).optional(),
+  /** v0.6.0, on a site that lists the lens in capabilities.mediaLenses; any other site answers 501. */
+  lens: MediaLens.optional(),
+  /** v0.6.0. A site that sorts says so in the answer's `sorted`. */
+  sort: z.enum(MEDIA_SORTS).optional(),
+  dir: SortDir.optional(),
   /** Only files carrying this tag (v0.4.0). A site without tags ignores it. */
   tag: MediaTag.optional(),
   /** "only" lists the trash (v0.4.0). Without it the trash is left out. A site without a trash ignores it. */
@@ -253,6 +303,10 @@ export const MediaListQuery = z.object({
 export const MediaList = z.object({
   items: z.array(MediaItem),
   nextCursor: z.string().nullable(),
+  /** How many files match across every page (v0.6.0), where the site can count them. */
+  total: z.number().int().min(0).optional(),
+  /** The order the site applied (v0.6.0). Absent: the site did not sort as asked. */
+  sorted: z.object({ sort: z.enum(MEDIA_SORTS), dir: SortDir }).optional(),
 });
 
 /**
@@ -402,6 +456,10 @@ export const MentionItem = z.object({
 
 export const MentionListQuery = z.object({
   status: MentionStatus.optional(),
+  /** v0.6.0: words in the source address, the author or the excerpt. */
+  q: z.string().max(200).optional(),
+  /** v0.6.0: only the mentions of this content id, such as a post slug. */
+  targetId: z.string().min(1).max(300).optional(),
   cursor: z.string().max(500).optional(),
   limit: z.coerce.number().int().min(1).max(200).default(50),
 });
@@ -422,9 +480,12 @@ export const MentionList = z.object({
   counts: MentionCounts,
   /** What a sweep would remove now, by status (the site's retention windows). */
   expiring: z.object({ failed: z.number().int().min(0), rejected: z.number().int().min(0) }),
+  /** The filters of v0.6.0 the site applied, echoed. Absent: the site did not filter by q or targetId. */
+  filtered: z.object({ q: z.string().max(200).optional(), targetId: z.string().max(300).optional() }).optional(),
 });
 
-export const MENTION_DECISIONS = ["approve", "reject"] as const;
+/** `reset` (v0.6.0, optional per site) takes an approved or rejected mention back to pending, so a decision can be undone. */
+export const MENTION_DECISIONS = ["approve", "reject", "reset"] as const;
 
 export const MentionDecideInput = z.object({
   decision: z.enum(MENTION_DECISIONS),
@@ -496,6 +557,9 @@ export type ContentSummary = z.infer<typeof ContentSummary>;
 export type ContentDoc = z.infer<typeof ContentDoc>;
 export type ListQuery = z.infer<typeof ListQuery>;
 export type ContentList = z.infer<typeof ContentList>;
+export type ContentTagsInput = z.infer<typeof ContentTagsInput>;
+export type ContentSort = (typeof CONTENT_SORTS)[number];
+export type SortDir = z.infer<typeof SortDir>;
 export type SaveDraftInput = z.infer<typeof SaveDraftInput>;
 export type PublishInput = z.infer<typeof PublishInput>;
 export type ScheduleInput = z.infer<typeof ScheduleInput>;
@@ -514,6 +578,8 @@ export type MediaUse = z.infer<typeof MediaUse>;
 export type MediaItem = z.infer<typeof MediaItem>;
 export type MediaDetail = z.infer<typeof MediaDetail>;
 export type MediaListQuery = z.infer<typeof MediaListQuery>;
+export type MediaLens = z.infer<typeof MediaLens>;
+export type MediaSort = (typeof MEDIA_SORTS)[number];
 export type MediaList = z.infer<typeof MediaList>;
 export type MediaUploadQuery = z.infer<typeof MediaUploadQuery>;
 export type MediaDeleteResult = z.infer<typeof MediaDeleteResult>;
@@ -563,6 +629,7 @@ export const ROUTES = [
   { group: "content", method: "GET", path: "/content/:id/diff", query: "DiffQuery", response: "Diff" },
   { group: "content", method: "GET", path: "/content/:id/revisions/:version", response: "RevisionSource" },
   { group: "content", method: "DELETE", path: "/content/:id", query: "ContentDeleteQuery", response: "ContentDeleteResult" },
+  { group: "content", method: "PUT", path: "/content/:id/tags", request: "ContentTagsInput", response: "WriteResult" },
   { group: "preview", method: "POST", path: "/preview", request: "PreviewInput", response: "text/html" },
   { group: "media", method: "GET", path: "/media", query: "MediaListQuery", response: "MediaList" },
   { group: "media", method: "POST", path: "/media", query: "MediaUploadQuery", request: "the file's bytes", response: "MediaItem" },
@@ -592,6 +659,7 @@ const HASHED = {
   MediaTrashEmptyInput, MediaTrashEmptyResult,
   MentionItem, MentionListQuery, MentionList, MentionDecideInput, MentionWriteResult, MentionDeleteQuery,
   MentionDeleteResult, MentionSweepInput, MentionSweepResult,
+  ContentTagsInput,
 };
 
 /** JSON with sorted keys, so the hash depends on the contract and not on property order. */

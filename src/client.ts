@@ -25,6 +25,7 @@ import {
   RevisionList,
   RevisionSource,
   WriteResult,
+  type ContentTagsInput,
   type ListQuery,
   type MediaAltInput,
   type MediaBulkInput,
@@ -111,6 +112,8 @@ export function createSiteClient(config: SiteClientConfig) {
     /** Optional per site (v0.3.0): a site with no delete answers SiteApiError with status 501. */
     delete: (id: string, input: { expectedVersion: string; changeId: string }) =>
       get(ContentDeleteResult, "DELETE", `/content/${enc(id)}${query(input)}`),
+    /** Optional per site (v0.6.0): sets a post's whole tag set. A site without it answers SiteApiError with status 501. */
+    setTags: (id: string, input: ContentTagsInput) => get(WriteResult, "PUT", `/content/${enc(id)}/tags`, input),
     diff: (id: string, from: string, to?: string) => get(Diff, "GET", `/content/${enc(id)}/diff${query({ from, to })}`),
     preview: async (input: PreviewInput) => (await call("POST", "/preview", input)).text(),
     /** The media group (v0.2.0). A refused delete throws SiteApiError whose body carries `usedBy`. */
@@ -126,7 +129,9 @@ export function createSiteClient(config: SiteClientConfig) {
             })
           ).json(),
         ),
-      delete: (id: string, changeId: string) => get(MediaDeleteResult, "DELETE", `/media/${enc(id)}${query({ changeId })}`),
+      /** Takes `{ changeId }` (v0.6.0), like every other write; the change id alone still works. */
+      delete: (id: string, input: { changeId: string } | string) =>
+        get(MediaDeleteResult, "DELETE", `/media/${enc(id)}${query({ changeId: typeof input === "string" ? input : input.changeId })}`),
       /**
        * The writes of v0.4.0, each optional per site: a site without it answers SiteApiError with
        * status 501 (see meta().capabilities). A stale version is status 409 with the current version.
@@ -146,7 +151,9 @@ export function createSiteClient(config: SiteClientConfig) {
       decide: (id: string, input: MentionDecideInput) => get(MentionWriteResult, "POST", `/mentions/${enc(id)}/decide`, input),
       delete: (id: string, input: { expectedVersion: string; changeId: string }) =>
         get(MentionDeleteResult, "DELETE", `/mentions/${enc(id)}${query(input)}`),
-      sweep: (changeId: string) => get(MentionSweepResult, "POST", "/mentions/sweep", { changeId }),
+      /** Takes `{ changeId }` (v0.6.0), like every other write; the change id alone still works. */
+      sweep: (input: { changeId: string } | string) =>
+        get(MentionSweepResult, "POST", "/mentions/sweep", { changeId: typeof input === "string" ? input : input.changeId }),
     },
   };
 }

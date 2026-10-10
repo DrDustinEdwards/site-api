@@ -7,10 +7,8 @@
 
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { z } from "zod";
 import * as contract from "../src/contract.js";
-
-type JsonSchema = { properties?: Record<string, unknown>; required?: string[]; [k: string]: unknown };
+import { additiveOnly, now, type JsonSchema } from "./additive.js";
 
 const V010 = JSON.parse(readFileSync(new URL("./fixtures/contract-v0.1.0.json", import.meta.url), "utf8")) as {
   version: string;
@@ -19,10 +17,9 @@ const V010 = JSON.parse(readFileSync(new URL("./fixtures/contract-v0.1.0.json", 
   schemas: Record<string, JsonSchema>;
 };
 
-/** The schemas v0.2.0 extends, by optional properties only. Every other one must be identical. */
-const EXTENDED = new Set(["Meta", "Capabilities", "ErrorBody"]);
+/** The schemas later versions extend, by optional properties only: v0.2.0 the first three, v0.6.0 the content list. Every other one must be identical. */
+const EXTENDED = new Set(["Meta", "Capabilities", "ErrorBody", "ContentSummary", "ContentDoc", "ListQuery", "ContentList"]);
 
-const now = (name: string) => z.toJSONSchema((contract as unknown as Record<string, z.ZodType>)[name]!, { io: "input" }) as JsonSchema;
 
 describe("the v0.1.0 contract", () => {
   it("is the recorded v0.1.0 (the fixture's own hash is the one Carrel's design names)", () => {
@@ -58,23 +55,6 @@ describe("the v0.1.0 contract", () => {
     });
   }
 
-  /**
-   * v0.2.0 may only add optional properties: every v0.1.0 property stays, required exactly as before,
-   * and each object nested in it follows the same rule (Meta.capabilities is Capabilities).
-   */
-  function additiveOnly(before: JsonSchema, after: JsonSchema, where: string) {
-    for (const [prop, schema] of Object.entries(before.properties ?? {})) {
-      const next = after.properties?.[prop] as JsonSchema | undefined;
-      expect(next, `${where}.${prop} is gone`).toBeDefined();
-      if ((schema as JsonSchema).type === "object") additiveOnly(schema as JsonSchema, next!, `${where}.${prop}`);
-      else expect(next, `${where}.${prop}`).toEqual(schema);
-    }
-    expect(after.required ?? [], `${where} required`).toEqual(before.required ?? []);
-    const { properties: _a, required: _b, ...restBefore } = before;
-    const { properties: _c, required: _d, ...restAfter } = after;
-    expect(restAfter, `${where} other keywords`).toEqual(restBefore);
-  }
-
   for (const name of EXTENDED) {
     it(`extends ${name} by optional properties only`, () => {
       additiveOnly(V010.schemas[name]!, now(name), name);
@@ -100,6 +80,6 @@ describe("the v0.1.0 contract", () => {
 
   it("bumps the schema hash and the package version", async () => {
     expect(await contract.schemaHash()).not.toBe(V010.schemaHash);
-    expect(contract.PACKAGE_VERSION).toBe("0.5.0");
+    expect(contract.PACKAGE_VERSION).toBe("0.6.0");
   });
 });

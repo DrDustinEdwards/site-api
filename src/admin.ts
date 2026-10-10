@@ -16,7 +16,10 @@
 import { SiteApiError, type SiteClient } from "./client.js";
 import {
   ContentId,
+  ContentTag,
+  MEDIA_SORTS,
   MediaId,
+  MediaLens,
   MediaTag,
   MentionId,
   MentionStatus,
@@ -24,10 +27,13 @@ import {
   type Capabilities,
   type ContentDoc,
   type ContentList,
+  type ListQuery,
   type ContentStatus,
   type ContentSummary,
+  type SortDir,
   type MediaDetail,
   type MediaItem,
+  type MediaSort,
   type MediaUploadLimits,
   type MediaUse,
   type MentionCounts,
@@ -65,7 +71,7 @@ export interface ContentSource {
   /** Where a row's title links: Carrel's editor, or the site's own. */
   editorHref(id: string): string;
   /** Optional: a faster list than the site's own, such as Carrel's search index. Same answer as client.list. */
-  postIndex?: { list(query: { q?: string; status?: ContentStatus; cursor?: string; limit: number }): Promise<ContentList> };
+  postIndex?: { list(query: Partial<ListQuery> & { limit: number }): Promise<ContentList> };
   /** Optional: notes per post id, for the rows on this page. */
   notes?(ids: string[]): Promise<Record<string, RowNote[]>>;
   /** Optional: how many posts the host has something waiting on (Carrel's AI drafts), for summary(). */
@@ -266,6 +272,7 @@ export interface PostQuery {
   kind?: string;
   tag?: string;
   sort?: PostSort;
+  dir?: SortDir;
   cursor?: string;
 }
 
@@ -309,8 +316,10 @@ export function readPostQuery(search: URLSearchParams): PostQuery {
   const kind = search.get("kind")?.trim().slice(0, 64);
   const tag = search.get("tag")?.trim().slice(0, 40);
   const sort = search.get("sort");
+  const dir = search.get("dir");
   const cursor = search.get("cursor")?.slice(0, 500);
   return {
+    ...(dir === "asc" || dir === "desc" ? { dir } : {}),
     ...(q ? { q } : {}),
     ...(status && (["draft", "scheduled", "published"] as const).includes(status as ContentStatus) ? { status: status as ContentStatus } : {}),
     ...(kind ? { kind } : {}),
@@ -346,15 +355,28 @@ const BY: Record<PostSort, (a: PostRow, b: PostRow) => number> = {
 /** One page of one site's posts, as PostsList renders it. */
 export async function loadPosts(source: ContentSource, query: PostQuery = {}): Promise<PostsData> {
   const meta = await source.client.meta();
-  const ask = { limit: PER_PAGE, ...(query.q ? { q: query.q } : {}), ...(query.status ? { status: query.status } : {}), ...(query.cursor ? { cursor: query.cursor } : {}) };
-  const list = source.postIndex ? await source.postIndex.list(ask) : await source.client.list(ask);
+  const lister = source.postIndex ?? source.client;
+  const base = { ...(query.q ? { q: query.q } : {}), ...(query.sort ? { sort: query.sort, ...(query.dir ? { dir: query.dir } : {}) } : {}) };
+  const list = await lister.list({ limit: PER_PAGE, ...base, ...(query.status ? { status: query.status } : {}), ...(query.cursor ? { cursor: query.cursor } : {}) });
   let rows = list.items.map((item) => postRow(source, item));
   const kinds = [...new Set(rows.map((r) => r.kind))].sort();
-  // The contract has no kind or tag filter and no sort yet, so these work on the page the site sent.
+  // The contract has no kind or tag filter, so these work on the page the site sent.
   if (query.kind) rows = rows.filter((r) => r.kind === query.kind);
-  if (query.tag) rows = rows.filter((r) => (r.tags ?? []).includes(query.tag!));
-  const sortedOnPage = query.sort !== undefined;
-  if (query.sort) rows = [...rows].sort(BY[query.sort]);
+  if (query.tag) rows = rows.filter((r) => (r.tags ?? []).some((t) => sameTag(t, query.tag!)));
+  // A site that sorted says so (v0.6.0); otherwise the kit sorts the page it has and says that.
+  const sortedOnPage = query.sort !== undefined && list.sorted === undefined;
+  if (sortedOnPage) {
+    const dir = query.dir ?? (query.sort === "title" ? "asc" : "desc");
+    rows = [...rows].sort((a, b) => (dir === (query.sort === "title" ? "asc" : "desc") ? 1 : -1) * BY[query.sort!](a, b));
+  }
+  // Where the site counts (v0.6.0), each status tab gets its count for the same search.
+  let counts: PostsData["counts"];
+  if (list.total !== undefined) {
+    const statuses = ["draft", "scheduled", "published"] as const;
+    const totals = await Promise.all(statuses.map((status) => lister.list({ limit: 1, ...(query.q ? { q: query.q } : {}), status })));
+    counts = { all: query.status ? totals.reduce((n, t) => n + (t.total ?? 0), 0) : list.total };
+    statuses.forEach((status, i) => (counts![status] = totals[i]!.total ?? 0));
+  }
   if (source.notes && rows.length > 0) {
     const notes = await source.notes(rows.map((r) => r.id));
     rows = rows.map((r) => (notes[r.id]?.length ? { ...r, notes: notes[r.id] } : r));
@@ -363,7 +385,8 @@ export async function loadPosts(source: ContentSource, query: PostQuery = {}): P
     site: { id: source.site.id, name: source.site.name },
     query,
     rows,
-    page: { nextCursor: list.nextCursor, ...(sortedOnPage ? { sortedOnPage } : {}) },
+    page: { nextCursor: list.nextCursor, ...(list.total !== undefined ? { total: list.total } : {}), ...(sortedOnPage ? { sortedOnPage } : {}) },
+    ...(counts ? { counts } : {}),
     kinds,
     offers: { delete: meta.capabilities.contentDelete === true, schedule: true, tags: true, duplicate: true },
     can: source.can,
@@ -376,9 +399,7 @@ export type PostIntent = (typeof POST_INTENTS)[number];
 /** A tag as a post's frontmatter list can hold it: one short piece of text with nothing that would break the list. */
 export function cleanPostTag(raw: string): string | null {
   const tag = raw.trim();
-  if (tag.length === 0 || tag.length > 40) return null;
-  if (/[,\[\]"'#:\r\n\\]/.test(tag)) return null;
-  return tag;
+  return ContentTag.safeParse(tag).success ? tag : null;
 }
 
 const sameTag = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
@@ -407,7 +428,7 @@ export async function runPostsIntent(source: ContentSource, input: IntentInput):
     if (tag === null) return refused("A tag is one short piece of text, with no commas, brackets, quotes or colons.");
   }
   let capabilities: Capabilities | null = null;
-  if (intent === "delete" || intent === "duplicate") capabilities = (await source.client.meta()).capabilities;
+  if (intent !== "unpublish" && intent !== "republish") capabilities = (await source.client.meta()).capabilities;
   if (intent === "delete" && capabilities?.contentDelete !== true) return refused("This site does not delete posts through the site API.");
 
   const client = source.client;
@@ -429,15 +450,19 @@ export async function runPostsIntent(source: ContentSource, input: IntentInput):
       case "tag-remove": {
         const doc = await read(id, version);
         if (doc.status !== "draft" && !source.can.publish) return { id, ok: false, message: LIVE_POST };
+        // A site that keeps tags (v0.6.0) writes them through its own route; otherwise the frontmatter is rewritten, as Carrel did.
+        const viaRoute = capabilities?.contentTags === true;
         const parts = splitSource(doc.source);
-        if (parts.front === null) return { id, ok: false, message: "This post has no frontmatter, so it has no tags to change." };
-        const tags = tagsOf(parts.front);
+        if (!viaRoute && parts.front === null) return { id, ok: false, message: "This post has no frontmatter, so it has no tags to change." };
+        const tags = viaRoute ? (doc.tags ?? []) : tagsOf(parts.front);
         const has = tags.some((t) => sameTag(t, tag!));
         if (intent === "tag-add" && has) return { id, ok: true, message: `Already tagged "${tag}". Not changed.` };
         if (intent === "tag-remove" && !has) return { id, ok: true, message: `Did not have the tag "${tag}". Not changed.` };
         const next = intent === "tag-add" ? [...tags, tag!] : tags.filter((t) => !sameTag(t, tag!));
         const change = changeId();
-        const written = await client.saveDraft(id, { source: joinSource({ ...parts, front: setTags(parts.front, next) }), expectedVersion: doc.version, changeId: change });
+        const written = viaRoute
+          ? await client.setTags(id, { tags: next, expectedVersion: doc.version, changeId: change })
+          : await client.saveDraft(id, { source: joinSource({ ...parts, front: setTags(parts.front!, next) }), expectedVersion: doc.version, changeId: change });
         undoIds.push(id);
         undoVersions.push(written.version);
         const note = await recordDone(source, `post-${intent}`, id, change);
@@ -576,6 +601,10 @@ export interface MediaQuery {
   q?: string;
   tag?: string;
   view?: "library" | "trash";
+  /** v0.6.0, where the site names the lens; dropped, never sent, where it does not. */
+  lens?: MediaLens;
+  sort?: MediaSort;
+  dir?: SortDir;
   cursor?: string;
   /** The file open in the inspector. */
   inspect?: string;
@@ -588,7 +617,12 @@ export interface MediaData {
   site: { id: string; name: string };
   query: MediaQuery;
   rows: MediaRow[];
-  page: { nextCursor: string | null };
+  page: {
+    nextCursor: string | null;
+    total?: number;
+    /** True when the rows were sorted on this page only, because the site's list does not sort. */
+    sortedOnPage?: boolean;
+  };
   /** The file in the inspector with every place it is used; null when the site has no such file. */
   detail?: (MediaDetail & { src: string }) | null;
   offers: {
@@ -599,6 +633,8 @@ export interface MediaData {
     tags: boolean;
     trash: boolean;
     delete: boolean;
+    /** The lenses the site answers (v0.6.0); empty where it answers none. */
+    lenses: MediaLens[];
   };
   can: Permissions;
 }
@@ -608,8 +644,14 @@ export function readMediaQuery(search: URLSearchParams): MediaQuery {
   const tag = search.get("tag")?.trim().toLowerCase();
   const cursor = search.get("cursor")?.slice(0, 500);
   const inspect = search.get("inspect") ?? "";
+  const lens = MediaLens.safeParse(search.get("lens"));
+  const sort = search.get("sort");
+  const dir = search.get("dir");
   return {
     ...(q ? { q } : {}),
+    ...(lens.success ? { lens: lens.data } : {}),
+    ...(sort && (MEDIA_SORTS as readonly string[]).includes(sort) ? { sort: sort as MediaSort } : {}),
+    ...(dir === "asc" || dir === "desc" ? { dir } : {}),
     ...(tag && MediaTag.safeParse(tag).success ? { tag } : {}),
     ...(search.get("view") === "trash" ? { view: "trash" as const } : {}),
     ...(cursor ? { cursor } : {}),
@@ -626,8 +668,15 @@ function mediaOffers(capabilities: Capabilities): MediaData["offers"] {
     tags: media && capabilities.mediaTags === true,
     trash: media && capabilities.mediaTrash === true,
     delete: media,
+    lenses: media ? [...(capabilities.mediaLenses ?? [])] : [],
   };
 }
+
+const MEDIA_BY: Record<MediaSort, (a: MediaItem, b: MediaItem) => number> = {
+  added: (a, b) => (b.uploadedAt ?? "").localeCompare(a.uploadedAt ?? ""),
+  size: (a, b) => b.bytes - a.bytes,
+  name: (a, b) => (a.filename ?? a.id).localeCompare(b.filename ?? b.id),
+};
 
 /** One page of one site's media library, as MediaLibrary renders it. */
 export async function loadMedia(source: ContentSource, query: MediaQuery = {}): Promise<MediaData> {
@@ -639,15 +688,26 @@ export async function loadMedia(source: ContentSource, query: MediaQuery = {}): 
     ...(query.q ? { q: query.q } : {}),
     ...(query.tag && offers.tags ? { tag: query.tag } : {}),
     ...(query.view === "trash" && offers.trash ? { trashed: "only" as const } : {}),
+    ...(query.lens && offers.lenses.includes(query.lens) ? { lens: query.lens } : {}),
+    ...(query.sort ? { sort: query.sort, ...(query.dir ? { dir: query.dir } : {}) } : {}),
     ...(query.cursor ? { cursor: query.cursor } : {}),
   });
-  const rows = list.items.map((item) => ({ ...item, src: absolute(source.site.origin, item.url) }));
+  let items = list.items;
+  // A site that sorted says so (v0.6.0); otherwise the kit sorts the page it has and says that.
+  const sortedOnPage = query.sort !== undefined && list.sorted === undefined;
+  if (sortedOnPage) {
+    const natural = query.sort === "name" ? "asc" : "desc";
+    const flip = (query.dir ?? natural) === natural ? 1 : -1;
+    items = [...items].sort((a, b) => flip * MEDIA_BY[query.sort!](a, b));
+  }
+  const rows = items.map((item) => ({ ...item, src: absolute(source.site.origin, item.url) }));
   let detail: MediaData["detail"];
   if (query.inspect) {
     const found = await orNull(source.client.media.get(query.inspect));
     detail = found ? { ...found, src: absolute(source.site.origin, found.url) } : null;
   }
-  return { ...base, rows, page: { nextCursor: list.nextCursor }, ...(detail !== undefined ? { detail } : {}) };
+  const page = { nextCursor: list.nextCursor, ...(list.total !== undefined ? { total: list.total } : {}), ...(sortedOnPage ? { sortedOnPage } : {}) };
+  return { ...base, rows, page, ...(detail !== undefined ? { detail } : {}) };
 }
 
 export const MEDIA_INTENTS = ["upload", "alt", "tags", "tag-add", "tag-remove", "trash", "restore", "delete", "empty-trash"] as const;
@@ -916,6 +976,10 @@ export const MENTION_FILTERS: readonly MentionFilter[] = ["pending", "failed", "
 export interface MentionsQuery {
   /** Absent: open on pending, or on all when nothing is pending. */
   status?: MentionFilter;
+  /** v0.6.0: words in the source, the author or the excerpt. */
+  q?: string;
+  /** v0.6.0: only the mentions of this post. */
+  targetId?: string;
   cursor?: string;
 }
 
@@ -927,7 +991,11 @@ export interface MentionsData {
   filter: MentionFilter;
   query: MentionsQuery;
   rows: MentionRow[];
-  page: { nextCursor: string | null };
+  page: {
+    nextCursor: string | null;
+    /** True when q or targetId was applied to this page only, because the site's list does not filter by them. */
+    filteredOnPage?: boolean;
+  };
   /** Across the whole queue, not the page. */
   counts: MentionCounts;
   /** What a sweep would remove now. */
@@ -939,8 +1007,12 @@ export interface MentionsData {
 export function readMentionsQuery(search: URLSearchParams): MentionsQuery {
   const status = search.get("status");
   const cursor = search.get("cursor")?.slice(0, 500);
+  const q = search.get("q")?.trim().slice(0, 200);
+  const targetId = search.get("targetId")?.trim().slice(0, 300);
   return {
     ...(status && MENTION_FILTERS.includes(status as MentionFilter) ? { status: status as MentionFilter } : {}),
+    ...(q ? { q } : {}),
+    ...(targetId ? { targetId } : {}),
     ...(cursor ? { cursor } : {}),
   };
 }
@@ -950,36 +1022,53 @@ const NO_COUNTS: MentionCounts = { unverified: 0, pending: 0, approved: 0, rejec
 /** One page of one site's mention queue, as MentionsList renders it. */
 export async function loadMentions(source: ContentSource, query: MentionsQuery = {}): Promise<MentionsData> {
   const capabilities = (await source.client.meta()).capabilities;
-  const base = { site: { id: source.site.id, name: source.site.name }, query, can: source.can, offers: { mentions: capabilities.mentions === true, reset: false } };
+  const base = { site: { id: source.site.id, name: source.site.name }, query, can: source.can, offers: { mentions: capabilities.mentions === true, reset: capabilities.mentions === true && capabilities.mentionReset === true } };
   if (capabilities.mentions !== true) {
     return { ...base, filter: query.status ?? "all", rows: [], page: { nextCursor: null }, counts: NO_COUNTS, expiring: { failed: 0, rejected: 0 } };
   }
   const page = (filter: MentionFilter) =>
-    source.client.mentions.list({ limit: PER_PAGE, ...(filter === "all" ? {} : { status: filter }), ...(query.cursor ? { cursor: query.cursor } : {}) });
+    source.client.mentions.list({
+      limit: PER_PAGE,
+      ...(filter === "all" ? {} : { status: filter }),
+      ...(query.q ? { q: query.q } : {}),
+      ...(query.targetId ? { targetId: query.targetId } : {}),
+      ...(query.cursor ? { cursor: query.cursor } : {}),
+    });
   let filter: MentionFilter = query.status ?? "pending";
   let list = await page(filter);
   if (!query.status && list.items.length === 0 && list.counts.pending === 0) {
     filter = "all";
     list = await page("all");
   }
+  // A site that filtered echoes it (v0.6.0); otherwise the kit filters the page it has and says that.
+  let items = list.items;
+  const filteredOnPage = (query.q !== undefined || query.targetId !== undefined) && list.filtered === undefined;
+  if (filteredOnPage) {
+    const needle = query.q?.toLowerCase();
+    items = items.filter(
+      (m) =>
+        (!query.targetId || m.targetId === query.targetId) &&
+        (!needle || [m.sourceUrl, m.authorName ?? "", m.excerpt ?? ""].some((t) => t.toLowerCase().includes(needle))),
+    );
+  }
   return {
     ...base,
     filter,
-    rows: list.items.map((m) => ({ ...m, postHref: source.editorHref(m.targetId) })),
-    page: { nextCursor: list.nextCursor },
+    rows: items.map((m) => ({ ...m, postHref: source.editorHref(m.targetId) })),
+    page: { nextCursor: list.nextCursor, ...(filteredOnPage ? { filteredOnPage } : {}) },
     counts: list.counts,
     expiring: list.expiring,
   };
 }
 
-export const MENTION_INTENTS = ["approve", "reject", "delete", "sweep"] as const;
+export const MENTION_INTENTS = ["approve", "reject", "reset", "delete", "sweep"] as const;
 export type MentionIntent = (typeof MENTION_INTENTS)[number];
 
 /** Said when the write moved but the site could not clear its cache. */
 const PURGE_FAILED = " The site could not clear its cache, so the post's page may show the old mentions until its cache expires.";
 
 /**
- * Approves, rejects or deletes each mention, in order, each with its own change id and record, or
+ * Approves, rejects, resets (v0.6.0) or deletes each mention, in order, each with its own change id and record, or
  * sweeps the queue. Each write carries the version the person saw, so a mention the site changed since
  * is refused as stale and stays.
  */
@@ -987,12 +1076,15 @@ export async function runMentionsIntent(source: ContentSource, input: IntentInpu
   const intent = text(input, "intent") as MentionIntent;
   if (!MENTION_INTENTS.includes(intent)) return refused("That is not something the mentions list can do.");
   if (!source.can.decideMentions) return refused(NOT_YOURS.decideMentions);
-  if ((await source.client.meta()).capabilities.mentions !== true) return refused("This site does not receive webmentions through the site API.");
+  const capabilities = (await source.client.meta()).capabilities;
+  if (capabilities.mentions !== true) return refused("This site does not receive webmentions through the site API.");
+  const canReset = capabilities.mentionReset === true;
+  if (intent === "reset" && !canReset) return refused("This site does not take a mention decision back.");
 
   if (intent === "sweep") {
     const change = changeId();
     try {
-      const { removed } = await source.client.mentions.sweep(change);
+      const { removed } = await source.client.mentions.sweep({ changeId: change });
       const note = await recordDone(source, "mention-sweep", "sweep", change);
       const n = removed.failed + removed.rejected;
       return { ok: true, message: `Removed ${removed.failed} failed and ${removed.rejected} rejected mention${n === 1 ? "" : "s"} past their retention window.` + note };
@@ -1010,36 +1102,52 @@ export async function runMentionsIntent(source: ContentSource, input: IntentInpu
   }
   const sendable = targets.filter((t): t is { id: string; version: string; status: string | null } => t.version !== null);
 
-  const undoIds: string[] = [];
-  const undoVersions: string[] = [];
-  let waiting = 0;
+  // Each done mention's inverse: the opposite decision between approved and rejected, a reset (v0.6.0)
+  // for a decision on a waiting mention, and the decision that was taken back for a reset.
+  const inverses: Array<{ id: string; version: string; intent: MentionIntent; status: MentionStatus }> = [];
+  let noUndo = 0;
   const { outcomes, conflict } = await eachItem(source, sendable, "mention", async ({ id, version, status }): Promise<Outcome> => {
     const change = changeId();
     if (intent === "delete") {
       const { purged } = await source.client.mentions.delete(id, { expectedVersion: version, changeId: change });
       return { id, ok: true, message: "Deleted." + (purged === false ? PURGE_FAILED : "") + (await recordDone(source, "mention-delete", id, change)) };
     }
-    const written = await source.client.mentions.decide(id, { decision: intent, expectedVersion: version, changeId: change });
-    // The opposite decision undoes a decision between approved and rejected; a waiting mention cannot go back yet.
-    const was = MentionStatus.safeParse(status).success ? status : null;
-    if (was === "approved" || was === "rejected") {
-      if (was !== written.status) {
-        undoIds.push(id);
-        undoVersions.push(written.version);
-      }
-    } else waiting++;
+    const written = await source.client.mentions.decide(id, { decision: intent as "approve" | "reject" | "reset", expectedVersion: version, changeId: change });
+    const parsed = MentionStatus.safeParse(status);
+    const was = parsed.success ? parsed.data : null;
+    const inverse: MentionIntent | null =
+      was === written.status
+        ? null
+        : was === "approved"
+          ? "approve"
+          : was === "rejected"
+            ? "reject"
+            : was === "pending" && canReset
+              ? "reset"
+              : null;
+    if (inverse) inverses.push({ id, version: written.version, intent: inverse, status: written.status });
+    else if (was !== written.status) noUndo++;
     const note = await recordDone(source, `mention-${intent}`, id, change);
-    return { id, ok: true, message: (intent === "approve" ? "Approved." : "Rejected.") + (written.purged === false ? PURGE_FAILED : "") + note };
+    return { id, ok: true, message: DECIDED[intent] + (written.purged === false ? PURGE_FAILED : "") + note };
   });
 
   const all = [...early, ...outcomes];
   const extra: Partial<IntentResult> = conflict ? { conflict } : {};
-  if (undoIds.length > 0) {
-    extra.undo = { intent: intent === "approve" ? "reject" : "approve", fields: { ids: undoIds, versions: undoVersions, statuses: undoIds.map(() => (intent === "approve" ? "approved" : "rejected")) } };
+  let tail = "";
+  if (inverses.length > 0 && inverses.every((i) => i.intent === inverses[0]!.intent)) {
+    extra.undo = {
+      intent: inverses[0]!.intent,
+      fields: { ids: inverses.map((i) => i.id), versions: inverses.map((i) => i.version), statuses: inverses.map((i) => i.status) },
+    };
+  } else if (inverses.length > 0) {
+    tail = " The mentions were in different states before, so there is no single Undo; change them one at a time to reverse it.";
   }
-  const tail = intent !== "delete" && waiting > 0 ? " A decision on a waiting mention has no Undo on this site." : "";
-  return result(all, summarise(all, intent === "approve" ? "Approved" : intent === "reject" ? "Rejected" : "Deleted", "mention") + tail, extra);
+  if (intent !== "delete" && noUndo > 0) tail += canReset ? "" : " A decision on a waiting mention has no Undo on this site.";
+  return result(all, summarise(all, DONE_MENTIONS[intent], "mention") + tail, extra);
 }
+
+const DECIDED: Record<MentionIntent, string> = { approve: "Approved.", reject: "Rejected.", reset: "Back to waiting.", delete: "Deleted.", sweep: "" };
+const DONE_MENTIONS: Record<MentionIntent, string> = { approve: "Approved", reject: "Rejected", reset: "Took back the decision on", delete: "Deleted", sweep: "Swept" };
 
 // ---------- many sites at once
 
@@ -1057,10 +1165,15 @@ export interface SiteSummary {
 export async function summary(source: ContentSource): Promise<SiteSummary> {
   const capabilities = (await source.client.meta()).capabilities;
   const mentionsWaiting = capabilities.mentions === true ? (await source.client.mentions.list({ status: "pending", limit: 1 })).counts.pending : null;
+  // A site that answers the no-alt lens (v0.6.0) and counts can say how many files lack alt text.
+  const mediaWithoutAlt =
+    capabilities.media === true && (capabilities.mediaLenses ?? []).includes("no-alt")
+      ? ((await source.client.media.list({ lens: "no-alt", limit: 1 })).total ?? null)
+      : null;
   return {
     site: { id: source.site.id, name: source.site.name },
     mentionsWaiting,
     postsWaiting: source.waiting ? await source.waiting() : null,
-    mediaWithoutAlt: null,
+    mediaWithoutAlt,
   };
 }

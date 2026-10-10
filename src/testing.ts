@@ -2,7 +2,9 @@
 // sitting. Carrel's tests run against it, and the conformance suite is proven on it.
 
 import { MediaInUseError, NotFoundError, RefusedError, VersionConflictError, type MediaAdapter, type MentionsAdapter, type SiteAdapter } from "./adapter.js";
-import type { ContentDoc, ContentStatus, MediaItem, MediaUploadLimits, MediaUse, MentionItem, MentionStatus, Revision, SiteInfo, WriteResult } from "./contract.js";
+import { joinSource, setTags as writeTags, splitSource, tagsOf } from "./frontmatter.js";
+import { LARGE_MEDIA_BYTES, MEDIA_LENSES } from "./contract.js";
+import type { ContentDoc, ContentStatus, ContentSummary, MediaLens, MediaItem, MediaUploadLimits, MediaUse, MentionItem, MentionStatus, Revision, SiteInfo, WriteResult } from "./contract.js";
 
 interface Stored {
   doc: ContentDoc;
@@ -16,10 +18,18 @@ export interface MemoryAdapterOptions {
   media?: MediaUploadLimits | false;
   /** false for a site whose adapter has no content delete (its route then answers 501). On by default. */
   contentDelete?: boolean;
+  /** false for a site that keeps no post tags through the API (a v0.5.0 site): the tags route then answers 501. On by default. */
+  contentTags?: boolean;
   /** false for a media manager with no alt, tag or trash writes (a v0.2.0 site): those routes then answer 501. On by default. */
   mediaWrites?: boolean;
+  /** false for a media manager with no lenses and no sort (a v0.5.0 site): a lens then answers 501. On by default. */
+  mediaLenses?: boolean;
+  /** false for a mentions group that ignores q and targetId (a v0.5.0 site) and so echoes no `filtered`. On by default. */
+  mentionFilters?: boolean;
   /** false for a site that does not receive webmentions (its routes then answer 501). On by default. */
   mentions?: boolean;
+  /** false for a mentions group with no reset (a v0.5.0 site): a reset then answers 501. On by default. */
+  mentionReset?: boolean;
 }
 
 /** What the reference adapter's sweep keeps, like dustinedwards.info: failed rows 30 days, rejected rows 90. */
@@ -56,6 +66,18 @@ const EXTENSIONS: Record<string, string> = {
 interface StoredMedia {
   item: MediaItem;
   bytes: Uint8Array;
+}
+
+/** The item with its tags (v0.6.0), where its frontmatter can hold them. */
+function withTags(doc: ContentDoc): ContentDoc {
+  const front = splitSource(doc.source).front;
+  return front !== null ? { ...doc, tags: tagsOf(front) } : doc;
+}
+
+/** A list row: the item without its source, with its version and tags. */
+function summaryOf(doc: ContentDoc): ContentSummary {
+  const { source: _s, format: _f, ...summary } = withTags(doc);
+  return summary;
 }
 
 function titleOf(source: string, id: string): string {
@@ -149,6 +171,13 @@ export function memoryAdapter(
     return { version };
   }
 
+  /** The lenses, as the site would answer them: nothing uses it, it has no alt text, it is over the size line. */
+  const LENS: Record<MediaLens, (i: MediaItem) => boolean> = {
+    unattached: (i) => usesOf(i.id).length === 0,
+    "no-alt": (i) => i.alt.trim() === "",
+    large: (i) => i.bytes > LARGE_MEDIA_BYTES,
+  };
+
   /** The site's reference check: every post whose source carries the file's URL, as the real site scans. */
   function usesOf(id: string): MediaUse[] {
     const url = `/media/${id}`;
@@ -167,17 +196,36 @@ export function memoryAdapter(
       ? undefined
       : {
           limits: options.media ?? MEMORY_MEDIA_LIMITS,
+          ...(options.mediaLenses === false ? {} : { lenses: MEDIA_LENSES }),
           async list(query) {
             const needle = query.q?.toLowerCase();
+            const lensed = options.mediaLenses !== false;
             const all = [...mediaStore.values()]
               .map((m) => m.item)
               .filter((i) => (query.trashed === "only" ? Boolean(i.trashedAt) : !i.trashedAt))
               .filter((i) => !query.tag || (i.tags ?? []).includes(query.tag))
               .filter((i) => !needle || [i.id, i.filename ?? "", i.alt].some((t) => t.toLowerCase().includes(needle)))
+              .filter((i) => !lensed || !query.lens || LENS[query.lens](i))
               .reverse();
+            // v0.6.0: sorted as asked, newest, largest or A to Z first unless dir says otherwise.
+            const sorted = lensed && query.sort ? { sort: query.sort, dir: query.dir ?? (query.sort === "name" ? "asc" : "desc") } : undefined;
+            if (sorted) {
+              const key = (i: MediaItem): string | number => (sorted.sort === "size" ? i.bytes : sorted.sort === "name" ? (i.filename ?? i.id).toLowerCase() : (i.uploadedAt ?? ""));
+              const order = [...all];
+              all.sort((a, b) => {
+                const [x, y] = [key(a), key(b)];
+                const by = typeof x === "number" ? x - (y as number) : x.localeCompare(y as string);
+                return (sorted.dir === "asc" ? 1 : -1) * by || order.indexOf(a) - order.indexOf(b);
+              });
+            }
             const start = query.cursor ? Number(query.cursor) : 0;
             const page = all.slice(start, start + query.limit);
-            return { items: page, nextCursor: start + query.limit < all.length ? String(start + query.limit) : null };
+            return {
+              items: page,
+              nextCursor: start + query.limit < all.length ? String(start + query.limit) : null,
+              ...(lensed ? { total: all.length } : {}),
+              ...(sorted ? { sorted } : {}),
+            };
           },
           async get(id) {
             const stored = mediaStore.get(id);
@@ -279,8 +327,12 @@ export function memoryAdapter(
       ? undefined
       : {
           async list(query) {
+            const filters = options.mentionFilters !== false;
+            const needle = filters ? query.q?.toLowerCase() : undefined;
             const all = [...mentionStore.values()]
               .filter((m) => !query.status || m.status === query.status)
+              .filter((m) => !needle || [m.sourceUrl, m.authorName ?? "", m.excerpt ?? ""].some((t) => t.toLowerCase().includes(needle)))
+              .filter((m) => !filters || !query.targetId || m.targetId === query.targetId)
               .sort((a, b) => Date.parse(b.receivedAt) - Date.parse(a.receivedAt) || Number(b.id) - Number(a.id));
             const start = query.cursor ? Number(query.cursor) : 0;
             const counts = { unverified: 0, pending: 0, approved: 0, rejected: 0, failed: 0 };
@@ -291,6 +343,7 @@ export function memoryAdapter(
               nextCursor: start + query.limit < all.length ? String(start + query.limit) : null,
               counts,
               expiring: { failed: soon.failed.length, rejected: soon.rejected.length },
+              ...(filters && (query.q || query.targetId) ? { filtered: { ...(query.q ? { q: query.q } : {}), ...(query.targetId ? { targetId: query.targetId } : {}) } } : {}),
             };
           },
           async decide(id, input) {
@@ -308,6 +361,16 @@ export function memoryAdapter(
             purged.push(current.targetId);
             return { status: next.status, version: next.version, purged: true };
           },
+          async reset(id, input) {
+            const current = heldMention(id, input.expectedVersion);
+            if (current.status !== "approved" && current.status !== "rejected") {
+              throw new RefusedError(`A ${current.status} mention has no decision to take back.`);
+            }
+            const next: MentionItem = { ...current, status: "pending", decidedAt: null, version: `m${++mentionVersion}` };
+            mentionStore.set(id, next);
+            purged.push(current.targetId);
+            return { status: next.status, version: next.version, purged: true };
+          },
           async delete(id, input) {
             const current = heldMention(id, input.expectedVersion);
             mentionStore.delete(id);
@@ -320,6 +383,9 @@ export function memoryAdapter(
             return { failed: gone.failed.length, rejected: gone.rejected.length };
           },
         };
+
+  // A v0.5.0 mentions group: no way back to pending.
+  if (mentionsAdapter && options.mentionReset === false) delete mentionsAdapter.reset;
 
   return {
     site,
@@ -340,16 +406,25 @@ export function memoryAdapter(
           .filter((d) => !query.status || d.status === query.status)
           .filter((d) => !needle || d.title.toLowerCase().includes(needle) || d.source.toLowerCase().includes(needle))
           .sort((a, b) => a.id.localeCompare(b.id));
+        // v0.6.0: sorted as asked, newest first for the dates and A to Z for titles unless dir says otherwise.
+        const sorted = query.sort ? { sort: query.sort, dir: query.dir ?? (query.sort === "title" ? "asc" : "desc") } : undefined;
+        if (sorted) {
+          const key = (d: ContentDoc) => (sorted.sort === "title" ? d.title.toLowerCase() : sorted.sort === "published" ? (d.publishedAt ?? d.publishAt ?? "") : (d.updatedAt ?? ""));
+          all.sort((a, b) => (sorted.dir === "asc" ? 1 : -1) * key(a).localeCompare(key(b)) || a.id.localeCompare(b.id));
+        }
         const start = query.cursor ? Number(query.cursor) : 0;
         const page = all.slice(start, start + query.limit);
         const next = start + query.limit < all.length ? String(start + query.limit) : null;
         return {
-          items: page.map(({ source: _s, version: _v, format: _f, ...summary }) => summary),
+          items: page.map(summaryOf),
           nextCursor: next,
+          total: all.length,
+          ...(sorted ? { sorted } : {}),
         };
       },
       async get(id) {
-        return store.get(id)?.doc ?? null;
+        const doc = store.get(id)?.doc;
+        return doc ? withTags(doc) : null;
       },
       async saveDraft(id, input) {
         const previous = expect(id, input.expectedVersion);
@@ -374,6 +449,18 @@ export function memoryAdapter(
       async revisionSource(id, version) {
         return store.get(id)?.history.find((h) => h.revision.version === version)?.source ?? null;
       },
+      ...(options.contentTags === false
+        ? {}
+        : {
+            async setTags(id: string, input: { tags: string[]; expectedVersion: string; changeId: string }) {
+              if (!store.has(id)) throw new NotFoundError();
+              const previous = existing(id, input.expectedVersion);
+              const parts = splitSource(previous.doc.source);
+              if (parts.front === null) throw new RefusedError("This post has no frontmatter, so it has nowhere to keep tags.");
+              const source = joinSource({ ...parts, front: writeTags(parts.front, input.tags) });
+              return commit(id, previous, { source, status: previous.doc.status, publishAt: previous.doc.publishAt }, input.changeId, "Tags");
+            },
+          }),
       ...(options.contentDelete === false
         ? {}
         : {

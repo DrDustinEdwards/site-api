@@ -3,7 +3,7 @@
 // by it. The one exception is opt-in (probeMediaUpload): it uploads a file of its own, then deletes
 // that file and no other.
 
-import { MediaBulkResult, ContentList, ErrorBody, RevisionList, RevisionSource, MediaDeleteResult, MediaDetail, MediaItem, MediaList, MentionList, Meta, PREFIX, schemaHash, type Meta as MetaType } from "./contract.js";
+import { MEDIA_LENSES, MediaBulkResult, ContentList, ErrorBody, RevisionList, RevisionSource, MediaDeleteResult, MediaDetail, MediaItem, MediaList, MentionList, Meta, PREFIX, schemaHash, type Meta as MetaType } from "./contract.js";
 
 export interface ConformanceConfig {
   baseUrl: string;
@@ -181,6 +181,19 @@ export async function runConformance(config: ConformanceConfig): Promise<Conform
       if (code !== expected) throw new Error(`error code ${code ?? "missing"}, expected ${expected}`);
       return offered ? "404 not-found" : "501 not-implemented";
     });
+    await check("content tags of an unknown id: refused, or not implemented where the site keeps no tags", async () => {
+      const response = await doFetch(`${origin}${PREFIX}/content/${PROBE_ID}/tags`, {
+        method: "PUT",
+        headers: { ...auth, "content-type": "application/json" },
+        body: JSON.stringify({ tags: ["conformance-probe"], expectedVersion: STALE_VERSION, changeId: "conformance-probe" }),
+      });
+      const offered = (meta as MetaType | null)?.capabilities.contentTags === true;
+      expectStatus(response, offered ? 404 : 501, offered ? "unknown content tags" : "content tags on a site without them");
+      const code = await errorCode(response);
+      const expected = offered ? "not-found" : "not-implemented";
+      if (code !== expected) throw new Error(`error code ${code ?? "missing"}, expected ${expected}`);
+      return offered ? "404 not-found" : "501 not-implemented";
+    });
   }
 
   // ---------- media (v0.2.0), only for a site that offers it
@@ -198,6 +211,21 @@ export async function runConformance(config: ConformanceConfig): Promise<Conform
       expectStatus(response, 200, "media list");
       const list = MediaList.parse(await response.json());
       return `${list.items.length} file(s) on the first page`;
+    });
+
+    // v0.6.0 lenses: every one the site names answers in shape; one it does not name answers 501.
+    await check("media lenses: each one the site names answers, and one it does not is not implemented", async () => {
+      const named = capabilities.mediaLenses ?? [];
+      for (const lens of MEDIA_LENSES) {
+        const response = await doFetch(`${origin}${PREFIX}/media?lens=${lens}&limit=1`, { headers: auth });
+        if (named.includes(lens)) {
+          expectStatus(response, 200, `media lens ${lens}`);
+          MediaList.parse(await response.json());
+        } else {
+          expectStatus(response, 501, `media lens ${lens} on a site that does not name it`);
+        }
+      }
+      return named.length > 0 ? `answers ${named.join(", ")}` : "501 for every lens";
     });
 
     if (config.probeWrites !== false) {
@@ -354,6 +382,16 @@ export async function runConformance(config: ConformanceConfig): Promise<Conform
       const code = await errorCode(response);
       if (code !== expected) throw new Error(`error code ${code ?? "missing"}, expected ${expected}`);
       return hasMentions ? "404 not-found" : "501 not-implemented";
+    });
+
+    await check("mention reset of an unknown id: refused, or not implemented where the site has no reset", async () => {
+      const offered = hasMentions && capabilities?.mentionReset === true;
+      const response = await post(`${mentionPath}/${MENTION_PROBE_ID}/decide`, { decision: "reset", expectedVersion: STALE_VERSION, changeId: "conformance-probe" });
+      expectStatus(response, offered ? 404 : 501, offered ? "unknown mention reset" : "mention reset on a site without it");
+      const expected = offered ? "not-found" : "not-implemented";
+      const code = await errorCode(response);
+      if (code !== expected) throw new Error(`error code ${code ?? "missing"}, expected ${expected}`);
+      return offered ? "404 not-found" : "501 not-implemented";
     });
 
     if (hasMentions) {
