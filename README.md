@@ -9,7 +9,7 @@ Each site mounts one handler at `/api/carrel/v1` and implements an adapter over 
 Installed by git tag, never from a registry:
 
 ```sh
-npm install github:DrDustinEdwards/site-api#v0.2.0
+npm install github:DrDustinEdwards/site-api#v0.6.0
 ```
 
 npm builds `dist/` on install through the `prepare` script.
@@ -129,7 +129,7 @@ Additive: every v0.4.0 route and body is unchanged, and the schema hash and pack
 
 ## Changes in v0.6.0
 
-Additive: every v0.5.0 route and body still works as it did.
+Additive: every v0.5.0 route and body still works as it did, and the schema hash and package version move on purpose. A test (`test/contract-v0.5.0.test.ts`, against `test/fixtures/contract-v0.5.0.json` written from the v0.5.0 build) holds every v0.5.0 route and schema identical, except the ones named below, each of which gains exactly the optional properties named here; the mention decision gains `reset` and nothing else. The one new route is `PUT /content/:id/tags`.
 
 - **Mention reset, optional per site.** `POST /mentions/:id/decide` takes a third decision, `reset`, which takes an approved or rejected mention back to `pending`, with `decidedAt` cleared and a new version. It is how a decision is undone. A mention with no decision to take back is refused with the site's own words (`422 refused`). The adapter's optional `mentions.reset` serves it; a site whose adapter lacks it answers a reset `501 not-implemented`, and `meta.capabilities.mentionReset` is absent. Conformance adds a reset of the probe id: `404` where the site offers reset, `501` where it does not.
 - **Each list row carries its `version` and `tags`** (both optional on `ContentSummary`, so a v0.5.0 site's rows still parse). A row's action then needs no read first. `ContentDoc` carries `tags` too.
@@ -274,5 +274,6 @@ Tests run locally, with no Actions minutes. The planted tests send a request eac
 - `test/mentions.test.ts`: a stale version, a missing mention, a site with no mentions, the site's own refusal, a missing key or a bad body for every mentions write, and the sweep route not read as a mention id.
 - `test/content-tags.test.ts`: a stale version, a missing post, a post with no frontmatter and a site without tags, each changing nothing, and a tag, sort or direction outside the contract refused before the adapter.
 - `test/lists.test.ts`: a lens the site does not name, an unknown lens, sort or direction, a search too long and an empty post id, each refused before the adapter.
-- `test/contract-v0.4.0.test.ts`: the v0.4.0 contract unchanged, against `test/fixtures/contract-v0.4.0.json`; only the four mentions routes and one optional capability are new.
-- `test/contract-v0.1.0.test.ts`: the v0.1.0 contract unchanged, against `test/fixtures/contract-v0.1.0.json`, written from the v0.1.0 build. Every v0.1.0 route and schema is identical, except three schemas that gain optional properties only (`Meta`, `Capabilities`, `ErrorBody`).
+- `test/contract-v0.5.0.test.ts`: the v0.5.0 contract unchanged, against `test/fixtures/contract-v0.5.0.json`; only the content tags route, the optional properties it names, the `reset` decision and five new schemas are new.
+- `test/contract-v0.4.0.test.ts`: the v0.4.0 contract unchanged, against `test/fixtures/contract-v0.4.0.json`; the only new routes are v0.5.0's four mentions routes and v0.6.0's content tags route, and the schemas later versions extend gain optional properties only.
+- `test/contract-v0.1.0.test.ts`: the v0.1.0 contract unchanged, against `test/fixtures/contract-v0.1.0.json`, written from the v0.1.0 build. Every v0.1.0 route and schema is identical, except seven schemas that gain optional properties only (`Meta`, `Capabilities` and `ErrorBody` from v0.2.0; `ContentSummary`, `ContentDoc`, `ListQuery` and `ContentList` from v0.6.0).
