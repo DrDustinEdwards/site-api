@@ -1084,7 +1084,7 @@ export async function runMentionsIntent(source: ContentSource, input: IntentInpu
   if (intent === "sweep") {
     const change = changeId();
     try {
-      const { removed } = await source.client.mentions.sweep(change);
+      const { removed } = await source.client.mentions.sweep({ changeId: change });
       const note = await recordDone(source, "mention-sweep", "sweep", change);
       const n = removed.failed + removed.rejected;
       return { ok: true, message: `Removed ${removed.failed} failed and ${removed.rejected} rejected mention${n === 1 ? "" : "s"} past their retention window.` + note };

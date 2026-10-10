@@ -248,7 +248,7 @@ describe("mentions sweep", () => {
     const { client: c } = client(adapter);
     expect(await c.mentions.sweep("c1")).toEqual({ changeId: "c1", removed: { failed: 1, rejected: 1 } });
     expect([...adapter.mentionStore.keys()].sort()).toEqual([ids.pending, ids.unverified, ids.failedNew, ids.rejectedNew].sort());
-    expect(await c.mentions.sweep("c2")).toEqual({ changeId: "c2", removed: { failed: 0, rejected: 0 } });
+    expect(await c.mentions.sweep({ changeId: "c2" })).toEqual({ changeId: "c2", removed: { failed: 0, rejected: 0 } });
   });
 
   it("PLANT: refused without the key, or with no change id, before the adapter runs, and nothing is removed", async () => {

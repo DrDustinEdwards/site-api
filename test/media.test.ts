@@ -87,7 +87,7 @@ describe("PLANT: deleting a file a post uses", () => {
     expect(adapter.deleted).toEqual([]);
 
     await adapter.content.saveDraft("river-post", { source: "---\ntitle: The river\n---\nIntro.\n", expectedVersion: saved.version, changeId: "c4" });
-    expect(await c.media.delete(item.id, "c5")).toMatchObject({ deleted: true });
+    expect(await c.media.delete(item.id, { changeId: "c5" })).toMatchObject({ deleted: true, changeId: "c5" });
   });
 
   it("names every post that uses it", async () => {

@@ -129,7 +129,9 @@ export function createSiteClient(config: SiteClientConfig) {
             })
           ).json(),
         ),
-      delete: (id: string, changeId: string) => get(MediaDeleteResult, "DELETE", `/media/${enc(id)}${query({ changeId })}`),
+      /** Takes `{ changeId }` (v0.6.0), like every other write; the change id alone still works. */
+      delete: (id: string, input: { changeId: string } | string) =>
+        get(MediaDeleteResult, "DELETE", `/media/${enc(id)}${query({ changeId: typeof input === "string" ? input : input.changeId })}`),
       /**
        * The writes of v0.4.0, each optional per site: a site without it answers SiteApiError with
        * status 501 (see meta().capabilities). A stale version is status 409 with the current version.
@@ -149,7 +151,9 @@ export function createSiteClient(config: SiteClientConfig) {
       decide: (id: string, input: MentionDecideInput) => get(MentionWriteResult, "POST", `/mentions/${enc(id)}/decide`, input),
       delete: (id: string, input: { expectedVersion: string; changeId: string }) =>
         get(MentionDeleteResult, "DELETE", `/mentions/${enc(id)}${query(input)}`),
-      sweep: (changeId: string) => get(MentionSweepResult, "POST", "/mentions/sweep", { changeId }),
+      /** Takes `{ changeId }` (v0.6.0), like every other write; the change id alone still works. */
+      sweep: (input: { changeId: string } | string) =>
+        get(MentionSweepResult, "POST", "/mentions/sweep", { changeId: typeof input === "string" ? input : input.changeId }),
     },
   };
 }
