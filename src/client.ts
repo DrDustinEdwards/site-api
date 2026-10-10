@@ -152,3 +152,6 @@ export function createSiteClient(config: SiteClientConfig) {
 }
 
 export type SiteClient = ReturnType<typeof createSiteClient>;
+
+// A site's own admin: the same client, answered in process by its own adapter (./local.ts).
+export { localClient, type LocalClientOptions } from "./local.js";
