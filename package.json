@@ -6,7 +6,7 @@
   "license": "MIT",
   "type": "module",
   "engines": {
-    "node": ">=24.14.1"
+    "node": ">=26.11.1"
   },
   "exports": {
     ".": {
