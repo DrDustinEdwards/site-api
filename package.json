@@ -40,7 +40,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@dustinedwards/site-runtime": "github:DrDustinEdwards/site-runtime#384f2b666100c7a12fb498b6a1116861febf0e1c",
+    "@dustinedwards/site-runtime": "github:DrDustinEdwards/site-runtime#v0.6.0",
     "diff": "9.0.0",
     "zod": "4.6.5"
   },
