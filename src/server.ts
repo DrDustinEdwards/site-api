@@ -68,6 +68,7 @@ import {
   type MediaUse,
 } from "./contract.js";
 import { checkUpload, essence, readUpload } from "./media.js";
+import { readCapped } from "@dustinedwards/site-runtime/body";
 
 /** The shape of Cloudflare's `ratelimit` binding, so a site passes its binding straight in. */
 export interface RateLimiter {
@@ -166,10 +167,10 @@ class BadRequest extends Error {
 async function readBody<T extends z.ZodType>(request: Request, schema: T): Promise<z.infer<T>> {
   const declared = Number(request.headers.get("content-length") ?? "0");
   if (declared > MAX_BODY_BYTES) throw new BadRequest("too-large", "The body is too large.");
-  const text = await request.text();
-  if (new TextEncoder().encode(text).length > MAX_BODY_BYTES) {
-    throw new BadRequest("too-large", "The body is too large.");
-  }
+  // Counted as it arrives (site-runtime's one reader), so an understated or missing Content-Length cannot make the
+  // Worker hold more than the limit; request.text() read the whole body first.
+  const text = await readCapped(request, MAX_BODY_BYTES);
+  if (text === null) throw new BadRequest("too-large", "The body is too large.");
   let raw: unknown;
   try {
     raw = JSON.parse(text);
