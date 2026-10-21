@@ -257,6 +257,10 @@ The shared posts, media and mentions screens (Capsomer's `PostsList`, `MediaLibr
 
 Tested once, where it lives: `test/admin.test.ts`, against `memoryAdapter()` through `localClient`, and once through `createSiteClient` as Carrel drives it.
 
+## Frontmatter
+
+`@dustinedwards/site-api/frontmatter` reads and writes a post's YAML frontmatter one top-level block at a time, with no YAML parser, so it runs in a Worker and a browser alike. `splitSource` and `joinSource` cut a source into `open + front + close + body` and back, byte for byte. `readKey`, `readList` and `tagsOf` read a key, a list (flow or block form) and the tags. `setBlock`, `setRawKey` and `setTags` replace one key's block (added at the end when absent; `setBlock` with no lines removes it) and return every other block, comment and unknown key as it was. The content kit's tag and duplicate writes use it. Tested in `test/frontmatter.test.ts`.
+
 ## Development
 
 ```sh
