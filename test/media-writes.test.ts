@@ -126,6 +126,25 @@ describe("trash, restore and empty", () => {
     expect(adapter.mediaStore.has(used.id)).toBe(true);
   });
 
+  it("stops at a delete that breaks, and still says what is already gone", async () => {
+    const { client, add, adapter } = setup();
+    const a = await add("a.png");
+    const b = await add("b.png");
+    await client.media.trash(a.id, { expectedVersion: a.version!, changeId: "t1" });
+    await client.media.trash(b.id, { expectedVersion: b.version!, changeId: "t2" });
+    const media = adapter.media!;
+    const real = media.delete.bind(media);
+    let calls = 0;
+    media.delete = async (id, opts) => {
+      if (++calls === 2) throw new Error("storage is down");
+      return real(id, opts);
+    };
+    const result = await client.media.emptyTrash({ changeId: "e" });
+    expect(result.deleted).toHaveLength(1);
+    expect(result.refused).toHaveLength(1);
+    expect(result.more).toBe(true);
+  });
+
   it("deletes at most 100 per request and says when more remain", async () => {
     const { client, adapter } = setup();
     for (let i = 0; i < 102; i++) {

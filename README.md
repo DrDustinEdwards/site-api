@@ -157,7 +157,7 @@ Files stay in the site's own storage and are served by the site. Carrel only lis
   1. a type the site did not declare (`400 invalid`), without reading the body;
   2. a declared or actual size over `maxBytes` (`413 too-large`), reading no further than the limit;
   3. an empty file, or a file name carrying a path (`400 invalid`);
-  4. bytes that are not the declared type (`400 invalid`), for the types with a signature: PNG, JPEG, GIF, WebP, AVIF, PDF and SVG (an `<svg` element near the start, no NUL bytes). For any other type the site checks the bytes itself.
+  4. bytes that are not the declared type (`400 invalid`), for the types with a signature: PNG, JPEG, GIF, WebP, AVIF, PDF and SVG (an `<svg` element near the start, no NUL bytes). An SVG holding script, an event handler, an embedded page or a `javascript:` link, and a PDF holding a JavaScript action, are refused too (`400 invalid`): they would run on the site that serves them. For any other type the site checks the bytes itself.
 - **Upload body.** The file's own bytes, not base64 and not multipart, so a file costs its own size and no more.
 - **Media ids** are the site's storage keys, with `/` between segments. A segment may not be empty, `.` or `..`, so an id is never a path out of the store.
 - **Deletes are the site's reference check.** The adapter's `delete` throws `MediaInUseError(usedBy)` when anything uses the file. The package answers `422 refused` with `usedBy`, naming each use (post, title, where), and the message names them too. A delete the site could not check must be refused (`RefusedError`), never made.

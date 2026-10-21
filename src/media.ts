@@ -68,6 +68,17 @@ const SIGNATURES: Record<string, (b: Uint8Array) => boolean> = {
   },
 };
 
+/**
+ * Content that runs when a site serves the file from its own origin: script, event handlers, embedded documents and
+ * javascript: links in an SVG, and JavaScript actions in a PDF. Such a file is refused rather than cleaned, since the
+ * package does not rewrite what an editor uploads.
+ */
+const ACTIVE: Record<string, (b: Uint8Array) => boolean> = {
+  "image/svg+xml": (b) =>
+    /<script\b|[\s/"']on[a-z]+\s*=|<foreignObject\b|<(iframe|embed|object)\b|javascript:|href\s*=\s*["']\s*&#/i.test(new TextDecoder().decode(b)),
+  "application/pdf": (b) => /\/(JS|JavaScript)\b/.test(new TextDecoder().decode(b)),
+};
+
 /** Refuses a type the site does not accept, and bytes that are not what the type claims. */
 export function checkUpload(contentType: string, bytes: Uint8Array | null, limits: MediaUploadLimits): UploadRefusal | null {
   const types = limits.types.map((t) => t.toLowerCase());
@@ -77,6 +88,7 @@ export function checkUpload(contentType: string, bytes: Uint8Array | null, limit
   if (bytes) {
     const signed = SIGNATURES[contentType];
     if (signed && !signed(bytes)) return { code: "invalid", message: `The file is not a ${contentType}: its bytes do not match the type it was sent as.` };
+    if (ACTIVE[contentType]?.(bytes)) return { code: "invalid", message: `The ${contentType} file holds script or an embedded page, which would run on the site. Export it without them.` };
   }
   return null;
 }

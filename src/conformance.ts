@@ -403,7 +403,12 @@ export async function runConformance(config: ConformanceConfig): Promise<Conform
         expectStatus(response, 409, "stale mention decision");
         const code = await errorCode(response);
         if (code !== "version-conflict") throw new Error(`error code ${code ?? "missing"}, expected version-conflict`);
-        return `409 version-conflict on mention ${first.id}`;
+        // A 409 is only a refusal if nothing changed: read the mention again.
+        const after = MentionList.parse(await (await doFetch(`${mentionPath}?limit=1`, { headers: auth })).json()).items.find((m) => m.id === first.id);
+        if (!after || after.version !== first.version || after.status !== first.status) {
+          throw new Error(`mention ${first.id} changed under a refused decision (version ${first.version} to ${after?.version ?? "gone"})`);
+        }
+        return `409 version-conflict on mention ${first.id}, unchanged`;
       });
 
       await check("mention sweep with no change id: refused before anything is removed", async () => {

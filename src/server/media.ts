@@ -136,7 +136,7 @@ export function mediaRoutes(media: MediaAdapter, log: Log): Route[] {
           for (const item of page.items) if (item.trashedAt) ids.push(item.id);
           cursor = page.nextCursor ?? undefined;
         } while (cursor && ids.length <= MAX_TRASH_EMPTY);
-        const more = ids.length > MAX_TRASH_EMPTY;
+        let more = ids.length > MAX_TRASH_EMPTY;
         const deleted: string[] = [];
         const refused: Array<{ id: string; message: string; usedBy?: MediaUse[] }> = [];
         for (const [n, id] of ids.slice(0, MAX_TRASH_EMPTY).entries()) {
@@ -145,7 +145,14 @@ export function mediaRoutes(media: MediaAdapter, log: Log): Route[] {
             deleted.push(id);
           } catch (error) {
             const failure = describeFailure(error, log);
-            if (failure.code !== "refused" && failure.code !== "not-found") throw error;
+            if (failure.code !== "refused" && failure.code !== "not-found") {
+              // Nothing gone yet: fail as before. Otherwise stop here and say what is already gone, so a retry
+              // knows where it stands.
+              if (deleted.length === 0) throw error;
+              refused.push({ id, message: failure.message });
+              more = true;
+              break;
+            }
             refused.push({ id, message: failure.message, ...(failure.usedBy ? { usedBy: failure.usedBy } : {}) });
           }
         }
