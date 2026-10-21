@@ -9,6 +9,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import * as contract from "../src/contract.js";
 import { additiveOnly, now, type JsonSchema } from "./additive.js";
+const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as { version: string };
 
 const V010 = JSON.parse(readFileSync(new URL("./fixtures/contract-v0.1.0.json", import.meta.url), "utf8")) as {
   version: string;
@@ -78,8 +79,8 @@ describe("the v0.1.0 contract", () => {
     expect(contract.ErrorBody.safeParse({ error: "refused", message: "No." }).success).toBe(true);
   });
 
-  it("bumps the schema hash and the package version", async () => {
+  it("bumps the schema hash, and says the package's own version", async () => {
     expect(await contract.schemaHash()).not.toBe(V010.schemaHash);
-    expect(contract.PACKAGE_VERSION).toBe("0.6.0");
+    expect(contract.PACKAGE_VERSION).toBe(pkg.version);
   });
 });

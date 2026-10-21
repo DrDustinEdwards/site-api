@@ -29,5 +29,6 @@ jobs:
       # `npm ci` runs the package's prepare script, which builds dist/.
       - run: npm ci
       - run: npm run typecheck
+      - run: npm run lint:promises
       - run: npm run build
       - run: npm test
