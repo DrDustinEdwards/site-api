@@ -10,8 +10,6 @@
 // site and supplies a ContentSource. Carrel passes createSiteClient({ baseUrl, key }); a site's own
 // admin passes localClient(adapter), so both run this code against the same contract. Every rule of
 // the site's own stays behind the contract; the kit adds only "who may" and "what the inverse is".
-//
-// Lifted from Carrel's app/lib/bulk.server.ts, media.server.ts and mentions.server.ts.
 
 import { SiteApiError, type SiteClient } from "./client.js";
 import {

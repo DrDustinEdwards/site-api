@@ -21,6 +21,10 @@
       "types": "./dist/client.d.ts",
       "default": "./dist/client.js"
     },
+    "./frontmatter": {
+      "types": "./dist/frontmatter.d.ts",
+      "default": "./dist/frontmatter.js"
+    },
     "./conformance": {
       "types": "./dist/conformance.d.ts",
       "default": "./dist/conformance.js"

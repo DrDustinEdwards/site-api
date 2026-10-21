@@ -1,4 +1,4 @@
-// PLANT: the v0.1.0 contract, unchanged. v0.2.0 is additive only (job_9e9282fde733): every v0.1.0
+// PLANT: the v0.1.0 contract, unchanged. v0.2.0 is additive only: every v0.1.0
 // route and body stays as it was, so a site or a Carrel on v0.1.0 keeps working against v0.2.0.
 //
 // test/fixtures/contract-v0.1.0.json was written from the v0.1.0 build (tag v0.1.0, 3cc13c0) before

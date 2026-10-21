@@ -10,7 +10,7 @@ export function essence(contentType: string | null): string {
   return (contentType ?? "").split(";")[0]!.trim().toLowerCase();
 }
 
-export type UploadRefusal = { code: "invalid" | "too-large"; message: string };
+type UploadRefusal = { code: "invalid" | "too-large"; message: string };
 
 /**
  * Reads the body up to `limits.maxBytes` and stops: a declared or actual size over the limit is
