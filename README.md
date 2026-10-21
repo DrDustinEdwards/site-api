@@ -112,6 +112,7 @@ Additive: every v0.3.0 route and body is unchanged, and the schema hash and pack
 - **Optional per site.** An adapter that lacks `setAlt`, `setTags`, or `trash` with `restore` answers that route `501 not-implemented` whatever the body says, and `meta.capabilities` carries `mediaAlt`, `mediaTags` and `mediaTrash` only where true. A bulk op needs the matching adapter methods (`delete` needs only the delete every media site has).
 - **Folders are not in the contract.** dustinedwards.info's media table has no folder column and its keys are content-addressed, so there is nothing for a folder route to edit. Tags carry the organising.
 - **Conformance** adds, under `probeWrites`: each write on the probe id (`404` where the capability is declared, `501` where not), a malformed alt body, a bulk trash whose one unknown file must come back as that file's own `not-found` inside a `200`, a bulk tag op with no tags, and an empty-trash body outside the contract. It never trashes, restores, tags or deletes a real file.
+
 ## Changes in v0.5.0
 
 Additive: every v0.4.0 route and body is unchanged, and the schema hash and package version move on purpose. A test (`test/contract-v0.4.0.test.ts`, against `test/fixtures/contract-v0.4.0.json` written from the v0.4.0 build) holds every v0.4.0 route and schema identical, except `Capabilities` and `Meta`, which gain one optional property.
@@ -265,15 +266,4 @@ npm run typecheck
 npm test
 ```
 
-Tests run locally, with no Actions minutes. The planted tests send a request each guard must refuse, and each also checks that the adapter never ran:
-
-- `test/planted.test.ts`: the key off its prefix, a wrong key, a stale `expectedVersion`, an unknown route.
-- `test/admin.test.ts`: the content kit refusing what the person may not run, a live post for someone who may not publish, a stale Undo, a first publication by Undo, an id that could not be a post, a host's hold, a media delete outside the trash, and an upload over the site's limits, each before the site is asked.
-- `test/media.test.ts`: a file a post uses (refused with the post named), an oversized or undeclared upload, bytes that are not their type, an id that climbs out.
-- `test/media-writes.test.ts`: alt, tags, trash, restore, empty trash and bulk, with stale versions, files in use, the 100-file limits and a site without the writes.
-- `test/mentions.test.ts`: a stale version, a missing mention, a site with no mentions, the site's own refusal, a missing key or a bad body for every mentions write, and the sweep route not read as a mention id.
-- `test/content-tags.test.ts`: a stale version, a missing post, a post with no frontmatter and a site without tags, each changing nothing, and a tag, sort or direction outside the contract refused before the adapter.
-- `test/lists.test.ts`: a lens the site does not name, an unknown lens, sort or direction, a search too long and an empty post id, each refused before the adapter.
-- `test/contract-v0.5.0.test.ts`: the v0.5.0 contract unchanged, against `test/fixtures/contract-v0.5.0.json`; only the content tags route, the optional properties it names, the `reset` decision and five new schemas are new.
-- `test/contract-v0.4.0.test.ts`: the v0.4.0 contract unchanged, against `test/fixtures/contract-v0.4.0.json`; the only new routes are v0.5.0's four mentions routes and v0.6.0's content tags route, and the schemas later versions extend gain optional properties only.
-- `test/contract-v0.1.0.test.ts`: the v0.1.0 contract unchanged, against `test/fixtures/contract-v0.1.0.json`, written from the v0.1.0 build. Every v0.1.0 route and schema is identical, except seven schemas that gain optional properties only (`Meta`, `Capabilities` and `ErrorBody` from v0.2.0; `ContentSummary`, `ContentDoc`, `ListQuery` and `ContentList` from v0.6.0).
+CI runs the same on every push. Each `PLANT` test sends a request a guard must refuse and also checks that the adapter never ran; each `test/contract-v*.test.ts` holds an earlier contract unchanged against its fixture in `test/fixtures/`, except for the optional properties later versions add.
