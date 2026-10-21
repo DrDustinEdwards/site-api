@@ -104,7 +104,7 @@ export function changeId(): string {
 }
 
 export function logOf(source: ContentSource) {
-  return source.log ?? ((entry: Record<string, unknown>) => console.error(JSON.stringify(entry)));
+  return (entry: Record<string, unknown>) => (source.log ? source.log(entry) : console.error(JSON.stringify(entry)));
 }
 
 /** Records one done item. A record that cannot be written is said in the outcome, never hidden. */

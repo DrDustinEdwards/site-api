@@ -94,8 +94,7 @@ describe("the v0.5.0 contract", () => {
     expect(contract.MentionDecideInput.safeParse({ decision: "approve", expectedVersion: "m1", changeId: "c1" }).success).toBe(true);
   });
 
-  it("changes the schema hash on purpose, and moves the package version to 0.6.0", async () => {
+  it("changes the schema hash on purpose", async () => {
     expect(await contract.schemaHash()).not.toBe(V050.schemaHash);
-    expect(contract.PACKAGE_VERSION).toBe("0.6.0");
   });
 });

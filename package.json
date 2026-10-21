@@ -1,6 +1,6 @@
 {
   "name": "@dustinedwards/site-api",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "private": true,
   "description": "The standard site API every Dustin Edwards site includes so Carrel can list, edit and publish its content.",
   "license": "MIT",
@@ -41,7 +41,8 @@
     "build": "tsc -p tsconfig.build.json",
     "prepare": "npm run build",
     "typecheck": "tsc -p tsconfig.json",
-    "test": "vitest run"
+    "test": "vitest run",
+    "lint:promises": "oxlint --type-aware --tsconfig tsconfig.json src"
   },
   "dependencies": {
     "@dustinedwards/site-runtime": "github:DrDustinEdwards/site-runtime#v0.7.0",
@@ -51,6 +52,8 @@
   "devDependencies": {
     "@types/node": "22.20.0",
     "@vitest/coverage-v8": "4.1.11",
+    "oxlint": "1.87.0",
+    "oxlint-tsgolint": "7.0.2003",
     "typescript": "5.9.3",
     "vitest": "4.1.11"
   }

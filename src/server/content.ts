@@ -120,13 +120,12 @@ export function contentRoutes(adapter: SiteAdapter): Route[] {
       pattern: new RegExp(`^/content/${ID}/tags$`),
       run: async (m, _u, request) => {
         const contentId = id(m);
-        const setTags = adapter.content.setTags;
-        if (!setTags) return fail("not-implemented", "This site does not keep tags on posts through the API.");
+        if (!adapter.content.setTags) return fail("not-implemented", "This site does not keep tags on posts through the API.");
         const input = await readBody(request, ContentTagsInput);
         // One spelling per tag: the first one given wins, so "News" and "news" are one tag.
         const seen = new Set<string>();
         const tags = input.tags.filter((t) => !seen.has(t.toLowerCase()) && seen.add(t.toLowerCase()));
-        return json(200, checked(WriteResult, await setTags.call(adapter.content, contentId, { ...input, tags }), "content tags"));
+        return json(200, checked(WriteResult, await adapter.content.setTags(contentId, { ...input, tags }), "content tags"));
       },
     },
     {

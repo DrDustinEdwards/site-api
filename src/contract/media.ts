@@ -111,6 +111,8 @@ export const MediaList = z.object({
  * no base64, so a file costs its own size and no more.
  */
 export const MediaUploadQuery = z.object({
+  // A file name may not hold control characters, on purpose.
+  // oxlint-disable-next-line no-control-regex
   filename: z.string().min(1).max(200).regex(/^[^/\\\u0000-\u001f]+$/, "A file name, with no path"),
   alt: z.string().max(2000).default(""),
   changeId: ChangeId,
