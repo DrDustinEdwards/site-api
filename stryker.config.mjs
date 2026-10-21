@@ -4,9 +4,9 @@ import process from "node:process";
 
 const ALL = ["src/**/*.ts"];
 const CHUNKS = {
-  contract: ["src/contract.ts"],
-  server: ["src/server.ts"],
-  admin: ["src/admin.ts"],
+  contract: ["src/contract.ts", "src/contract/**/*.ts"],
+  server: ["src/server.ts", "src/server/**/*.ts"],
+  admin: ["src/admin.ts", "src/admin/**/*.ts"],
 };
 CHUNKS.rest = [...ALL, ...Object.values(CHUNKS).flat().map((glob) => `!${glob}`)];
 
