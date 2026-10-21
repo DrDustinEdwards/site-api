@@ -24,7 +24,8 @@ const KEY = /^([A-Za-z_][\w-]*):(.*)$/;
 
 function blocks(front: string): Block[] {
   const out: Block[] = [];
-  for (const line of front.split("\n")) {
+  // A CRLF source reads like an LF one: a key line with a CR on it is still a key line.
+  for (const line of front.split(/\r?\n/)) {
     const m = KEY.exec(line);
     if (m) out.push({ key: m[1]!, lines: [line] });
     else if (out.length > 0) out[out.length - 1]!.lines.push(line);
@@ -86,7 +87,16 @@ export function tagsOf(front: string | null): string[] {
  * written as `tags: []`, not removed. A list in block form comes back in flow form.
  */
 export function setTags(front: string, tags: string[]): string {
-  return setRawKey(front, "tags", `[${tags.join(", ")}]`);
+  return setRawKey(front, "tags", `[${tags.map(tagItem).join(", ")}]`);
+}
+
+/** YAML 1.1 reads these plain words as booleans or null, not as the tag. */
+const YAML_WORDS = /^(y|n|yes|no|true|false|on|off|null|~)$/i;
+
+/** A tag as a flow-list item: bare when YAML reads it back as the same string, double-quoted otherwise. */
+function tagItem(tag: string): string {
+  const plain = /^[A-Za-z][\w .+/-]*$/.test(tag) && !/\s$/.test(tag) && !YAML_WORDS.test(tag);
+  return plain ? tag : JSON.stringify(tag);
 }
 
 /** The frontmatter with a top-level key set to a raw value (`draft: true`), added at the end when absent. Every other block is returned as it was. */
@@ -100,6 +110,8 @@ export function setRawKey(front: string, key: string, raw: string): string {
  * as it was, and every other block is returned as it was.
  */
 export function setBlock(front: string, key: string, lines: string[]): string {
+  // Edited as LF and written back in the source's own line ending.
+  const crlf = front.includes("\r\n");
   const all = blocks(front);
   const at = all.findIndex((b) => b.key === key);
   if (at >= 0) {
@@ -112,5 +124,5 @@ export function setBlock(front: string, key: string, lines: string[]): string {
   } else {
     return front;
   }
-  return all.flatMap((b) => b.lines).join("\n");
+  return all.flatMap((b) => b.lines).join(crlf ? "\r\n" : "\n");
 }

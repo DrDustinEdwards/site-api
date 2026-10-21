@@ -170,6 +170,25 @@ describe("PLANT: an upload the site does not accept", () => {
     expect(calls).not.toHaveBeenCalled();
   });
 
+  it("refuses an SVG that would run script on the site, and keeps a plain one", async () => {
+    const { adapter, calls } = spied();
+    const { api } = site(adapter);
+    for (const svg of [
+      '<svg onload="alert(1)"><script>alert(1)</script></svg>',
+      '<svg xmlns="http://www.w3.org/2000/svg"><rect onclick="x()"/></svg>',
+      '<svg xmlns="http://www.w3.org/2000/svg"><a href="javascript:alert(1)"><text>x</text></a></svg>',
+      '<svg xmlns="http://www.w3.org/2000/svg"><a href="&#106;avascript:alert(1)"/></svg>',
+      '<svg xmlns="http://www.w3.org/2000/svg"><foreignObject><iframe src="/x"/></foreignObject></svg>',
+    ]) {
+      const response = await api.handle(upload(new TextEncoder().encode(svg), "image/svg+xml", "x.svg"));
+      expect(response.status, svg).toBe(400);
+      expect((await response.json()).message, svg).toContain("holds script");
+    }
+    expect(calls).not.toHaveBeenCalled();
+    const plain = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><a href="#top"><rect width="10" height="10"/></a></svg>';
+    expect((await api.handle(upload(new TextEncoder().encode(plain), "image/svg+xml", "x.svg"))).status).toBe(201);
+  });
+
   it("refuses an empty file, and a file name carrying a path", async () => {
     const { adapter, calls } = spied();
     const { api } = site(adapter);

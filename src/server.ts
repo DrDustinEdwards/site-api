@@ -3,6 +3,8 @@
 // Order is the guard: prefix, then rate limit, then key, then route. A request outside the prefix
 // is never served, whatever key it carries; a request without the key learns nothing about routes.
 
+import { safeEqual } from "@dustinedwards/site-runtime/compare";
+
 import type { SiteAdapter } from "./adapter.js";
 import { PREFIX } from "./contract.js";
 import { contentRoutes } from "./server/content.js";
@@ -34,28 +36,6 @@ export const MIN_KEY_LENGTH = 32;
 
 export function insidePrefix(pathname: string): boolean {
   return pathname === PREFIX || pathname.startsWith(`${PREFIX}/`);
-}
-
-async function sha256(text: string): Promise<Uint8Array> {
-  return new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text)));
-}
-
-/** The Workers runtime's constant-time compare. Node, which runs the tests, has no such method. */
-type TimingSafe = { timingSafeEqual?: (a: Uint8Array, b: Uint8Array) => boolean };
-
-/**
- * Compares digests, not the keys, so the time taken says nothing about the key's length or prefix.
- * Both digests are 32 bytes. The Workers runtime compares them with crypto.subtle.timingSafeEqual
- * (Cloudflare's Workers best practices, "Secret comparison"); where it is missing a loop that
- * visits every byte does the same.
- */
-export async function keysMatch(presented: string, expected: string): Promise<boolean> {
-  const [a, b] = await Promise.all([sha256(presented), sha256(expected)]);
-  const native = (crypto.subtle as TimingSafe).timingSafeEqual;
-  if (native) return native.call(crypto.subtle, a, b);
-  let diff = 0;
-  for (let i = 0; i < a.length; i++) diff |= a[i]! ^ b[i]!;
-  return diff === 0;
 }
 
 function bearer(request: Request): string | null {
@@ -102,7 +82,7 @@ export function createSiteApi(config: SiteApiConfig): SiteApi {
       return fail("not-configured", "The site API is not configured.");
     }
     const presented = bearer(request);
-    if (!presented || !(await keysMatch(presented, expected))) {
+    if (!presented || !(await safeEqual(presented, expected))) {
       log({ siteApi: "refused", reason: presented ? "wrong-key" : "no-key" });
       return fail("unauthorized", "Unauthorized.");
     }

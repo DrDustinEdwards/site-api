@@ -68,7 +68,7 @@ describe("conformance", () => {
     const before = structuredClone(adapter.mentionStore.get(id));
     const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: site(adapter).fetch });
     expect(failing(report)).toEqual([]);
-    expect(report.checks.find((c) => c.name.startsWith("mention decide on a stale"))?.detail).toBe(`409 version-conflict on mention ${id}`);
+    expect(report.checks.find((c) => c.name.startsWith("mention decide on a stale"))?.detail).toBe(`409 version-conflict on mention ${id}, unchanged`);
     expect(adapter.mentionStore.get(id)).toEqual(before);
     expect(adapter.purged).toEqual([]);
   });

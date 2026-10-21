@@ -77,3 +77,18 @@ describe("writes", () => {
     expect(setBlock(parts.front!, "missing", [])).toBe(parts.front);
   });
 });
+
+describe("edge sources", () => {
+  it("reads and writes a CRLF frontmatter as CRLF, without a second key", () => {
+    const front = splitSource("---\r\ntitle: Hello\r\ntags: [old]\r\n---\r\nBody\r\n").front!;
+    expect(readKey(front, "title")).toBe("Hello");
+    expect(setRawKey(front, "title", '"Hi"')).toBe('title: "Hi"\r\ntags: [old]');
+    expect(setTags(front, ["new"])).toBe("title: Hello\r\ntags: [new]");
+  });
+
+  it("quotes a tag that YAML would not read back as the same string", () => {
+    const written = setTags("title: x", ["News", "Field notes", "no", "true", "*", "{", "2026", "c#"]);
+    expect(written).toBe('title: x\ntags: [News, Field notes, "no", "true", "*", "{", "2026", "c#"]');
+    expect(tagsOf(written)).toEqual(["News", "Field notes", "no", "true", "*", "{", "2026", "c#"]);
+  });
+});
