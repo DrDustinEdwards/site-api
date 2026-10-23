@@ -62,7 +62,7 @@ import {
   MentionWriteResult,
 } from "./contract/mentions.js";
 
-export const PACKAGE_VERSION = "0.8.0";
+export const PACKAGE_VERSION = "0.8.1";
 export const PREFIX = "/api/carrel/v1";
 
 export const Capabilities = z.object({
