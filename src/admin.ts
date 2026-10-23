@@ -13,7 +13,6 @@
 
 export { localClient } from "./local.js";
 export type { Permissions, RowNote, ContentSource, Fields, IntentInput, Outcome, IntentResult } from "./admin/kit.js";
-export { MAX_INTENT_ITEMS, PER_PAGE } from "./admin/kit.js";
 export * from "./admin/posts.js";
 export * from "./admin/media.js";
 export * from "./admin/mentions.js";

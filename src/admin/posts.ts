@@ -36,7 +36,7 @@ import {
 
 
 export type PostSort = "updated" | "published" | "title";
-export const POST_SORTS: readonly PostSort[] = ["updated", "published", "title"];
+const POST_SORTS: readonly PostSort[] = ["updated", "published", "title"];
 
 export interface PostQuery {
   q?: string;
@@ -165,11 +165,11 @@ export async function loadPosts(source: ContentSource, query: PostQuery = {}): P
   };
 }
 
-export const POST_INTENTS = ["tag-add", "tag-remove", "duplicate", "unpublish", "republish", "delete"] as const;
+const POST_INTENTS = ["tag-add", "tag-remove", "duplicate", "unpublish", "republish", "delete"] as const;
 export type PostIntent = (typeof POST_INTENTS)[number];
 
 /** A tag as a post's frontmatter list can hold it: one short piece of text with nothing that would break the list. */
-export function cleanPostTag(raw: string): string | null {
+function cleanPostTag(raw: string): string | null {
   const tag = raw.trim();
   return ContentTag.safeParse(tag).success ? tag : null;
 }

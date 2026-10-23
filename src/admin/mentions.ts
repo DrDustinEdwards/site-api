@@ -119,7 +119,7 @@ export async function loadMentions(source: ContentSource, query: MentionsQuery =
   };
 }
 
-export const MENTION_INTENTS = ["approve", "reject", "reset", "delete", "sweep"] as const;
+const MENTION_INTENTS = ["approve", "reject", "reset", "delete", "sweep"] as const;
 export type MentionIntent = (typeof MENTION_INTENTS)[number];
 
 /** Said when the write moved but the site could not clear its cache. */

@@ -152,7 +152,7 @@ export async function loadMedia(source: ContentSource, query: MediaQuery = {}): 
   return { ...base, rows, page, ...(detail !== undefined ? { detail } : {}) };
 }
 
-export const MEDIA_INTENTS = ["upload", "alt", "tags", "tag-add", "tag-remove", "trash", "restore", "delete", "empty-trash"] as const;
+const MEDIA_INTENTS = ["upload", "alt", "tags", "tag-add", "tag-remove", "trash", "restore", "delete", "empty-trash"] as const;
 export type MediaIntent = (typeof MEDIA_INTENTS)[number];
 
 /** A typed list of tags (commas between them) as a tag set: each in the site's spelling, unique, at most 12. */
