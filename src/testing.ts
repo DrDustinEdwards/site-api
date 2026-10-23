@@ -33,7 +33,7 @@ export interface MemoryAdapterOptions {
 }
 
 /** What the reference adapter's sweep keeps, like dustinedwards.info: failed rows 30 days, rejected rows 90. */
-export const MEMORY_MENTION_RETENTION_DAYS = { failed: 30, rejected: 90 } as const;
+const MEMORY_MENTION_RETENTION_DAYS = { failed: 30, rejected: 90 } as const;
 
 /** What the endpoint writes when a stranger sends a mention, for tests to seed the queue with. */
 export interface ReceivedMention {

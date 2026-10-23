@@ -72,7 +72,7 @@ export interface IntentResult {
 }
 
 /** The most items one intent acts on, as the site's own bulk route allows. */
-export const MAX_INTENT_ITEMS = 100;
+const MAX_INTENT_ITEMS = 100;
 export const PER_PAGE = 50;
 
 // ---------- shared plumbing
@@ -103,7 +103,7 @@ export function changeId(): string {
   return crypto.randomUUID();
 }
 
-export function logOf(source: ContentSource) {
+function logOf(source: ContentSource) {
   return (entry: Record<string, unknown>) => (source.log ? source.log(entry) : console.error(JSON.stringify(entry)));
 }
 

@@ -30,9 +30,9 @@ export interface ConformanceReport {
 }
 
 /** An id no site should hold, so the refused write names nothing real. */
-export const PROBE_ID = "carrel-conformance-probe";
+const PROBE_ID = "carrel-conformance-probe";
 /** A media id no site should hold: the refused delete names nothing real. */
-export const MEDIA_PROBE_ID = "carrel-conformance-probe/no-such-file.png";
+const MEDIA_PROBE_ID = "carrel-conformance-probe/no-such-file.png";
 /** A type no site accepts, for the refused upload. */
 const PROBE_TYPE = "application/x-carrel-conformance-probe";
 /** The smallest valid PNG: one transparent pixel. */
@@ -42,7 +42,7 @@ const PROBE_PNG = Uint8Array.from(
 );
 const STALE_VERSION = "carrel-conformance-stale-version";
 /** A mention id no site should hold: the refused mention writes name nothing real. */
-export const MENTION_PROBE_ID = "carrel-conformance-probe";
+const MENTION_PROBE_ID = "carrel-conformance-probe";
 
 export async function runConformance(config: ConformanceConfig): Promise<ConformanceReport> {
   const doFetch = config.fetch ?? fetch;

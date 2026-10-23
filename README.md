@@ -115,7 +115,7 @@ Additive: every v0.3.0 route and body is unchanged, and the schema hash and pack
 
 ## Changes in v0.5.0
 
-Additive: every v0.4.0 route and body is unchanged, and the schema hash and package version move on purpose. A test (`test/contract-v0.4.0.test.ts`, against `test/fixtures/contract-v0.4.0.json` written from the v0.4.0 build) holds every v0.4.0 route and schema identical, except `Capabilities` and `Meta`, which gain one optional property.
+Additive: every v0.4.0 route and body is unchanged, and the schema hash and package version move on purpose. Every v0.4.0 route and schema is identical in v0.5.0, except `Capabilities` and `Meta`, which gain one optional property; `test/contract-v0.5.0.test.ts` holds the v0.5.0 contract, and with it v0.4.0's.
 
 **The mentions group, optional per site.** A site that receives webmentions lets Carrel read and moderate its queue. A site whose adapter has no `mentions` answers every `/mentions` route `501 not-implemented` whatever the request says, and `meta.capabilities.mentions` is absent.
 
