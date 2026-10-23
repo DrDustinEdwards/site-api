@@ -126,3 +126,76 @@ export function setBlock(front: string, key: string, lines: string[]): string {
   }
   return all.flatMap((b) => b.lines).join(crlf ? "\r\n" : "\n");
 }
+
+// The JSON source format: the front matter a site writes for Carrel when it stores its fields in columns,
+// one `key: <JSON literal>` line per field, so a round trip needs no YAML. A text field may also be written
+// unquoted by hand. `jsonSource` is the one reader and writer, given the site's own field list.
+
+export type JsonFieldKind = "text" | "list" | "flag";
+type JsonValue<K extends JsonFieldKind> = K extends "text" ? string | null : K extends "list" ? string[] : boolean;
+export type JsonValues<F extends Record<string, JsonFieldKind>> = { [K in keyof F]?: JsonValue<F[K]> };
+
+export class JsonSourceError extends Error {
+  constructor(readonly problems: string[]) {
+    super(`The front matter cannot be read:\n${problems.map((p) => `- ${p}`).join("\n")}`);
+    this.name = "JsonSourceError";
+  }
+}
+
+/**
+ * A reader and writer for one site's fields. `write` lists the fields that are not undefined, in the
+ * field list's order, and `blankLine` puts an empty line before the body. `read` returns each key the
+ * source has (a key it leaves out is undefined) and the body, and throws JsonSourceError naming every
+ * problem: an unknown, repeated or malformed key, a value of the wrong kind, or a `required` field that
+ * is missing or blank. With no front matter, the whole source is the body, unless a field is required.
+ */
+export function jsonSource<F extends Record<string, JsonFieldKind>>(fields: F, options: { required?: Array<keyof F & string>; blankLine?: boolean } = {}) {
+  const keys = Object.keys(fields) as Array<keyof F & string>;
+  const required = options.required ?? [];
+  return {
+    write(values: JsonValues<F>, body: string): string {
+      const lines = keys.filter((k) => values[k] !== undefined).map((k) => `${k}: ${JSON.stringify(values[k])}`);
+      return `---\n${lines.join("\n")}\n---\n${options.blankLine ? "\n" : ""}${body}`;
+    },
+    read(source: string): { values: JsonValues<F>; body: string } {
+      const { front, body } = splitSource(source);
+      if (front === null) {
+        if (required.length > 0) throw new JsonSourceError(["The source must start with a front matter block between two --- lines."]);
+        return { values: {}, body: source };
+      }
+      const problems: string[] = [];
+      const values: Record<string, unknown> = {};
+      for (const line of front.split(/\r?\n/)) {
+        if (line.trim() === "") continue;
+        const m = KEY.exec(line);
+        const key = m?.[1];
+        if (!m || !key) problems.push(`This front matter line is not "key: value": ${line.slice(0, 80)}`);
+        else if (!Object.hasOwn(fields, key)) problems.push(`${key} is not a field. The fields are ${keys.join(", ")}.`);
+        else if (key in values) problems.push(`${key} appears twice.`);
+        else values[key] = jsonValue(key, fields[key]!, m[2]!.trim(), problems);
+      }
+      for (const key of required) {
+        const v = values[key];
+        if (v === undefined || v === null || (typeof v === "string" && v.trim() === "")) problems.push(`${key} is required.`);
+      }
+      if (problems.length > 0) throw new JsonSourceError(problems);
+      return { values: values as JsonValues<F>, body };
+    },
+  };
+}
+
+function jsonValue(key: string, kind: JsonFieldKind, raw: string, problems: string[]): unknown {
+  if (kind === "text" && !raw.startsWith('"')) return raw === "" || raw === "null" ? null : raw;
+  let value: unknown;
+  try {
+    value = raw === "" || (kind === "list" && raw === "null") ? (kind === "list" ? [] : false) : JSON.parse(raw);
+  } catch {
+    problems.push(`${key}: the value is not valid JSON.`);
+    return undefined;
+  }
+  if (kind === "text" && typeof value === "string") return value;
+  if (kind === "list" && Array.isArray(value) && value.every((t) => typeof t === "string")) return value.map((t) => t.trim()).filter(Boolean);
+  if (kind === "flag" && typeof value === "boolean") return value;
+  problems.push(`${key} must be ${kind === "text" ? "a string" : kind === "list" ? 'a list of strings, such as ["a", "b"]' : "true or false"}.`);
+  return undefined;
+}
