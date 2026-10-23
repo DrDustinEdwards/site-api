@@ -183,6 +183,16 @@ export const CAPABILITIES: Capabilities = {
   publications: false,
 };
 
+/**
+ * A content version made from the fields that identify an item's own content: the first 32 hex
+ * characters of the SHA-256 of their JSON. For a site with no version column; pass the same fields,
+ * in the same order, on every read and write.
+ */
+export async function contentVersion(parts: readonly unknown[]): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(JSON.stringify(parts)));
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("").slice(0, 32);
+}
+
 /** The expectedVersion on a write is not what the site holds. currentVersion null: no such id. */
 export class VersionConflictError extends Error {
   constructor(readonly currentVersion: string | null, message = "The content changed since it was loaded.") {
