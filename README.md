@@ -9,7 +9,7 @@ Each site mounts one handler at `/api/carrel/v1` and implements an adapter over 
 Installed by git tag, never from a registry:
 
 ```sh
-npm install github:DrDustinEdwards/site-api#v0.7.2
+npm install github:DrDustinEdwards/site-api#v0.8.0
 ```
 
 npm builds `dist/` on install through the `prepare` script.
@@ -127,6 +127,10 @@ Additive: every v0.4.0 route and body is unchanged, and the schema hash and pack
 - **Sweep.** `POST /mentions/sweep` with `{ changeId }` removes the failed and rejected mentions past the site's own retention windows (dustinedwards.info: 30 days for failed, 90 for rejected; pending and approved ones never expire) and answers `{ changeId, removed: { failed, rejected } }`. It names no version because it is not about one mention, and the windows are the site's, not the package's.
 - **Versions.** A mention's `version` is opaque, like a content version, and must move whenever its status, its verification or its decision does, and not when another mention changes. A write with a version the site no longer holds is `409 version-conflict` with `currentVersion`; a missing mention is `404`. dustinedwards.info's table has no `updated_at` and no version column, so its adapter derives one: a hash of `status`, `received_at`, `verified_at` and `decided_at` (a re-send resets all three timestamps and the status, an approve or reject sets the status and `decided_at`). It checks the version and then writes with the same values in the `WHERE`, so a change between the check and the write matches no row and is reported as a conflict.
 - **Conformance** adds, for every site: the list in shape (or `501` where the site has no group), writes without the key or with a wrong one refused, a decide and a delete of an id no site holds refused (`404`, or `501` without the group), and, where the site has the group, a decide with a stale version refused on the first real mention, a sweep with no change id refused (`400`, before anything is removed), and an unknown status refused. It never decides, deletes or sweeps anything real.
+
+## Changes in v0.8.0
+
+Additive, no route or schema changes, so the schema hash is the same. `@dustinedwards/site-api/frontmatter` adds `jsonSource` and `JsonSourceError`, the JSON front matter a site writes for Carrel when its fields live in columns (foxhound, germomics, foxing), so each site keeps a field list instead of its own reader and writer.
 
 ## Changes in v0.7.2
 
@@ -272,7 +276,9 @@ Tested once, where it lives: `test/admin.test.ts`, against `memoryAdapter()` thr
 
 ## Frontmatter
 
-`@dustinedwards/site-api/frontmatter` reads and writes a post's YAML frontmatter one top-level block at a time, with no YAML parser, so it runs in a Worker and a browser alike. `splitSource` and `joinSource` cut a source into `open + front + close + body` and back, byte for byte. `readKey`, `readList` and `tagsOf` read a key, a list (flow or block form) and the tags. `setBlock`, `setRawKey` and `setTags` replace one key's block (added at the end when absent; `setBlock` with no lines removes it) and return every other block, comment and unknown key as it was. The content kit's tag and duplicate writes use it. Tested in `test/frontmatter.test.ts`.
+`@dustinedwards/site-api/frontmatter` reads and writes a post's YAML frontmatter one top-level block at a time, with no YAML parser, so it runs in a Worker and a browser alike. `splitSource` and `joinSource` cut a source into `open + front + close + body` and back, byte for byte. `readKey`, `readList` and `tagsOf` read a key, a list (flow or block form) and the tags. `setBlock`, `setRawKey` and `setTags` replace one key's block (added at the end when absent; `setBlock` with no lines removes it) and return every other block, comment and unknown key as it was. The content kit's tag and duplicate writes use it.
+
+`jsonSource(fields, { required, blankLine })` is the other format: a site that keeps a post's fields in columns hands Carrel one `key: <JSON>` line per field. `fields` names each key's kind (`text`, `list` or `flag`) in the order they are written. `write(values, body)` leaves out a value that is `undefined` and writes `null` as `null`. `read(source)` returns the keys the source has and the body, and throws `JsonSourceError` with every problem at once (`problems`): an unknown or repeated key, a line that is not `key: value`, a value of the wrong kind, a required field missing or blank. A text value may be written unquoted by hand; a list is trimmed and empty items dropped. With no front matter the whole source is the body, unless a field is required. Tested in `test/frontmatter.test.ts`.
 
 ## Development
 

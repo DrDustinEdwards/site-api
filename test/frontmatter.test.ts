@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { joinSource, readKey, readList, setBlock, setRawKey, setTags, splitSource, tagsOf } from "../src/frontmatter.js";
+import { JsonSourceError, joinSource, jsonSource, readKey, readList, setBlock, setRawKey, setTags, splitSource, tagsOf } from "../src/frontmatter.js";
 
 const SOURCE = [
   "---",
@@ -90,5 +90,41 @@ describe("edge sources", () => {
     const written = setTags("title: x", ["News", "Field notes", "no", "true", "*", "{", "2026", "c#"]);
     expect(written).toBe('title: x\ntags: [News, Field notes, "no", "true", "*", "{", "2026", "c#"]');
     expect(tagsOf(written)).toEqual(["News", "Field notes", "no", "true", "*", "{", "2026", "c#"]);
+  });
+});
+
+describe("jsonSource", () => {
+  const post = jsonSource({ title: "text", slug: "text", tags: "list", featured: "flag" }, { required: ["title"] });
+
+  it("round-trips its fields as JSON lines and leaves an undefined one out", () => {
+    const source = post.write({ title: 'A "quoted" title', slug: null, tags: ["a", "b"], featured: true }, "Body\n");
+    expect(source).toBe('---\ntitle: "A \\"quoted\\" title"\nslug: null\ntags: ["a","b"]\nfeatured: true\n---\nBody\n');
+    expect(post.read(source)).toEqual({ values: { title: 'A "quoted" title', slug: null, tags: ["a", "b"], featured: true }, body: "Body\n" });
+    expect(jsonSource({ title: "text" }, { blankLine: true }).write({}, "B")).toBe("---\n\n---\n\nB");
+    expect(post.read("---\r\ntitle: Plain words\r\n---\r\n\r\nBody").values).toEqual({ title: "Plain words" });
+  });
+
+  it("names every problem at once", () => {
+    let err: unknown;
+    try {
+      post.read('---\nslug: "x\ntags: "x"\nfeatured: yes\nextra: 1\nslug: "b"\nno colon\n---\nBody');
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toBeInstanceOf(JsonSourceError);
+    expect((err as JsonSourceError).problems).toEqual([
+      "slug: the value is not valid JSON.",
+      'tags must be a list of strings, such as ["a", "b"].',
+      "featured: the value is not valid JSON.",
+      "extra is not a field. The fields are title, slug, tags, featured.",
+      "slug appears twice.",
+      'This front matter line is not "key: value": no colon',
+      "title is required.",
+    ]);
+  });
+
+  it("reads a source without front matter as all body, unless a field is required", () => {
+    expect(jsonSource({ title: "text" }).read("Just a body")).toEqual({ values: {}, body: "Just a body" });
+    expect(() => post.read("Just a body")).toThrow(JsonSourceError);
   });
 });
