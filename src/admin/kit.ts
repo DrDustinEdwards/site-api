@@ -158,9 +158,6 @@ export function summarize(outcomes: Outcome[], done: string, noun: string): stri
   return `${done} ${plural(ok, noun)}; ${left} left as ${left === 1 ? "it was" : "they were"}.`;
 }
 
-/** The old spelling of `summarize`, kept so nothing that imports it breaks. @deprecated */
-export const summarise = summarize; // codespell:ignore
-
 export function result(outcomes: Outcome[], message: string, extra: Partial<IntentResult> = {}): IntentResult {
   return { ok: outcomes.length > 0 && outcomes.every((o) => o.ok), message, outcomes, ...extra };
 }

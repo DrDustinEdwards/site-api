@@ -142,7 +142,7 @@ Additive: every v0.4.0 route and body is unchanged, and the schema hash and pack
 
 ## Changes in v0.9.0
 
-Additive, no route or schema changes. `createSiteApi` takes `onPageChange(paths, request)`, called after a publish, an unpublish, a delete, or a save or tag change to a published item, with that item's public path, so a site tells search engines through Prelum's `submitIndexNow` (below). `handle(request, ctx)` runs it under `ctx.waitUntil`, so Carrel's answer never waits; a failure is logged, never answered. The admin kit's `summarise` is `summarize`, in American spelling; the old name still works. `contentVersion(parts)` returns the first 32 hex characters of the SHA-256 of `JSON.stringify(parts)`, the version germomics, txasm and julieedwards.info each computed with their own copy. A site that switches to it keeps the same versions.
+Additive, no route or schema changes. `createSiteApi` takes `onPageChange(paths, request)`, called after a publish, an unpublish, a delete, or a save or tag change to a published item, with that item's public path, so a site tells search engines through Prelum's `submitIndexNow` (below). `handle(request, ctx)` runs it under `ctx.waitUntil`, so Carrel's answer never waits; a failure is logged, never answered. `contentVersion(parts)` returns the first 32 hex characters of the SHA-256 of `JSON.stringify(parts)`, the version germomics, txasm and julieedwards.info each computed with their own copy. A site that switches to it keeps the same versions.
 
 ## Changes in v0.8.0
 
