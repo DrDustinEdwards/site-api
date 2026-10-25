@@ -26,7 +26,7 @@ import {
   recordDone,
   targetsOf,
   checkCount,
-  summarise,
+  summarize,
   result,
   orNull,
   Conflict,
@@ -315,7 +315,7 @@ export async function runPostsIntent(source: ContentSource, input: IntentInput):
     }
   }
   if (notUndoable > 0) tail += ` A post that was only scheduled has no Undo; schedule it again from the editor.`;
-  return result(all, summarise(all, DONE[intent], "post") + tail, extra);
+  return result(all, summarize(all, DONE[intent], "post") + tail, extra);
 }
 
 const DONE: Record<PostIntent, string> = {

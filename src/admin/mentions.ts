@@ -21,7 +21,7 @@ import {
   recordDone,
   targetsOf,
   checkCount,
-  summarise,
+  summarize,
   result,
   failure,
   eachItem,
@@ -201,7 +201,7 @@ export async function runMentionsIntent(source: ContentSource, input: IntentInpu
     tail = " The mentions were in different states before, so there is no single Undo; change them one at a time to reverse it.";
   }
   if (intent !== "delete" && noUndo > 0) tail += canReset ? "" : " A decision on a waiting mention has no Undo on this site.";
-  return result(all, summarise(all, DONE_MENTIONS[intent], "mention") + tail, extra);
+  return result(all, summarize(all, DONE_MENTIONS[intent], "mention") + tail, extra);
 }
 
 const DECIDED: Record<MentionIntent, string> = { approve: "Approved.", reject: "Rejected.", reset: "Back to waiting.", delete: "Deleted.", sweep: "" };

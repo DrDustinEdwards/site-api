@@ -25,7 +25,19 @@ const api = createSiteApi({
   limiter: env.CARREL_RATE_LIMIT,  // a Workers `ratelimit` binding
 });
 
-if (api.matches(request)) return api.handle(request);
+if (api.matches(request)) return api.handle(request, ctx);
+```
+
+Every Carrel site tells search engines when a page changes, through `onPageChange` and Prelum's `submitIndexNow` (the site serves its key file with Prelum's `keyFileResponse`):
+
+```ts
+import { submitIndexNow } from "@drdustinedwards/site-helpers/indexnow";
+
+const api = createSiteApi({
+  // ...as above
+  onPageChange: (paths, request) =>
+    submitIndexNow({ origin: SITE_ORIGIN, key: INDEXNOW_KEY, urls: paths.map((p) => `${SITE_ORIGIN}${p}`), from: request.url }),
+});
 ```
 
 The guard runs in this order: prefix, rate limit, key, route.
@@ -110,7 +122,7 @@ Additive: every v0.3.0 route and body is unchanged, and the schema hash and pack
 - **Empty trash.** `POST /media/trash/empty` `{ changeId }` deletes for good the trashed files, through the same adapter `delete` and reference check as `DELETE /media/:id`, one at a time. File n is recorded under `<changeId>-<n>`. It answers `{ changeId, deleted, refused, more }`: a file still used stays in the trash and is listed in `refused` with its `usedBy`. At most 100 files go per request; `more: true` means send it again.
 - **Bulk.** `POST /media/bulk` `{ op, tags?, items }`, with `op` one of `trash`, `restore`, `delete`, `add-tags`, `remove-tags` and 1 to 100 items, each `{ id, expectedVersion?, changeId }` with its own change id (`expectedVersion` is required for every op but `delete`). It answers `200 { op, results }` whenever the request was well formed, with one outcome per item in order: `{ ok: true, id, changeId, version? }` or `{ ok: false, id, changeId, error, message, currentVersion?, usedBy? }` with `error` one of `not-found`, `version-conflict`, `refused`, `invalid`, `internal`. One file's refusal never stops the others. The tag ops work from the file's current tags, refused as a version conflict if its version is not the one the caller saw. A malformed request is `400` and runs nothing.
 - **Optional per site.** An adapter that lacks `setAlt`, `setTags`, or `trash` with `restore` answers that route `501 not-implemented` whatever the body says, and `meta.capabilities` carries `mediaAlt`, `mediaTags` and `mediaTrash` only where true. A bulk op needs the matching adapter methods (`delete` needs only the delete every media site has).
-- **Folders are not in the contract.** dustinedwards.info's media table has no folder column and its keys are content-addressed, so there is nothing for a folder route to edit. Tags carry the organising.
+- **Folders are not in the contract.** dustinedwards.info's media table has no folder column and its keys are content-addressed, so there is nothing for a folder route to edit. Tags carry the organizing.
 - **Conformance** adds, under `probeWrites`: each write on the probe id (`404` where the capability is declared, `501` where not), a malformed alt body, a bulk trash whose one unknown file must come back as that file's own `not-found` inside a `200`, a bulk tag op with no tags, and an empty-trash body outside the contract. It never trashes, restores, tags or deletes a real file.
 
 ## Changes in v0.5.0
@@ -128,9 +140,9 @@ Additive: every v0.4.0 route and body is unchanged, and the schema hash and pack
 - **Versions.** A mention's `version` is opaque, like a content version, and must move whenever its status, its verification or its decision does, and not when another mention changes. A write with a version the site no longer holds is `409 version-conflict` with `currentVersion`; a missing mention is `404`. dustinedwards.info's table has no `updated_at` and no version column, so its adapter derives one: a hash of `status`, `received_at`, `verified_at` and `decided_at` (a re-send resets all three timestamps and the status, an approve or reject sets the status and `decided_at`). It checks the version and then writes with the same values in the `WHERE`, so a change between the check and the write matches no row and is reported as a conflict.
 - **Conformance** adds, for every site: the list in shape (or `501` where the site has no group), writes without the key or with a wrong one refused, a decide and a delete of an id no site holds refused (`404`, or `501` without the group), and, where the site has the group, a decide with a stale version refused on the first real mention, a sweep with no change id refused (`400`, before anything is removed), and an unknown status refused. It never decides, deletes or sweeps anything real.
 
-## Unreleased
+## Changes in v0.9.0
 
-Additive, no route or schema changes. `contentVersion(parts)` returns the first 32 hex characters of the SHA-256 of `JSON.stringify(parts)`, the version germomics, txasm and julieedwards.info each computed with their own copy. A site that switches to it keeps the same versions.
+Additive, no route or schema changes. `createSiteApi` takes `onPageChange(paths, request)`, called after a publish, an unpublish, a delete, or a save or tag change to a published item, with that item's public path, so a site tells search engines through Prelum's `submitIndexNow` (below). `handle(request, ctx)` runs it under `ctx.waitUntil`, so Carrel's answer never waits; a failure is logged, never answered. `contentVersion(parts)` returns the first 32 hex characters of the SHA-256 of `JSON.stringify(parts)`, the version germomics, txasm and julieedwards.info each computed with their own copy. A site that switches to it keeps the same versions.
 
 ## Changes in v0.8.0
 

@@ -150,7 +150,7 @@ export function checkCount(total: number, noun: string): IntentResult | null {
 }
 
 /** The message for a whole run: what was done, and how many were left as they were. */
-export function summarise(outcomes: Outcome[], done: string, noun: string): string {
+export function summarize(outcomes: Outcome[], done: string, noun: string): string {
   const ok = outcomes.filter((o) => o.ok).length;
   const left = outcomes.length - ok;
   if (left === 0) return `${done} ${plural(ok, noun)}.`;
