@@ -34,7 +34,7 @@ describe("media lenses and sort (v0.6.0)", () => {
     const { adapter, api } = client({ mediaLenses: false });
     const spy = vi.spyOn(adapter.media!, "list");
     expect((await api.handle(req("/api/carrel/v1/media?lens=no-alt"))).status).toBe(501);
-    for (const q of ["lens=pretty", "sort=colour", "dir=up"]) expect((await api.handle(req(`/api/carrel/v1/media?${q}`))).status, q).toBe(400);
+    for (const q of ["lens=pretty", "sort=hue", "dir=up"]) expect((await api.handle(req(`/api/carrel/v1/media?${q}`))).status, q).toBe(400);
     expect(spy).not.toHaveBeenCalled();
     expect((await api.handle(req("/api/carrel/v1/media"))).status).toBe(200);
   });

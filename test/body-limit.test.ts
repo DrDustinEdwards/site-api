@@ -28,6 +28,6 @@ describe("PLANT: a 10 MB JSON body", () => {
     expect(response.status).toBe(413);
     expect(await response.json()).toMatchObject({ error: "too-large" });
     expect(saved).not.toHaveBeenCalled();
-    expect(sent, "the stream is cancelled, not read to its end").toBeLessThan(10);
+    expect(sent, "the stream is canceled, not read to its end").toBeLessThan(10);
   });
 });

@@ -30,7 +30,7 @@ import {
   recordDone,
   targetsOf,
   checkCount,
-  summarise,
+  summarize,
   result,
   orNull,
   Conflict,
@@ -244,7 +244,7 @@ export async function runMediaIntent(source: ContentSource, input: IntentInput):
   });
   const settled = checks.filter((c) => !c.ok || c.message !== "");
   const all: Outcome[] = [...early, ...settled];
-  if (plan.length === 0) return result(all, summarise(all, MEDIA_DONE[intent], "file"), staleRead ? { conflict: staleRead } : {});
+  if (plan.length === 0) return result(all, summarize(all, MEDIA_DONE[intent], "file"), staleRead ? { conflict: staleRead } : {});
 
   const op = intent === "tag-add" ? "add-tags" : intent === "tag-remove" ? "remove-tags" : intent;
   const sent = plan.map((p) => ({ ...p, changeId: changeId() }));
@@ -289,7 +289,7 @@ export async function runMediaIntent(source: ContentSource, input: IntentInput):
       extra.undo = { intent: intent === "tag-add" ? "tag-remove" : "tag-add", fields: { ids: undoIds, versions: undoVersions, tags: changed[0]!.split(",") } };
     } else tail = " The files changed by different tags, so there is no single Undo; change them one at a time to reverse it.";
   }
-  return result(all, summarise(all, MEDIA_DONE[intent], "file") + tail, extra);
+  return result(all, summarize(all, MEDIA_DONE[intent], "file") + tail, extra);
 }
 
 const MEDIA_DONE: Record<MediaIntent, string> = {

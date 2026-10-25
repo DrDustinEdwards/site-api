@@ -150,13 +150,16 @@ export function checkCount(total: number, noun: string): IntentResult | null {
 }
 
 /** The message for a whole run: what was done, and how many were left as they were. */
-export function summarise(outcomes: Outcome[], done: string, noun: string): string {
+export function summarize(outcomes: Outcome[], done: string, noun: string): string {
   const ok = outcomes.filter((o) => o.ok).length;
   const left = outcomes.length - ok;
   if (left === 0) return `${done} ${plural(ok, noun)}.`;
   if (ok === 0) return `Nothing was changed: ${plural(left, noun)} left as ${left === 1 ? "it was" : "they were"}.`;
   return `${done} ${plural(ok, noun)}; ${left} left as ${left === 1 ? "it was" : "they were"}.`;
 }
+
+/** The old spelling of `summarize`, kept so nothing that imports it breaks. @deprecated */
+export const summarise = summarize; // codespell:ignore
 
 export function result(outcomes: Outcome[], message: string, extra: Partial<IntentResult> = {}): IntentResult {
   return { ok: outcomes.length > 0 && outcomes.every((o) => o.ok), message, outcomes, ...extra };

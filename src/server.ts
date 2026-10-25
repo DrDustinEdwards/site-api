@@ -24,12 +24,24 @@ export interface SiteApiConfig {
   limiter: RateLimiter;
   /** Where refusals and adapter failures are logged. Defaults to console. */
   log?: (entry: Record<string, unknown>) => void;
+  /**
+   * Called after a content write changes what a public page shows: a publish, an unpublish, a delete, or a save or tag
+   * change to a published item, with that item's public path. The site tells search engines here, through Prelum's
+   * `submitIndexNow`, so every Carrel site does it the same way. It runs under the request's `waitUntil` when `handle`
+   * is given one, so Carrel's answer never waits on it, and a failure is logged, never answered.
+   */
+  onPageChange?: (paths: string[], request: Request) => Promise<unknown> | void;
+}
+
+/** The part of a Worker's ExecutionContext the handler uses. */
+export interface WaitUntil {
+  waitUntil(promise: Promise<unknown>): void;
 }
 
 export interface SiteApi {
   /** True when the request's path is inside the prefix. Mount the handler only where this holds. */
   matches(request: Request): boolean;
-  handle(request: Request): Promise<Response>;
+  handle(request: Request, ctx?: WaitUntil): Promise<Response>;
 }
 
 export const MIN_KEY_LENGTH = 32;
@@ -37,6 +49,9 @@ export const MIN_KEY_LENGTH = 32;
 export function insidePrefix(pathname: string): boolean {
   return pathname === PREFIX || pathname.startsWith(`${PREFIX}/`);
 }
+
+// The content writes that can change a public page; a schedule changes nothing until it fires.
+const PAGE_WRITE = /^\/content\/([^/]+)(?:\/(draft|publish|unpublish|tags))?$/;
 
 function bearer(request: Request): string | null {
   const header = request.headers.get("authorization");
@@ -60,7 +75,19 @@ export function createSiteApi(config: SiteApiConfig): SiteApi {
     `^/(${[...(media ? [] : ["media"]), ...(mentions ? [] : ["mentions"]), "inbox", "insight", "publications"].join("|")})(/|$)`,
   );
 
-  async function handle(request: Request): Promise<Response> {
+  // Tells the site which public page a content write changed: after the write, or for a delete from what was live
+  // before it, since a deleted item leaves nothing to read. A draft that was never published has no page to tell about.
+  async function pageOf(id: string): Promise<{ path: string | null; live: boolean }> {
+    const doc = await adapter.content.get(id).catch(() => null);
+    return { path: doc?.path ?? null, live: doc?.status === "published" };
+  }
+
+  async function tellPageChange(id: string, action: string | undefined, before: { path: string | null; live: boolean } | null, request: Request) {
+    const page = before ?? (await pageOf(id));
+    if (page.path && (page.live || action === "unpublish")) await config.onPageChange?.([page.path], request);
+  }
+
+  async function handle(request: Request, ctx?: WaitUntil): Promise<Response> {
     const url = new URL(request.url);
     // The URL parser has already resolved dot segments, so /api/carrel/v1/../admin arrives as /admin.
     if (!insidePrefix(url.pathname)) return fail("not-found", "Not found.");
@@ -98,7 +125,16 @@ export function createSiteApi(config: SiteApiConfig): SiteApi {
     if (!hit) return fail("method-not-allowed", "Method not allowed.");
 
     try {
-      return await hit.route.run(hit.match, url, request);
+      const write = config.onPageChange && request.method !== "GET" ? PAGE_WRITE.exec(path) : null;
+      const id = write ? decodeURIComponent(write[1]!) : "";
+      const before = write && request.method === "DELETE" ? await pageOf(id) : null;
+      const response = await hit.route.run(hit.match, url, request);
+      if (write && response.ok) {
+        const told = tellPageChange(id, write[2], before, request).catch((error) => log({ siteApi: "page-change-failed", error: String(error) }));
+        if (ctx) ctx.waitUntil(told);
+        else await told;
+      }
+      return response;
     } catch (error) {
       const failure = describeFailure(error, log);
       return fail(failure.code, failure.message, {
