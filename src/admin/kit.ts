@@ -60,6 +60,8 @@ export interface Outcome {
   usedBy?: MediaUse[];
   /** The new copy's id, after a duplicate. */
   copyId?: string;
+  /** The version this item's write made, so the screen's next write to it (another field of the same file) sends it. */
+  version?: string;
 }
 
 export interface IntentResult {
@@ -123,7 +125,8 @@ export async function recordDone(source: ContentSource, kind: string, id: string
 
 /**
  * The ids and their versions, as the form sent them: `ids` and, when the person saw them, `versions`
- * in the same order. Unique, each shaped as the site could hold it; anything else is reported, not sent.
+ * in the same order, or each one's own `version:<id>` field (a form with no script cannot line a list
+ * of versions up with the boxes ticked, so each box's version is posted under its id). Unique, each shaped as the site could hold it; anything else is reported, not sent.
  */
 export function targetsOf(
   input: IntentInput,
@@ -138,7 +141,7 @@ export function targetsOf(
   ids.forEach((id, i) => {
     if (seen.has(id)) return;
     seen.add(id);
-    const version = versions[i] ?? "";
+    const version = versions[i] ?? text(input, `version:${id}`);
     if (!shape.safeParse(id).success || (version !== "" && !Version.safeParse(version).success)) invalid.push(id || "(no id)");
     else targets.push({ id, version: version === "" ? null : version, status: statuses[i] || null });
   });

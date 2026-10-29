@@ -160,6 +160,8 @@ Additive: every v0.4.0 route and body is unchanged, and the schema hash and pack
 Additive:
 
 - **`mediaReplaceKeepsSize`**, a new optional capability beside `mediaReplace`: true when the site refuses a replace whose picture is not the size of the one it replaces, because its addresses or pages are sized by the file's own width and height (dustinedwards.info's keys carry `-<w>x<h>`). An adapter says so with `MediaAdapter.replaceKeepsSize: true`; `memoryAdapter({ mediaReplaceKeepsSize: true })` does the same. The content kit's `offers.replaceKeepsSize` carries it, so a screen asks for a file of the same size and saves a crop as a new file instead of in place.
+- **A version per box, for a form with no script.** `runPostsIntent`, `runMediaIntent` and `runMentionsIntent` read each id's version from a `version:<id>` field where `versions` does not give one, so a bulk form with no script (which cannot line a list of versions up with the boxes ticked) posts each box's version under its id. `versions` still wins.
+- **An outcome carries the version its write made** (`Outcome.version`), for the media kit's `alt`, `tags`, `caption`, `focus` and `replace`, so a screen that saves one field after another (Capsomer's autosaving inspector) sends each write on the version the last one made.
 - **The kit's `focus` intent takes `x` and `y`**, each a percent from the top left, as a focal point form with no script posts them, and `clear=yes` to clear it, besides `focus` as `"XxY"`.
 
 ## Changes in v0.10.1

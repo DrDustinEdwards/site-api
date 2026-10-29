@@ -368,7 +368,8 @@ describe("media", () => {
     const a = await upload(client, "a.png");
     const b = await upload(client, "b.png");
     const bTagged = await client.media.setTags(b.id, { tags: ["blue"], expectedVersion: b.version!, changeId: "s1" });
-    const added = await runMediaIntent(source, { intent: "tag-add", ids: [a.id, b.id], versions: [a.version!, bTagged.version], tags: "Blue" });
+    // A form with no script posts each ticked box's version under its own id.
+    const added = await runMediaIntent(source, { intent: "tag-add", ids: [a.id, b.id], [`version:${a.id}`]: a.version!, [`version:${b.id}`]: bTagged.version, "version:unticked.png": "m9", tags: "Blue" });
     expect(added.outcomes).toEqual([
       { id: b.id, ok: true, message: "Already had those tags. Not changed." },
       { id: a.id, ok: true, message: "Tags added." },
@@ -385,6 +386,8 @@ describe("media", () => {
     const a = await upload(client, "a.png");
     const first = await client.media.setTags(a.id, { tags: ["old"], expectedVersion: a.version!, changeId: "s1" });
     const set = await runMediaIntent(source, { intent: "tags", ids: [a.id], versions: [first.version], tags: "new, other" });
+    // The outcome carries the version the write made, so the inspector's next field saves on it.
+    expect(set.outcomes![0]!.version).toBe(adapter.mediaStore.get(a.id)!.item.version);
     expect(adapter.mediaStore.get(a.id)!.item.tags).toEqual(["new", "other"]);
     await runMediaIntent(source, { intent: set.undo!.intent, ...set.undo!.fields });
     expect(adapter.mediaStore.get(a.id)!.item.tags).toEqual(["old"]);
