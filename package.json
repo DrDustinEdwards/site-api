@@ -29,6 +29,10 @@
       "types": "./dist/schedules.d.ts",
       "default": "./dist/schedules.js"
     },
+    "./r2": {
+      "types": "./dist/r2.d.ts",
+      "default": "./dist/r2.js"
+    },
     "./conformance": {
       "types": "./dist/conformance.d.ts",
       "default": "./dist/conformance.js"

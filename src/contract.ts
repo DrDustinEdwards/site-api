@@ -36,13 +36,17 @@ import {
   MediaAltInput,
   MediaBulkInput,
   MediaBulkResult,
+  MediaCaptionInput,
   MediaDeleteQuery,
   MediaDeleteResult,
   MediaDetail,
+  MediaFocusInput,
   MediaItem,
   MediaLens,
   MediaList,
   MediaListQuery,
+  MediaReplaceQuery,
+  MediaReplaceResult,
   MediaTagsInput,
   MediaTrashEmptyInput,
   MediaTrashEmptyResult,
@@ -98,6 +102,12 @@ export const Capabilities = z.object({
    * and a schedule on a live item is refused rather than hiding it.
    */
   scheduledUpdates: z.boolean().optional(),
+  /** True when the site keeps a focal point on files (v0.10.0), `PUT /media/:id/focus`. Absent or false: that route answers 501. */
+  mediaFocus: z.boolean().optional(),
+  /** True when the site keeps a caption on files (v0.10.0), `PUT /media/:id/caption`. Absent or false: that route answers 501. */
+  mediaCaption: z.boolean().optional(),
+  /** True when the site replaces a file's bytes under the same id and address (v0.10.0), `PUT /media/:id/file`. Absent or false: that route answers 501. */
+  mediaReplace: z.boolean().optional(),
 });
 
 export const Meta = z.object({
@@ -146,7 +156,7 @@ export type ErrorBody = z.infer<typeof ErrorBody>;
  * text, tags, trash, restore and empty-trash, and one bulk route that applies any of them to many files.
  * v0.5.0 adds the mentions group: list, decide, delete and sweep, answering 501 for a site whose
  * adapter has no `mentions`. v0.10.0 adds reading and canceling a schedule, 501 for a site whose adapter
- * has no `schedules`.
+ * has no `schedules`, and a file's focal point, caption and replace, each 501 where the adapter lacks it.
  */
 export const ROUTES = [
   { group: "meta", method: "GET", path: "/meta", response: "Meta" },
@@ -170,6 +180,9 @@ export const ROUTES = [
   { group: "media", method: "DELETE", path: "/media/:id", query: "MediaDeleteQuery", response: "MediaDeleteResult" },
   { group: "media", method: "PUT", path: "/media/:id/alt", request: "MediaAltInput", response: "MediaWriteResult" },
   { group: "media", method: "PUT", path: "/media/:id/tags", request: "MediaTagsInput", response: "MediaWriteResult" },
+  { group: "media", method: "PUT", path: "/media/:id/focus", request: "MediaFocusInput", response: "MediaWriteResult" },
+  { group: "media", method: "PUT", path: "/media/:id/caption", request: "MediaCaptionInput", response: "MediaWriteResult" },
+  { group: "media", method: "PUT", path: "/media/:id/file", query: "MediaReplaceQuery", request: "the file's bytes", response: "MediaReplaceResult" },
   { group: "media", method: "POST", path: "/media/:id/trash", request: "MediaTrashInput", response: "MediaWriteResult" },
   { group: "media", method: "POST", path: "/media/:id/restore", request: "MediaTrashInput", response: "MediaWriteResult" },
   { group: "media", method: "POST", path: "/media/trash/empty", request: "MediaTrashEmptyInput", response: "MediaTrashEmptyResult" },
@@ -194,6 +207,7 @@ const HASHED = {
   MentionDeleteResult, MentionSweepInput, MentionSweepResult,
   ContentTagsInput,
   ScheduledUpdate, ScheduleCancelQuery,
+  MediaFocusInput, MediaCaptionInput, MediaReplaceQuery, MediaReplaceResult,
 };
 
 /** JSON with sorted keys, so the hash depends on the contract and not on property order. */

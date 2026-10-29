@@ -13,6 +13,7 @@ import {
   MediaDetail,
   MediaItem,
   MediaList,
+  MediaReplaceResult,
   MediaTrashEmptyResult,
   MediaWriteResult,
   MentionDecideInput,
@@ -30,6 +31,8 @@ import {
   type ListQuery,
   type MediaAltInput,
   type MediaBulkInput,
+  type MediaCaptionInput,
+  type MediaFocusInput,
   type MediaListQuery,
   type MediaTagsInput,
   type MediaTrashEmptyInput,
@@ -150,6 +153,25 @@ export function createSiteClient(config: SiteClientConfig) {
       setTags: (id: string, input: MediaTagsInput) => get(MediaWriteResult, "PUT", `/media/${enc(id)}/tags`, input),
       trash: (id: string, input: MediaTrashInput) => get(MediaWriteResult, "POST", `/media/${enc(id)}/trash`, input),
       restore: (id: string, input: MediaTrashInput) => get(MediaWriteResult, "POST", `/media/${enc(id)}/restore`, input),
+      /**
+       * v0.10.0, each optional per site (`mediaFocus`, `mediaCaption`, `mediaReplace`; 501 without). `focus` is "XxY"
+       * from site-runtime's ./image `focusOf`, or null to clear it.
+       */
+      setFocus: (id: string, input: MediaFocusInput) => get(MediaWriteResult, "PUT", `/media/${enc(id)}/focus`, input),
+      setCaption: (id: string, input: MediaCaptionInput) => get(MediaWriteResult, "PUT", `/media/${enc(id)}/caption`, input),
+      /**
+       * New bytes for a file under the same id and address, in the file's own type. Alt, caption and tags stay; the focal
+       * point is cleared. `sizesNeedPurge` says whether the site's cache may still serve sizes of the old file.
+       */
+      replace: async (id: string, input: { bytes: Uint8Array; contentType: string; filename: string; expectedVersion: string; changeId: string }) =>
+        MediaReplaceResult.parse(
+          await (
+            await call("PUT", `/media/${enc(id)}/file${query({ filename: input.filename, expectedVersion: input.expectedVersion, changeId: input.changeId })}`, undefined, {
+              bytes: input.bytes,
+              contentType: input.contentType,
+            })
+          ).json(),
+        ),
       /** Deletes for good every trashed file the site allows, up to MAX_TRASH_EMPTY; `more` says to send it again. */
       emptyTrash: (input: MediaTrashEmptyInput) => get(MediaTrashEmptyResult, "POST", "/media/trash/empty", input),
       /** One request for many files; every file's outcome is its own, so check each `ok`. */

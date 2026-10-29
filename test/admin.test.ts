@@ -434,6 +434,20 @@ describe("media", () => {
     expect(records).toEqual([expect.objectContaining({ kind: "media-upload" })]);
   });
 
+  it("replaces a file as the Owner only, and sets and clears its focal point (v0.10.0)", async () => {
+    const { adapter, client, source, records } = setup();
+    const a = await upload(client, "a.png");
+    const focused = await runMediaIntent(source, { intent: "focus", ids: [a.id], versions: [a.version!], focus: "0.3x0.6" });
+    expect(focused).toMatchObject({ ok: true, message: "Focal point saved." });
+    const v = adapter.mediaStore.get(a.id)!.item.version!;
+    const file = new File([PNG, new Uint8Array([7])], "a2.png", { type: "image/png" });
+    expect(await runMediaIntent({ ...source, can: EDITOR }, { intent: "replace", ids: [a.id], versions: [v], file })).toEqual({ ok: false, message: "Replacing a file is the Owner's step." });
+    const replaced = await runMediaIntent(source, { intent: "replace", ids: [a.id], versions: [v], file });
+    expect(replaced).toMatchObject({ ok: true, message: expect.stringMatching(/^Replaced\. Every page/) });
+    expect(adapter.mediaStore.get(a.id)!.item).toMatchObject({ focus: null, filename: "a2.png" });
+    expect(records.map((r) => r.kind)).toEqual(["media-focus", "media-replace"]);
+  });
+
   it("refuses what the site does not offer, before asking it", async () => {
     const { client, source } = setup({ mediaWrites: false });
     const a = await upload(client, "a.png");

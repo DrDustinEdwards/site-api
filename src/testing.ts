@@ -1,7 +1,7 @@
 // A reference adapter held in memory: what a conforming site does, small enough to read in one
 // sitting. Carrel's tests run against it, and the conformance suite is proven on it.
 
-import { MediaInUseError, NotFoundError, RefusedError, VersionConflictError, type DueSchedule, type MediaAdapter, type MentionsAdapter, type SchedulesAdapter, type SiteAdapter } from "./adapter.js";
+import { MediaInUseError, NotFoundError, RefusedError, VersionConflictError, type DueSchedule, type MediaAdapter, type MediaReplace, type MentionsAdapter, type SchedulesAdapter, type SiteAdapter } from "./adapter.js";
 import { joinSource, setTags as writeTags, splitSource, tagsOf } from "./frontmatter.js";
 import { LARGE_MEDIA_BYTES, MEDIA_LENSES } from "./contract.js";
 import type { ContentDoc, ContentStatus, ContentSummary, MediaLens, MediaItem, MediaUploadLimits, MediaUse, MentionItem, MentionStatus, Revision, ScheduledUpdate, SiteInfo, WriteResult } from "./contract.js";
@@ -24,7 +24,7 @@ export interface MemoryAdapterOptions {
   contentDelete?: boolean;
   /** false for a site that keeps no post tags through the API (a v0.5.0 site): the tags route then answers 501. On by default. */
   contentTags?: boolean;
-  /** false for a media manager with no alt, tag or trash writes (a v0.2.0 site): those routes then answer 501. On by default. */
+  /** false for a media manager with no alt, tag, trash, focal point, caption or replace writes (a v0.2.0 site): those routes then answer 501. On by default. */
   mediaWrites?: boolean;
   /** false for a media manager with no lenses and no sort (a v0.5.0 site): a lens then answers 501. On by default. */
   mediaLenses?: boolean;
@@ -255,7 +255,7 @@ export function memoryAdapter(
               alt: input.alt,
               uploadedAt: now().toISOString(),
               deletable: true,
-              ...(mediaWrites ? { version: nextMediaVersion(), tags: [], trashedAt: null } : {}),
+              ...(mediaWrites ? { version: nextMediaVersion(), tags: [], trashedAt: null, focus: null, caption: "" } : {}),
             };
             mediaStore.set(id, { item, bytes: input.bytes });
             return item;
@@ -280,6 +280,20 @@ export function memoryAdapter(
                 },
                 async restore(id: string, input: { expectedVersion: string; changeId: string }) {
                   return touchMedia(heldMedia(id, input.expectedVersion), { trashedAt: null });
+                },
+                async setFocus(id: string, input: { focus: string | null; expectedVersion: string; changeId: string }) {
+                  return touchMedia(heldMedia(id, input.expectedVersion), { focus: input.focus });
+                },
+                async setCaption(id: string, input: { caption: string; expectedVersion: string; changeId: string }) {
+                  return touchMedia(heldMedia(id, input.expectedVersion), { caption: input.caption });
+                },
+                // Same id and address, alt, caption and tags kept, the focal point cleared. Nothing is cached in memory,
+                // so no size can be stale.
+                async replace(id: string, input: MediaReplace) {
+                  const stored = heldMedia(id, input.expectedVersion);
+                  stored.bytes = input.bytes;
+                  touchMedia(stored, { filename: input.filename, bytes: input.bytes.byteLength, width: null, height: null, focus: null, uploadedAt: now().toISOString() });
+                  return { item: stored.item, sizesNeedPurge: false };
                 },
               }
             : {}),

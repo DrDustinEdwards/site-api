@@ -17,9 +17,11 @@ const V050 = JSON.parse(readFileSync(new URL("./fixtures/contract-v0.5.0.json", 
   schemas: Record<string, JsonSchema>;
 };
 
-/** Every v0.5.0 schema later versions extend, and exactly the optional properties each adds (v0.10.0: scheduled updates). */
+/** Every v0.5.0 schema later versions extend, and exactly the optional properties each adds (v0.10.0: scheduled updates, and a file's focal point and caption). */
 const ADDED: Record<string, string[]> = {
-  Capabilities: ["contentTags", "mediaLenses", "mentionReset", "scheduledUpdates"],
+  Capabilities: ["contentTags", "mediaCaption", "mediaFocus", "mediaLenses", "mediaReplace", "mentionReset", "scheduledUpdates"],
+  MediaItem: ["caption", "focus"],
+  MediaDetail: ["caption", "focus"],
   Meta: [],
   ContentSummary: ["scheduledUpdate", "tags", "version"],
   ContentDoc: ["scheduledUpdate", "tags"],
@@ -46,10 +48,17 @@ describe("the v0.5.0 contract", () => {
     expect(V050.routes.length).toBe(29);
   });
 
-  it("keeps every v0.5.0 route exactly, and adds only the content tags route and, in v0.10.0, the schedule's read and cancel", () => {
+  it("keeps every v0.5.0 route exactly, and adds only the content tags route and, in v0.10.0, the schedule's read and cancel and the media focus, caption and replace", () => {
     for (const route of V050.routes) expect(contract.ROUTES, JSON.stringify(route)).toContainEqual(route);
     const fresh = contract.ROUTES.filter((r) => !V050.routes.some((old) => JSON.stringify(old) === JSON.stringify(r)));
-    expect(fresh.map((r) => `${r.method} ${r.path}`)).toEqual(["PUT /content/:id/tags", "GET /content/:id/schedule", "DELETE /content/:id/schedule"]);
+    expect(fresh.map((r) => `${r.method} ${r.path}`)).toEqual([
+      "PUT /content/:id/tags",
+      "GET /content/:id/schedule",
+      "DELETE /content/:id/schedule",
+      "PUT /media/:id/focus",
+      "PUT /media/:id/caption",
+      "PUT /media/:id/file",
+    ]);
   });
 
   for (const name of Object.keys(V050.schemas).filter((n) => !(n in ADDED) && n !== WIDENED)) {
@@ -76,7 +85,10 @@ describe("the v0.5.0 contract", () => {
 
   it("adds only the new schemas v0.6.0 and v0.10.0 name", () => {
     const v060 = ["ContentTag", "ContentTagsInput", "ContentTags", "MediaLens", "SortDir"];
-    const v0100 = ["ScheduleCancelQuery", "ScheduledUpdate", "ScheduledUpdateSummary"];
+    const v0100 = [
+      "ScheduleCancelQuery", "ScheduledUpdate", "ScheduledUpdateSummary",
+      "MediaCaption", "MediaCaptionInput", "MediaFocus", "MediaFocusInput", "MediaReplaceQuery", "MediaReplaceResult",
+    ];
     expect(exported.filter((n) => !(n in V050.schemas)).sort()).toEqual([...v060, ...v0100].sort());
   });
 

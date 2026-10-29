@@ -1,5 +1,7 @@
 // The media half of the content kit: MediaLibrary's view data and its intents.
 
+import { focusOf } from "@dustinedwards/site-runtime/image";
+
 import { SiteApiError } from "../client.js";
 import {
   MEDIA_SORTS,
@@ -77,6 +79,10 @@ export interface MediaData {
     delete: boolean;
     /** The lenses the site answers (v0.6.0); empty where it answers none. */
     lenses: MediaLens[];
+    /** v0.10.0: the site keeps a focal point, keeps a caption, and replaces a file's bytes under its own address. */
+    focus: boolean;
+    caption: boolean;
+    replace: boolean;
   };
   can: Permissions;
 }
@@ -111,6 +117,9 @@ function mediaOffers(capabilities: Capabilities): MediaData["offers"] {
     trash: media && capabilities.mediaTrash === true,
     delete: media,
     lenses: media ? [...(capabilities.mediaLenses ?? [])] : [],
+    focus: media && capabilities.mediaFocus === true,
+    caption: media && capabilities.mediaCaption === true,
+    replace: media && capabilities.mediaReplace === true,
   };
 }
 
@@ -152,7 +161,7 @@ export async function loadMedia(source: ContentSource, query: MediaQuery = {}): 
   return { ...base, rows, page, ...(detail !== undefined ? { detail } : {}) };
 }
 
-const MEDIA_INTENTS = ["upload", "alt", "tags", "tag-add", "tag-remove", "trash", "restore", "delete", "empty-trash"] as const;
+const MEDIA_INTENTS = ["upload", "alt", "tags", "tag-add", "tag-remove", "trash", "restore", "delete", "empty-trash", "focus", "caption", "replace"] as const;
 export type MediaIntent = (typeof MEDIA_INTENTS)[number];
 
 /** A typed list of tags (commas between them) as a tag set: each in the site's spelling, unique, at most 12. */
@@ -184,14 +193,18 @@ const EMPTY_ROUNDS = 20;
 export async function runMediaIntent(source: ContentSource, input: IntentInput): Promise<IntentResult> {
   const intent = text(input, "intent") as MediaIntent;
   if (!MEDIA_INTENTS.includes(intent)) return refused("That is not something the media library can do.");
-  const need: keyof Permissions = intent === "delete" || intent === "empty-trash" ? "deleteMedia" : "edit";
-  if (!source.can[need]) return refused(NOT_YOURS[need]);
+  // A replace changes every live page that uses the file and the old bytes are gone, so it is the Owner's, like a delete.
+  const need: keyof Permissions = intent === "delete" || intent === "empty-trash" || intent === "replace" ? "deleteMedia" : "edit";
+  if (!source.can[need]) return refused(intent === "replace" ? "Replacing a file is the Owner's step." : NOT_YOURS[need]);
   const offers = mediaOffers((await source.client.meta()).capabilities);
   if (!offers.media) return refused("This site has no media library.");
   const lacking =
     (intent === "alt" && !offers.alt) ||
     ((intent === "tags" || intent === "tag-add" || intent === "tag-remove") && !offers.tags) ||
-    ((intent === "trash" || intent === "restore" || intent === "empty-trash") && !offers.trash);
+    ((intent === "trash" || intent === "restore" || intent === "empty-trash") && !offers.trash) ||
+    (intent === "focus" && !offers.focus) ||
+    (intent === "caption" && !offers.caption) ||
+    (intent === "replace" && !offers.replace);
   if (lacking) return refused("This site does not offer that.");
 
   if (intent === "upload") return uploadOne(source, input, offers.upload!);
@@ -207,10 +220,14 @@ export async function runMediaIntent(source: ContentSource, input: IntentInput):
     if (!sendable.includes(t)) early.push({ id: t.id, ok: false, message: "The page did not say which version of this file you saw, so nothing was sent. Reload and try again." });
   }
 
-  if (intent === "alt" || intent === "tags") {
+  if (intent === "alt" || intent === "tags" || intent === "focus" || intent === "caption" || intent === "replace") {
     if (sendable.length !== 1 || targets.length !== 1) return result(early, "Choose one file.");
     const file = { id: sendable[0]!.id, version: sendable[0]!.version! };
-    return intent === "alt" ? setAlt(source, file, text(input, "alt")) : setFileTags(source, file, texts(input, "tags"));
+    if (intent === "alt") return setAlt(source, file, text(input, "alt"));
+    if (intent === "tags") return setFileTags(source, file, texts(input, "tags"));
+    if (intent === "focus") return setFocus(source, file, text(input, "focus"));
+    if (intent === "caption") return setCaption(source, file, text(input, "caption"));
+    return replaceFile(source, input, file, offers.upload!);
   }
 
   let tags: string[] = [];
@@ -302,6 +319,9 @@ const MEDIA_DONE: Record<MediaIntent, string> = {
   restore: "Restored",
   delete: "Deleted",
   "empty-trash": "Deleted",
+  focus: "Saved the focal point on",
+  caption: "Saved the caption on",
+  replace: "Replaced",
 };
 
 const MEDIA_DONE_ONE: Record<MediaIntent, string> = {
@@ -314,6 +334,9 @@ const MEDIA_DONE_ONE: Record<MediaIntent, string> = {
   restore: "Restored to the library.",
   delete: "Deleted from the site.",
   "empty-trash": "Deleted from the site.",
+  focus: "Focal point saved.",
+  caption: "Caption saved.",
+  replace: "Replaced.",
 };
 
 /**
@@ -352,6 +375,54 @@ async function setAlt(source: ContentSource, file: { id: string; version: string
     const change = changeId();
     await source.client.media.setAlt(id, { alt: alt.trim().slice(0, 2000), expectedVersion: version, changeId: change });
     return { id, ok: true, message: "Alt text saved." + (await recordDone(source, "media-alt", id, change)) };
+  });
+  return result(outcomes, outcomes[0]!.message, conflict ? { conflict } : {});
+}
+
+/** Sets the point a file's crops are cut around: `focus` is "XxY", each 0 to 1 from the top left, or "" to clear it. */
+async function setFocus(source: ContentSource, file: { id: string; version: string }, raw: string): Promise<IntentResult> {
+  const focus = raw.trim() === "" ? null : focusOf(raw);
+  if (raw.trim() !== "" && focus === null) return refused("That is not a point on the picture.");
+  const { outcomes, conflict } = await eachItem(source, [file], "file", async ({ id, version }) => {
+    const change = changeId();
+    await source.client.media.setFocus(id, { focus, expectedVersion: version, changeId: change });
+    return { id, ok: true, message: (focus ? "Focal point saved." : "Focal point cleared.") + (await recordDone(source, "media-focus", id, change)) };
+  });
+  return result(outcomes, outcomes[0]!.message, conflict ? { conflict } : {});
+}
+
+async function setCaption(source: ContentSource, file: { id: string; version: string }, caption: string): Promise<IntentResult> {
+  const { outcomes, conflict } = await eachItem(source, [file], "file", async ({ id, version }) => {
+    const change = changeId();
+    await source.client.media.setCaption(id, { caption: caption.trim().slice(0, 2000), expectedVersion: version, changeId: change });
+    return { id, ok: true, message: "Caption saved." + (await recordDone(source, "media-caption", id, change)) };
+  });
+  return result(outcomes, outcomes[0]!.message, conflict ? { conflict } : {});
+}
+
+/**
+ * New bytes for one file under its own id and address, checked against the site's limits first as an upload is. Alt,
+ * caption and tags stay; the focal point is cleared. Says so when the site's cache may still serve the old sizes.
+ */
+async function replaceFile(source: ContentSource, input: IntentInput, file: { id: string; version: string }, limits: MediaUploadLimits): Promise<IntentResult> {
+  const upload = fieldOf(input, "file").find((v): v is Blob => typeof v !== "string");
+  if (!upload) return refused("Choose the new file.");
+  const name = (upload as Blob & { name?: string }).name || "upload";
+  const type = upload.type.split(";")[0]!.trim().toLowerCase();
+  if (!limits.types.includes(type)) return refused(`${name} is ${type || "an unknown type"}; this site accepts ${limits.types.map((t) => t.split("/")[1]).join(", ")}.`);
+  if (upload.size > limits.maxBytes) return refused(`${name} is ${megabytes(upload.size)}; this site accepts files up to ${megabytes(limits.maxBytes)}.`);
+  if (upload.size === 0) return refused(`${name} is empty.`);
+  const { outcomes, conflict } = await eachItem(source, [file], "file", async ({ id, version }) => {
+    const change = changeId();
+    const done = await source.client.media.replace(id, {
+      bytes: new Uint8Array(await upload.arrayBuffer()),
+      contentType: type,
+      filename: name.replace(/[/\\]/g, "-").slice(0, 200),
+      expectedVersion: version,
+      changeId: change,
+    });
+    const stale = done.sizesNeedPurge ? " The site's cache may still serve sizes of the old picture until they are purged." : "";
+    return { id, ok: true, message: "Replaced. Every page that uses it shows the new file; set its focal point again if it had one." + stale + (await recordDone(source, "media-replace", id, change)) };
   });
   return result(outcomes, outcomes[0]!.message, conflict ? { conflict } : {});
 }
