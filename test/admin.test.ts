@@ -6,7 +6,9 @@ import { describe, expect, it, vi } from "vitest";
 import {
   loadMedia,
   loadMentions,
+  liveSaveWarning,
   loadPosts,
+  loadScheduledUpdate,
   runMediaIntent,
   runMentionsIntent,
   runPostsIntent,
@@ -247,6 +249,36 @@ describe("posts", () => {
     const unscheduled = await runPostsIntent(source, { intent: "unpublish", ids: ["fresh"] });
     expect(unscheduled.undo).toBeUndefined();
     expect(unscheduled.message).toContain("only scheduled has no Undo");
+  });
+
+  it("shows a live post's scheduled update and its source; reschedule (with Undo) moves only its time, cancel keeps the post live, and a live save warns", async () => {
+    const { client, source } = setup({}, { scheduleHref: (id) => `/edit/${id}/scheduled` });
+    const live = await post(client, "a", "title: A", true);
+    await client.schedule("a", { expectedVersion: live.version, changeId: "s1", source: "---\ntitle: A\n---\nNew body.\n", publishAt: "2030-01-01T09:00:00-06:00" });
+
+    const data = await loadPosts(source);
+    expect(data.offers.scheduledUpdates).toBe(true);
+    expect(data.rows[0]).toMatchObject({ status: "published", scheduledUpdate: { publishAt: "2030-01-01T09:00:00-06:00", href: "/edit/a/scheduled" } });
+    const view = await loadScheduledUpdate(source, "a");
+    expect(view).toMatchObject({ when: "2030-01-01 15:00 UTC", source: "---\ntitle: A\n---\nNew body.\n", live: { href: "https://memory.example/blog/a" } });
+    expect(view!.patch).toContain("+New body.");
+    expect(liveSaveWarning(await client.get("a"))).toContain("2030-01-01 15:00 UTC");
+
+    const tagged = await runPostsIntent(source, { intent: "tag-add", ids: ["a"], tag: "t" });
+    expect(tagged.outcomes![0]!.message).toContain("scheduled update will still replace it");
+
+    const moved = await runPostsIntent(source, { intent: "reschedule", ids: ["a"], publishAt: "2030-02-01T00:00:00Z" });
+    expect(moved).toMatchObject({ ok: true, message: "Rescheduled 1 post." });
+    expect(await client.scheduledUpdate("a")).toMatchObject({ publishAt: "2030-02-01T00:00:00Z", source: "---\ntitle: A\n---\nNew body.\n" });
+    await runPostsIntent(source, { intent: moved.undo!.intent, ...moved.undo!.fields });
+    expect((await client.scheduledUpdate("a")).publishAt).toBe("2030-01-01T09:00:00-06:00");
+    expect((await runPostsIntent(source, { intent: "reschedule", ids: ["a"], publishAt: "soon" })).ok).toBe(false);
+
+    const canceled = await runPostsIntent(source, { intent: "cancel-schedule", ids: ["a"] });
+    expect(canceled.undo).toBeUndefined();
+    expect(await client.get("a")).toMatchObject({ status: "published", scheduledUpdate: null, source: expect.stringContaining("Body of a.") });
+    expect(await loadScheduledUpdate(source, "a")).toBeNull();
+    expect(await runPostsIntent(setup({}, { can: EDITOR }).source, { intent: "cancel-schedule", ids: ["a"] })).toMatchObject({ ok: false });
   });
 
   it("deletes where the site offers it, and refuses on a site that does not, before asking", async () => {
