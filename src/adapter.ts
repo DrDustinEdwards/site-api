@@ -126,7 +126,7 @@ export interface MediaAdapter {
    * is the file's own type. The site keeps alt, caption and tags, clears the focal point (it named a place in the old
    * picture), measures the new picture, moves the version, and answers the item. `sizesNeedPurge` says whether its cache
    * may still serve sizes made from the old bytes: false when its image route keys the cache by the object's etag
-   * (site-runtime ./image 0.28.0 and later), or when it purged them as part of the write. On R2, `replaceObject` from
+   * (site-runtime ./image 0.27.0 and later), or when it purged them as part of the write. On R2, `replaceObject` from
    * `@dustinedwards/site-api/r2` writes the bytes and keeps the object's metadata.
    */
   replace?(id: string, input: MediaReplace): Promise<{ item: MediaItem; sizesNeedPurge: boolean }>;

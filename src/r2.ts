@@ -33,7 +33,7 @@ const RACED = "The file changed on the site while this was being written. Nothin
 /**
  * Sets the object's focal point (customMetadata `focus`, FOCUS_METADATA, in `focusOf`'s spelling), or removes it for
  * null, keeping its bytes and every other metadata field. Answers the object as written; its etag moves, so the
- * image route's cached sizes (keyed by etag from site-runtime 0.28.0) are made afresh around the new point.
+ * image route's cached sizes (keyed by etag from site-runtime 0.27.0) are made afresh around the new point.
  */
 export async function writeFocus(bucket: R2BucketLike, key: string, focus: string | null): Promise<R2ObjectLike> {
   const point = focus === null ? null : focusOf(focus);

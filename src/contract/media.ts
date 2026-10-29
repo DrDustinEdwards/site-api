@@ -207,7 +207,7 @@ export const MediaReplaceResult = MediaItem.extend({
   /**
    * True when the site's cache may still serve sizes made from the old bytes, so they need purging (or wait out their
    * cache lifetime). False when none can be stale: the site's image route keys its cache by the file's etag
-   * (site-runtime ./image 0.28.0 and later) or the site purged them in the write. Either way, a browser that already
+   * (site-runtime ./image 0.27.0 and later) or the site purged them in the write. Either way, a browser that already
    * holds the old file under a long cache lifetime keeps it until that runs out.
    */
   sizesNeedPurge: z.boolean(),
