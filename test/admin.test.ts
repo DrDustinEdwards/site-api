@@ -513,6 +513,8 @@ describe("media", () => {
     expect(readMediaQuery(new URLSearchParams(`inspect=${a.id}&suggest=1&orientation=square&kind=image`))).toEqual({ inspect: a.id, suggest: true, orientation: "square", kind: "image" });
     const plain = await loadMedia(source, { inspect: a.id });
     expect(plain.detail?.suggestions).toBeUndefined();
+    // Rows and the inspected file say which way the picture lies, by the package's orientationOf (v0.13.1).
+    expect([plain.rows[0]?.orientation, plain.detail?.orientation]).toEqual(["square", "square"]);
     expect((await loadMedia(source, { inspect: a.id, suggest: true })).detail?.suggestions).toEqual({ tags: ["dusk"], alt: "A picture of river dusk.", model: "memory-suggester" });
 
     // Someone else, in another admin, changes the file after this page loaded.
