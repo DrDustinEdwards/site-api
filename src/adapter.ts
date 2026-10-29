@@ -87,6 +87,11 @@ export interface MediaAdapter {
    * and says so in the answer's `sorted`. The package answers a lens not named here with 501.
    */
   lenses?: readonly MediaLens[];
+  /**
+   * Optional (v0.11.0): true when `replace` refuses new bytes whose picture is not the old one's size (RefusedError),
+   * because the site's addresses or pages are sized by it. The package says so in capabilities.mediaReplaceKeepsSize.
+   */
+  replaceKeepsSize?: boolean;
   list(query: MediaListQuery): Promise<MediaList>;
   /** The file and every place it is used. null when the id does not exist. */
   get(id: string): Promise<MediaDetail | null>;
@@ -254,6 +259,7 @@ export function capabilitiesOf(adapter: SiteAdapter): Capabilities {
     ...(adapter.media?.setFocus ? { mediaFocus: true } : {}),
     ...(adapter.media?.setCaption ? { mediaCaption: true } : {}),
     ...(adapter.media?.replace ? { mediaReplace: true } : {}),
+    ...(adapter.media?.replace && adapter.media.replaceKeepsSize ? { mediaReplaceKeepsSize: true } : {}),
     ...(adapter.mentions ? { mentions: true } : {}),
     ...(adapter.mentions?.reset ? { mentionReset: true } : {}),
     ...(adapter.schedules ? { scheduledUpdates: true } : {}),

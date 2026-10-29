@@ -83,6 +83,8 @@ export interface MediaData {
     focus: boolean;
     caption: boolean;
     replace: boolean;
+    /** v0.11.0: a replace must keep the picture's size (capabilities.mediaReplaceKeepsSize), so a crop is saved as a new file. */
+    replaceKeepsSize: boolean;
   };
   can: Permissions;
 }
@@ -120,6 +122,7 @@ function mediaOffers(capabilities: Capabilities): MediaData["offers"] {
     focus: media && capabilities.mediaFocus === true,
     caption: media && capabilities.mediaCaption === true,
     replace: media && capabilities.mediaReplace === true,
+    replaceKeepsSize: media && capabilities.mediaReplace === true && capabilities.mediaReplaceKeepsSize === true,
   };
 }
 
@@ -225,7 +228,7 @@ export async function runMediaIntent(source: ContentSource, input: IntentInput):
     const file = { id: sendable[0]!.id, version: sendable[0]!.version! };
     if (intent === "alt") return setAlt(source, file, text(input, "alt"));
     if (intent === "tags") return setFileTags(source, file, texts(input, "tags"));
-    if (intent === "focus") return setFocus(source, file, text(input, "focus"));
+    if (intent === "focus") return setFocus(source, file, focusField(input));
     if (intent === "caption") return setCaption(source, file, text(input, "caption"));
     return replaceFile(source, input, file, offers.upload!);
   }
@@ -373,10 +376,26 @@ async function uploadOne(source: ContentSource, input: IntentInput, limits: Medi
 async function setAlt(source: ContentSource, file: { id: string; version: string }, alt: string): Promise<IntentResult> {
   const { outcomes, conflict } = await eachItem(source, [file], "file", async ({ id, version }) => {
     const change = changeId();
-    await source.client.media.setAlt(id, { alt: alt.trim().slice(0, 2000), expectedVersion: version, changeId: change });
-    return { id, ok: true, message: "Alt text saved." + (await recordDone(source, "media-alt", id, change)) };
+    const written = await source.client.media.setAlt(id, { alt: alt.trim().slice(0, 2000), expectedVersion: version, changeId: change });
+    return { id, ok: true, version: written.version, message: "Alt text saved." + (await recordDone(source, "media-alt", id, change)) };
   });
   return result(outcomes, outcomes[0]!.message, conflict ? { conflict } : {});
+}
+
+/**
+ * The focal point a form posted: `clear=yes` clears it; `x` and `y`, each a percent from the top left, are what a form
+ * with no script sends (MediaLibrary's focal point); otherwise `focus` as "XxY". "" clears it.
+ */
+function focusField(input: IntentInput): string {
+  if (text(input, "clear") === "yes") return "";
+  const x = text(input, "x").trim();
+  const y = text(input, "y").trim();
+  if (x === "" && y === "") return text(input, "focus");
+  const part = (v: string) => {
+    const n = Number(v);
+    return v !== "" && n >= 0 && n <= 100 ? String(Math.round(n * 10) / 1000) : "bad";
+  };
+  return `${part(x)}x${part(y)}`;
 }
 
 /** Sets the point a file's crops are cut around: `focus` is "XxY", each 0 to 1 from the top left, or "" to clear it. */
@@ -385,8 +404,8 @@ async function setFocus(source: ContentSource, file: { id: string; version: stri
   if (raw.trim() !== "" && focus === null) return refused("That is not a point on the picture.");
   const { outcomes, conflict } = await eachItem(source, [file], "file", async ({ id, version }) => {
     const change = changeId();
-    await source.client.media.setFocus(id, { focus, expectedVersion: version, changeId: change });
-    return { id, ok: true, message: (focus ? "Focal point saved." : "Focal point cleared.") + (await recordDone(source, "media-focus", id, change)) };
+    const written = await source.client.media.setFocus(id, { focus, expectedVersion: version, changeId: change });
+    return { id, ok: true, version: written.version, message: (focus ? "Focal point saved." : "Focal point cleared.") + (await recordDone(source, "media-focus", id, change)) };
   });
   return result(outcomes, outcomes[0]!.message, conflict ? { conflict } : {});
 }
@@ -394,8 +413,8 @@ async function setFocus(source: ContentSource, file: { id: string; version: stri
 async function setCaption(source: ContentSource, file: { id: string; version: string }, caption: string): Promise<IntentResult> {
   const { outcomes, conflict } = await eachItem(source, [file], "file", async ({ id, version }) => {
     const change = changeId();
-    await source.client.media.setCaption(id, { caption: caption.trim().slice(0, 2000), expectedVersion: version, changeId: change });
-    return { id, ok: true, message: "Caption saved." + (await recordDone(source, "media-caption", id, change)) };
+    const written = await source.client.media.setCaption(id, { caption: caption.trim().slice(0, 2000), expectedVersion: version, changeId: change });
+    return { id, ok: true, version: written.version, message: "Caption saved." + (await recordDone(source, "media-caption", id, change)) };
   });
   return result(outcomes, outcomes[0]!.message, conflict ? { conflict } : {});
 }
@@ -422,7 +441,7 @@ async function replaceFile(source: ContentSource, input: IntentInput, file: { id
       changeId: change,
     });
     const stale = done.sizesNeedPurge ? " The site's cache may still serve sizes of the old picture until they are purged." : "";
-    return { id, ok: true, message: "Replaced. Every page that uses it shows the new file; set its focal point again if it had one." + stale + (await recordDone(source, "media-replace", id, change)) };
+    return { id, ok: true, ...(done.version ? { version: done.version } : {}), message: "Replaced. Every page that uses it shows the new file; set its focal point again if it had one." + stale + (await recordDone(source, "media-replace", id, change)) };
   });
   return result(outcomes, outcomes[0]!.message, conflict ? { conflict } : {});
 }
@@ -438,7 +457,7 @@ async function setFileTags(source: ContentSource, file: { id: string; version: s
     const change = changeId();
     const written = await source.client.media.setTags(id, { tags: parsed.tags, expectedVersion: version, changeId: change });
     undo = { intent: "tags", fields: { ids: [id], versions: [written.version], tags: (detail.tags ?? []).join(", ") } };
-    return { id, ok: true, message: "Tags saved." + (await recordDone(source, "media-tags", id, change)) };
+    return { id, ok: true, version: written.version, message: "Tags saved." + (await recordDone(source, "media-tags", id, change)) };
   });
   return result(outcomes, outcomes[0]!.message, { ...(conflict ? { conflict } : {}), ...(undo ? { undo } : {}) });
 }

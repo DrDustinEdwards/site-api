@@ -28,6 +28,8 @@ export interface MemoryAdapterOptions {
   mediaWrites?: boolean;
   /** false for a media manager with no lenses and no sort (a v0.5.0 site): a lens then answers 501. On by default. */
   mediaLenses?: boolean;
+  /** true for a site whose replace refuses a picture of another size, as dustinedwards.info's does (v0.11.0). Off by default. */
+  mediaReplaceKeepsSize?: boolean;
   /** false for a mentions group that ignores q and targetId (a v0.5.0 site) and so echoes no `filtered`. On by default. */
   mentionFilters?: boolean;
   /** false for a site that does not receive webmentions (its routes then answer 501). On by default. */
@@ -207,6 +209,7 @@ export function memoryAdapter(
       : {
           limits: options.media ?? MEMORY_MEDIA_LIMITS,
           ...(options.mediaLenses === false ? {} : { lenses: MEDIA_LENSES }),
+          ...(options.mediaReplaceKeepsSize ? { replaceKeepsSize: true } : {}),
           async list(query) {
             const needle = query.q?.toLowerCase();
             const lensed = options.mediaLenses !== false;
