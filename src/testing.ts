@@ -1,14 +1,18 @@
 // A reference adapter held in memory: what a conforming site does, small enough to read in one
 // sitting. Carrel's tests run against it, and the conformance suite is proven on it.
 
-import { MediaInUseError, NotFoundError, RefusedError, VersionConflictError, type MediaAdapter, type MentionsAdapter, type SiteAdapter } from "./adapter.js";
+import { MediaInUseError, NotFoundError, RefusedError, VersionConflictError, type DueSchedule, type MediaAdapter, type MentionsAdapter, type SchedulesAdapter, type SiteAdapter } from "./adapter.js";
 import { joinSource, setTags as writeTags, splitSource, tagsOf } from "./frontmatter.js";
 import { LARGE_MEDIA_BYTES, MEDIA_LENSES } from "./contract.js";
-import type { ContentDoc, ContentStatus, ContentSummary, MediaLens, MediaItem, MediaUploadLimits, MediaUse, MentionItem, MentionStatus, Revision, SiteInfo, WriteResult } from "./contract.js";
+import type { ContentDoc, ContentStatus, ContentSummary, MediaLens, MediaItem, MediaUploadLimits, MediaUse, MentionItem, MentionStatus, Revision, ScheduledUpdate, SiteInfo, WriteResult } from "./contract.js";
 
 interface Stored {
   doc: ContentDoc;
   history: Array<{ revision: Revision; source: string }>;
+  /** The update waiting on a live item (v0.10.0), kept beside it as a site's own table would. */
+  pending?: ScheduledUpdate;
+  /** The change that scheduled a scheduled item, which its publish is recorded under. */
+  scheduleChangeId?: string;
 }
 
 export interface MemoryAdapterOptions {
@@ -30,6 +34,8 @@ export interface MemoryAdapterOptions {
   mentions?: boolean;
   /** false for a mentions group with no reset (a v0.5.0 site): a reset then answers 501. On by default. */
   mentionReset?: boolean;
+  /** false for a site with no scheduled updates (a v0.9.0 site): reading and canceling a schedule answer 501. On by default. */
+  schedules?: boolean;
 }
 
 /** What the reference adapter's sweep keeps, like dustinedwards.info: failed rows 30 days, rejected rows 90. */
@@ -103,6 +109,7 @@ export function memoryAdapter(
   const site = options.site ?? { id: "memory", name: "Memory site", origin: "https://memory.example" };
   const now = options.now ?? (() => new Date());
   const store = new Map<string, Stored>();
+  const schedules = options.schedules !== false;
   let counter = 0;
 
   function expect(id: string, expectedVersion: string | null): Stored | undefined {
@@ -115,7 +122,7 @@ export function memoryAdapter(
   function commit(
     id: string,
     previous: Stored | undefined,
-    changes: { source?: string; status: ContentStatus; publishAt?: string | null },
+    changes: { source?: string; status: ContentStatus; publishAt?: string | null; pending?: ScheduledUpdate | null; publishedAt?: string },
     changeId: string,
     message: string,
   ): WriteResult {
@@ -130,16 +137,19 @@ export function memoryAdapter(
       status: changes.status,
       path: changes.status === "published" || wasPublished ? `/blog/${id}` : null,
       publishAt: changes.publishAt ?? null,
-      publishedAt: changes.status === "published" ? (wasPublished ?? at) : wasPublished,
+      publishedAt: changes.status === "published" ? (wasPublished ?? changes.publishedAt ?? at) : wasPublished,
       updatedAt: at,
       format: "markdown",
       source,
       version,
     };
+    // Only a live item carries an update, and a write that does not name one keeps what was waiting.
+    const pending = changes.status !== "published" ? undefined : changes.pending === undefined ? previous?.pending : (changes.pending ?? undefined);
+    if (schedules) doc.scheduledUpdate = pending ? { publishAt: pending.publishAt, changeId: pending.changeId } : null;
     const history = previous?.history ?? [];
     history.unshift({ revision: { version, at, author: "carrel", message: `${message} [${changeId}]` }, source });
-    store.set(id, { doc, history });
-    return { id, version, status: doc.status, changeId };
+    store.set(id, { doc, history, ...(pending ? { pending } : {}), ...(changes.status === "scheduled" ? { scheduleChangeId: changeId } : {}) });
+    return { id, version, status: doc.status, changeId, ...(schedules ? { scheduledUpdate: doc.scheduledUpdate } : {}) };
   }
 
   function existing(id: string, expectedVersion: string): Stored {
@@ -387,8 +397,54 @@ export function memoryAdapter(
   // A v0.5.0 mentions group: no way back to pending.
   if (mentionsAdapter && options.mentionReset === false) delete mentionsAdapter.reset;
 
+  const at = (time: string) => Date.parse(time);
+
+  /** The reference schedules group (v0.10.0): the update sits beside the live item until `apply` puts it live. */
+  const schedulesAdapter: SchedulesAdapter = {
+    async get(id) {
+      return store.get(id)?.pending ?? null;
+    },
+    async update(id, input) {
+      const previous = existing(id, input.expectedVersion);
+      if (previous.doc.status !== "published") throw new RefusedError("Only a live post takes a scheduled update.");
+      const pending = { id, source: input.source, publishAt: input.publishAt, changeId: input.changeId, scheduledAt: now().toISOString() };
+      return commit(id, previous, { status: "published", pending }, input.changeId, "Schedule update");
+    },
+    async cancel(id, input) {
+      if (!store.has(id)) throw new NotFoundError();
+      const previous = existing(id, input.expectedVersion);
+      if (previous.pending) return commit(id, previous, { status: "published", pending: null }, input.changeId, "Cancel scheduled update");
+      if (previous.doc.status === "scheduled") return commit(id, previous, { status: "draft" }, input.changeId, "Unschedule");
+      throw new RefusedError("Nothing is scheduled for this post.");
+    },
+    async due({ now: time, limit }) {
+      const due: DueSchedule[] = [];
+      for (const { doc, pending, scheduleChangeId } of store.values()) {
+        if (pending) due.push({ id: doc.id, kind: "update", publishAt: pending.publishAt, changeId: pending.changeId });
+        else if (doc.status === "scheduled" && doc.publishAt) due.push({ id: doc.id, kind: "publish", publishAt: doc.publishAt, changeId: scheduleChangeId ?? "schedule" });
+      }
+      return due
+        .filter((d) => at(d.publishAt) <= time.getTime())
+        .sort((a, b) => at(a.publishAt) - at(b.publishAt) || a.id.localeCompare(b.id))
+        .slice(0, limit);
+    },
+    async apply(id, input) {
+      const previous = store.get(id);
+      if (!previous || at(input.publishAt) > input.now.getTime()) return null;
+      const { doc, pending } = previous;
+      if (input.kind === "update") {
+        if (doc.status !== "published" || !pending || pending.changeId !== input.changeId || at(pending.publishAt) !== at(input.publishAt)) return null;
+        return commit(id, previous, { source: pending.source, status: "published", pending: null }, input.changeId, "Publish scheduled update");
+      }
+      if (doc.status !== "scheduled" || !doc.publishAt || at(doc.publishAt) !== at(input.publishAt)) return null;
+      // A first publication records the time it was scheduled for, not the time the cron ran.
+      return commit(id, previous, { status: "published", publishedAt: new Date(doc.publishAt).toISOString() }, input.changeId, "Publish scheduled");
+    },
+  };
+
   return {
     site,
+    ...(schedules ? { schedules: schedulesAdapter } : {}),
     mentionStore,
     purged,
     receiveMention,
@@ -433,7 +489,8 @@ export function memoryAdapter(
       },
       async publish(id, input) {
         const previous = existing(id, input.expectedVersion);
-        return commit(id, previous, { source: input.source, status: "published" }, input.changeId, "Publish");
+        // A publish now drops any update that was waiting: what goes live is this.
+        return commit(id, previous, { source: input.source, status: "published", pending: null }, input.changeId, "Publish");
       },
       async schedule(id, input) {
         const previous = existing(id, input.expectedVersion);

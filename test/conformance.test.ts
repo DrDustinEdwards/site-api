@@ -17,6 +17,7 @@ describe("conformance", () => {
     expect(report.ok).toBe(true);
     expect(report.checks.map((c) => c.name).slice(11)).toEqual([
       "content tags of an unknown id: refused, or not implemented where the site keeps no tags",
+      "schedule read and cancel of an unknown id: refused, or not implemented where the site has no scheduled updates",
       "media: upload limits declared",
       "media list: answers in the contract's shape",
       "media lenses: each one the site names answers, and one it does not is not implemented",
@@ -44,7 +45,7 @@ describe("conformance", () => {
   it("runs only the content checks on a site with no media manager", async () => {
     const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: site(memoryAdapter({ media: false })).fetch });
     expect(failing(report)).toEqual([]);
-    expect(report.checks).toHaveLength(20);
+    expect(report.checks).toHaveLength(21);
   });
 
   it("expects 501 on a site with no content delete, and 404 where it has one", async () => {

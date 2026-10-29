@@ -1,4 +1,4 @@
-// The content group: list, read, write, revisions, diff, delete, tags and the preview.
+// The content group: list, read, write, scheduled updates, revisions, diff, delete, tags and the preview.
 
 import { z } from "zod";
 import { ChangeId, ContentId, Source, SortDir, Timestamp, Version } from "./base.js";
@@ -14,6 +14,15 @@ export const ContentTags = z.array(ContentTag).max(50);
 /** What a list can be sorted by (v0.6.0). updated and published run newest first unless `dir` says otherwise; title runs A to Z. */
 export const CONTENT_SORTS = ["updated", "published", "title"] as const;
 
+/**
+ * The update waiting on a live item (v0.10.0): its own source replaces the live one at `publishAt`. Until then the
+ * live version is the one served. `changeId` is the change that scheduled it, and the one its publish is recorded under.
+ */
+export const ScheduledUpdateSummary = z.object({
+  publishAt: Timestamp,
+  changeId: ChangeId,
+});
+
 export const ContentSummary = z.object({
   id: ContentId,
   kind: z.string().min(1).max(64),
@@ -28,6 +37,8 @@ export const ContentSummary = z.object({
   version: Version.optional(),
   /** The item's tags (v0.6.0), on a site that keeps them. */
   tags: ContentTags.optional(),
+  /** On a live item, the update scheduled to replace it (v0.10.0); null when none. Absent: the site has no scheduled updates. */
+  scheduledUpdate: ScheduledUpdateSummary.nullable().optional(),
 });
 
 export const ContentDoc = ContentSummary.extend({
@@ -89,6 +100,25 @@ export const WriteResult = z.object({
   id: ContentId,
   version: Version,
   status: ContentStatus,
+  changeId: ChangeId,
+  /** The update still waiting on the item after the write (v0.10.0), null when none, on a site with scheduled updates. */
+  scheduledUpdate: ScheduledUpdateSummary.nullable().optional(),
+});
+
+/** The update waiting on a live item, with its source (v0.10.0): `GET /content/:id/schedule`. */
+export const ScheduledUpdate = ScheduledUpdateSummary.extend({
+  id: ContentId,
+  source: Source,
+  /** When it was scheduled. */
+  scheduledAt: Timestamp,
+});
+
+/**
+ * Canceling a schedule (v0.10.0), sent as a query since a DELETE carries no body. On a live item it drops the waiting
+ * update and the live version stays; on a scheduled item that was never live it returns the item to draft.
+ */
+export const ScheduleCancelQuery = z.object({
+  expectedVersion: Version,
   changeId: ChangeId,
 });
 
@@ -155,6 +185,9 @@ export type PublishInput = z.infer<typeof PublishInput>;
 export type ScheduleInput = z.infer<typeof ScheduleInput>;
 export type UnpublishInput = z.infer<typeof UnpublishInput>;
 export type WriteResult = z.infer<typeof WriteResult>;
+export type ScheduledUpdateSummary = z.infer<typeof ScheduledUpdateSummary>;
+export type ScheduledUpdate = z.infer<typeof ScheduledUpdate>;
+export type ScheduleCancelQuery = z.infer<typeof ScheduleCancelQuery>;
 export type Revision = z.infer<typeof Revision>;
 export type RevisionList = z.infer<typeof RevisionList>;
 export type Diff = z.infer<typeof Diff>;

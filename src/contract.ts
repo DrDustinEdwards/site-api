@@ -26,7 +26,9 @@ import {
   RevisionList,
   RevisionSource,
   SaveDraftInput,
+  ScheduleCancelQuery,
   ScheduleInput,
+  ScheduledUpdate,
   UnpublishInput,
   WriteResult,
 } from "./contract/content.js";
@@ -62,7 +64,7 @@ import {
   MentionWriteResult,
 } from "./contract/mentions.js";
 
-export const PACKAGE_VERSION = "0.9.0";
+export const PACKAGE_VERSION = "0.10.0";
 export const PREFIX = "/api/carrel/v1";
 
 export const Capabilities = z.object({
@@ -90,6 +92,12 @@ export const Capabilities = z.object({
   mentions: z.boolean().optional(),
   /** True when a decision can be taken back to pending (v0.6.0), the `reset` decision. Absent or false: a reset answers 501. */
   mentionReset: z.boolean().optional(),
+  /**
+   * True when a live item can carry a scheduled update (v0.10.0): `GET` and `DELETE /content/:id/schedule`, and a
+   * schedule on a live item that keeps it live until the update replaces it. Absent or false: those routes answer 501,
+   * and a schedule on a live item is refused rather than hiding it.
+   */
+  scheduledUpdates: z.boolean().optional(),
 });
 
 export const Meta = z.object({
@@ -137,7 +145,8 @@ export type ErrorBody = z.infer<typeof ErrorBody>;
  * v0.4.0 adds media writes, each optional per site (501 when the adapter lacks the method): alt
  * text, tags, trash, restore and empty-trash, and one bulk route that applies any of them to many files.
  * v0.5.0 adds the mentions group: list, decide, delete and sweep, answering 501 for a site whose
- * adapter has no `mentions`.
+ * adapter has no `mentions`. v0.10.0 adds reading and canceling a schedule, 501 for a site whose adapter
+ * has no `schedules`.
  */
 export const ROUTES = [
   { group: "meta", method: "GET", path: "/meta", response: "Meta" },
@@ -152,6 +161,8 @@ export const ROUTES = [
   { group: "content", method: "GET", path: "/content/:id/revisions/:version", response: "RevisionSource" },
   { group: "content", method: "DELETE", path: "/content/:id", query: "ContentDeleteQuery", response: "ContentDeleteResult" },
   { group: "content", method: "PUT", path: "/content/:id/tags", request: "ContentTagsInput", response: "WriteResult" },
+  { group: "content", method: "GET", path: "/content/:id/schedule", response: "ScheduledUpdate" },
+  { group: "content", method: "DELETE", path: "/content/:id/schedule", query: "ScheduleCancelQuery", response: "WriteResult" },
   { group: "preview", method: "POST", path: "/preview", request: "PreviewInput", response: "text/html" },
   { group: "media", method: "GET", path: "/media", query: "MediaListQuery", response: "MediaList" },
   { group: "media", method: "POST", path: "/media", query: "MediaUploadQuery", request: "the file's bytes", response: "MediaItem" },
@@ -182,6 +193,7 @@ const HASHED = {
   MentionItem, MentionListQuery, MentionList, MentionDecideInput, MentionWriteResult, MentionDeleteQuery,
   MentionDeleteResult, MentionSweepInput, MentionSweepResult,
   ContentTagsInput,
+  ScheduledUpdate, ScheduleCancelQuery,
 };
 
 /** JSON with sorted keys, so the hash depends on the contract and not on property order. */

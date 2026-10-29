@@ -9,7 +9,7 @@ Each site mounts one handler at `/api/carrel/v1` and implements an adapter over 
 Installed by git tag, never from a registry:
 
 ```sh
-npm install github:DrDustinEdwards/site-api#v0.8.0
+npm install github:DrDustinEdwards/site-api#v0.10.0
 ```
 
 npm builds `dist/` on install through the `prepare` script.
@@ -28,17 +28,27 @@ const api = createSiteApi({
 if (api.matches(request)) return api.handle(request, ctx);
 ```
 
-Every Carrel site tells search engines when a page changes, through `onPageChange` and Prelum's `submitIndexNow` (the site serves its key file with Prelum's `keyFileResponse`):
+Every Carrel site tells search engines when a page changes, through the IndexNow publish hook over Prelum's `submitIndexNow` (the site serves its key file with Prelum's `keyFileResponse`), and applies its schedules from a cron:
 
 ```ts
+import { createSiteApi, indexNowHook } from "@dustinedwards/site-api";
 import { submitIndexNow } from "@drdustinedwards/site-helpers/indexnow";
 
 const api = createSiteApi({
   // ...as above
-  onPageChange: (paths, request) =>
-    submitIndexNow({ origin: SITE_ORIGIN, key: INDEXNOW_KEY, urls: paths.map((p) => `${SITE_ORIGIN}${p}`), from: request.url }),
+  hooks: [indexNowHook({ submit: submitIndexNow, origin: SITE_ORIGIN, key: INDEXNOW_KEY })],
 });
+
+export default {
+  fetch(request, env, ctx) { /* ...as above */ },
+  // wrangler.jsonc: "triggers": { "crons": ["* * * * *"] }
+  scheduled(controller, env, ctx) {
+    ctx.waitUntil(api.runSchedules({ now: new Date(controller.scheduledTime) }));
+  },
+};
 ```
+
+A v0.9.0 site's `onPageChange: (paths, request) => submitIndexNow(...)` still works, and from v0.10.0 it also hears the pages a schedule changes.
 
 The guard runs in this order: prefix, rate limit, key, route.
 
@@ -70,7 +80,9 @@ All paths sit under `/api/carrel/v1`. Bodies are JSON, checked on the way in and
 | content | `GET /content/:id` | | `ContentDoc`: summary, markdown source, version |
 | content | `PUT /content/:id/draft` | `SaveDraftInput` | `WriteResult` |
 | content | `POST /content/:id/publish` | `PublishInput` | `WriteResult` |
-| content | `POST /content/:id/schedule` | `ScheduleInput` | `WriteResult` |
+| content | `POST /content/:id/schedule` | `ScheduleInput` | `WriteResult`; on a live item, a scheduled update (v0.10.0) |
+| content | `GET /content/:id/schedule` | | `ScheduledUpdate`: the update waiting on a live item, with its source (v0.10.0, optional per site) |
+| content | `DELETE /content/:id/schedule?expectedVersion&changeId` | | `WriteResult` (v0.10.0, optional per site) |
 | content | `POST /content/:id/unpublish` | `UnpublishInput` | `WriteResult` |
 | content | `GET /content/:id/revisions` | | `RevisionList`, newest first |
 | content | `GET /content/:id/diff?from&to` | | `Diff`: a unified patch; `to` defaults to current |
@@ -139,6 +151,31 @@ Additive: every v0.4.0 route and body is unchanged, and the schema hash and pack
 - **Sweep.** `POST /mentions/sweep` with `{ changeId }` removes the failed and rejected mentions past the site's own retention windows (dustinedwards.info: 30 days for failed, 90 for rejected; pending and approved ones never expire) and answers `{ changeId, removed: { failed, rejected } }`. It names no version because it is not about one mention, and the windows are the site's, not the package's.
 - **Versions.** A mention's `version` is opaque, like a content version, and must move whenever its status, its verification or its decision does, and not when another mention changes. A write with a version the site no longer holds is `409 version-conflict` with `currentVersion`; a missing mention is `404`. dustinedwards.info's table has no `updated_at` and no version column, so its adapter derives one: a hash of `status`, `received_at`, `verified_at` and `decided_at` (a re-send resets all three timestamps and the status, an approve or reject sets the status and `decided_at`). It checks the version and then writes with the same values in the `WHERE`, so a change between the check and the write matches no row and is reported as a conflict.
 - **Conformance** adds, for every site: the list in shape (or `501` where the site has no group), writes without the key or with a wrong one refused, a decide and a delete of an id no site holds refused (`404`, or `501` without the group), and, where the site has the group, a decide with a stale version refused on the first real mention, a sweep with no change id refused (`400`, before anything is removed), and an unknown status refused. It never decides, deletes or sweeps anything real.
+
+## Changes in v0.10.0
+
+Additive: every v0.9.0 route and body is unchanged, and the schema hash and package version move on purpose. Two new routes, one new optional capability, and optional `scheduledUpdate` on `ContentSummary`, `ContentDoc` and `WriteResult`. One behavior change: a schedule on a live post is refused on a site without scheduled updates, where before the site's own schedule took the post off the site until the time.
+
+**Scheduled updates to a live post, optional per site** (`meta.capabilities.scheduledUpdates`). Modeled on EmDash's scheduled publishing: a published post can carry one pending revision with its own publish time. The live version stays served until then, and at that time the revision replaces it.
+
+| The item | `status` | `scheduledUpdate` | What readers see |
+|---|---|---|---|
+| A draft | `draft` | `null` | nothing |
+| Scheduled, never live | `scheduled` (`publishAt` set) | `null` | nothing until `publishAt` |
+| Live | `published` | `null` | the live version |
+| Live, with an update waiting | `published` | `{ publishAt, changeId }` | the live version until `publishAt`, then the update |
+
+- **Schedule.** `POST /content/:id/schedule` takes the same `ScheduleInput` as before: `{ expectedVersion, changeId, publishAt, source? }`. On a draft or a scheduled item it works as it always has. On a live item it stores an update: `source` (the live source when left out) goes live at `publishAt`, and the item stays `published` and unchanged until then. The answer is `WriteResult` with `status: "published"` and `scheduledUpdate: { publishAt, changeId }`. The item's `version` moves, since the update is part of the item, so the next write sends the new one. A site without the capability refuses a schedule on a live item, `422 refused`, and the post stays live.
+- **Reschedule.** Send the schedule again with the current version: the new `source` and `publishAt` replace the update that was waiting. There is only ever one.
+- **Read.** `GET /content/:id` and the list rows are the live version, with `scheduledUpdate` saying what waits. `GET /content/:id/schedule` answers `ScheduledUpdate` `{ id, source, publishAt, changeId, scheduledAt }`, the waiting revision's own source, for the editor and a preview (`POST /preview` with that source). `404 not-found` when nothing waits, `501` without the capability.
+- **Cancel.** `DELETE /content/:id/schedule?expectedVersion&changeId` answers `WriteResult`. A live item drops its update and stays live (`scheduledUpdate: null`); a scheduled item that was never live returns to `draft`. Nothing scheduled is `422 refused`, a stale version `409`, a missing id `404`, and `501` without the capability.
+- **Other writes.** A publish now drops a waiting update (what goes live is that publish), and so do an unpublish and a delete, so the cron never brings a post back. A save or a tag change to the live post changes the live version and leaves the update waiting; the update's own source replaces the live one when it runs, so Carrel should warn before such a save.
+- **The cron.** `api.runSchedules({ now, limit })` applies every schedule due at `now`, scheduled items and live items' updates alike, oldest first, at most `limit` (50, `SCHEDULE_BATCH_LIMIT`) per pass, and runs the publish hooks for each. The site calls it from `scheduled()` on a one-minute cron (above), so a schedule lands within a minute of its time. Each schedule is its own unit: the adapter applies it only when what it holds still matches what was listed (kind, time and change id), so a cancel, a reschedule or an unpublish in between is skipped, never undone. One that throws is logged (`schedule-failed`) and listed again on the next pass. It answers `{ applied, skipped, failed, more }`; `more: true` means the limit was reached. A scheduled item's first publication records the time it was scheduled for as `publishedAt`, and the publish is recorded under the change id that scheduled it.
+- **The adapter.** `SiteAdapter.schedules` (`SchedulesAdapter` in `src/adapter.ts`): `get`, `update`, `cancel`, `due` and `apply`. Its writes throw the usual errors and move the item's version. A site whose version is a hash of its own fields adds the update's time and change id to them, as `contentVersion` takes any parts.
+- **Storage.** A D1 site keeps updates in one table beside its content, with `@dustinedwards/site-api/schedules`: `SCHEDULED_UPDATES_SQL` is the migration (the site's next `migrations/` file), and `d1ScheduledUpdates(db)` gives `get`, `due`, and `put` and `remove` as statements the site runs in one `db.batch` with its own row's version move. Times are kept in UTC. A site that keeps content elsewhere (dustinedwards.info, in git) stores the update its own way.
+- **Conformance** adds a schedule read and cancel of the probe id: `404` where the site offers scheduled updates, `501` where it does not.
+
+**Publish hooks.** `createSiteApi({ hooks })` takes `PublishHook`s, `{ name, run(event) }`, run when a public page changes: on a publish, an unpublish, a delete of a live item, a save or tag change to a live item, and each schedule `runSchedules` applies. The event is `{ action, id, path, url, trigger, changeId, request? }`: `action` is `publish`, `update`, `unpublish` or `delete`; `trigger` is `request` or `schedule`; `url` is the site's origin and the path. The hooks run together, after the write, under the request's `waitUntil`, so Carrel's answer never waits. A hook that throws or resolves `false` is logged (`hook-failed`, with the hook's name and the event) and the write stands. The first hook is `indexNowHook({ submit, origin, key })`: it sends the changed URL through the `submitIndexNow` the site passes in, Prelum's, so this package holds no copy of it; a request on another origin (a preview) sends nothing.
 
 ## Changes in v0.9.0
 
@@ -224,6 +261,13 @@ interface SiteAdapter {
     setTags?(id: string, input: { tags: string[]; expectedVersion: string; changeId: string }): Promise<WriteResult>; // v0.6.0; omit and the route answers 501
   };
   preview: { render(input: PreviewInput): Promise<string> };
+  schedules?: {                                    // v0.10.0; omit for a site with no scheduled updates to live posts
+    get(id: string): Promise<ScheduledUpdate | null>;
+    update(id: string, input: { source: string; publishAt: string; expectedVersion: string; changeId: string }): Promise<WriteResult>;
+    cancel(id: string, input: { expectedVersion: string; changeId: string }): Promise<WriteResult>;
+    due(input: { now: Date; limit: number }): Promise<DueSchedule[]>;          // { id, kind: "publish" | "update", publishAt, changeId }
+    apply(id: string, input: DueSchedule & { now: Date }): Promise<WriteResult | null>; // null: no longer matches, nothing changed
+  };
   mentions?: {                                     // v0.5.0; omit for a site with no webmentions
     list(query: MentionListQuery): Promise<MentionList>; // items, nextCursor, counts, expiring
     decide(id: string, input: { decision: "approve" | "reject"; expectedVersion: string; changeId: string }): Promise<{ status: MentionStatus; version: string; purged: boolean | null }>;
@@ -257,7 +301,7 @@ An adapter signals refusals by throwing these errors:
 
 The package computes diffs, and serves the source at a revision, from `revisionSource`, so a site only has to return old source. `content.delete` throws `VersionConflictError`, `NotFoundError` or `RefusedError` like the writes.
 
-`@dustinedwards/site-api/testing` exports `memoryAdapter()`, a conforming reference adapter held in memory, media included (its reference check scans each post's source for `/media/<id>`, as dustinedwards.info's does). `memoryAdapter({ media: false })` is a site with no media manager, `memoryAdapter({ contentDelete: false })` one with no content delete, `memoryAdapter({ contentTags: false })` one that keeps no post tags through the API, `memoryAdapter({ mediaWrites: false })` a v0.2.0 media manager with no alt, tag or trash writes, `memoryAdapter({ mediaLenses: false })` one with no lenses and no sort, `memoryAdapter({ mentionFilters: false })` a mentions group that ignores `q` and `targetId`, `memoryAdapter({ mentions: false })` one with no webmentions, and `memoryAdapter({ mentionReset: false })` a v0.5.0 mentions group with no reset. Its files carry a `version` that every metadata write moves. Its mentions are seeded with `adapter.receiveMention({ sourceUrl, targetId, status?, ... })`, as the site's endpoint would write them. Carrel's tests run against it.
+`@dustinedwards/site-api/testing` exports `memoryAdapter()`, a conforming reference adapter held in memory, media included (its reference check scans each post's source for `/media/<id>`, as dustinedwards.info's does). `memoryAdapter({ media: false })` is a site with no media manager, `memoryAdapter({ contentDelete: false })` one with no content delete, `memoryAdapter({ contentTags: false })` one that keeps no post tags through the API, `memoryAdapter({ mediaWrites: false })` a v0.2.0 media manager with no alt, tag or trash writes, `memoryAdapter({ mediaLenses: false })` one with no lenses and no sort, `memoryAdapter({ mentionFilters: false })` a mentions group that ignores `q` and `targetId`, `memoryAdapter({ mentions: false })` one with no webmentions, `memoryAdapter({ mentionReset: false })` a v0.5.0 mentions group with no reset, and `memoryAdapter({ schedules: false })` a v0.9.0 site with no scheduled updates. Its files carry a `version` that every metadata write moves. Its mentions are seeded with `adapter.receiveMention({ sourceUrl, targetId, status?, ... })`, as the site's endpoint would write them. Carrel's tests run against it.
 
 ## Carrel's side
 
@@ -271,7 +315,8 @@ The package computes diffs, and serves the source at a revision, from `revisionS
   - a stale write is refused;
   - on a site that offers media (v0.2.0): the upload limits are declared, the media list answers in shape, a delete of an id no site holds is refused, and an upload of a type no site accepts is refused;
   - on a site that offers media (v0.4.0): each media write is refused on the probe id (or answers 501 where the site lacks it), as above under Changes in v0.4.0;
-  - the mentions checks of v0.5.0, listed above under Changes in v0.5.0.
+  - the mentions checks of v0.5.0, listed above under Changes in v0.5.0;
+  - the schedule read and cancel of v0.10.0, listed above under Changes in v0.10.0.
 
   Every write it sends must be refused, so it never changes a conforming site. `probeMediaUpload: true` adds one real round trip: it uploads a 1x1 PNG of its own, reads it back, and deletes that file and no other. It is off by default.
 

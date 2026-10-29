@@ -18,8 +18,8 @@ const V010 = JSON.parse(readFileSync(new URL("./fixtures/contract-v0.1.0.json", 
   schemas: Record<string, JsonSchema>;
 };
 
-/** The schemas later versions extend, by optional properties only: v0.2.0 the first three, v0.6.0 the content list. Every other one must be identical. */
-const EXTENDED = new Set(["Meta", "Capabilities", "ErrorBody", "ContentSummary", "ContentDoc", "ListQuery", "ContentList"]);
+/** The schemas later versions extend, by optional properties only: v0.2.0 the first three, v0.6.0 the content list, v0.10.0 the write result. Every other one must be identical. */
+const EXTENDED = new Set(["Meta", "Capabilities", "ErrorBody", "ContentSummary", "ContentDoc", "ListQuery", "ContentList", "WriteResult"]);
 
 
 describe("the v0.1.0 contract", () => {

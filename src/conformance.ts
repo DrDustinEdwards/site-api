@@ -194,6 +194,20 @@ export async function runConformance(config: ConformanceConfig): Promise<Conform
       if (code !== expected) throw new Error(`error code ${code ?? "missing"}, expected ${expected}`);
       return offered ? "404 not-found" : "501 not-implemented";
     });
+    await check("schedule read and cancel of an unknown id: refused, or not implemented where the site has no scheduled updates", async () => {
+      const path = `${origin}${PREFIX}/content/${PROBE_ID}/schedule`;
+      const offered = (meta as MetaType | null)?.capabilities.scheduledUpdates === true;
+      const expected = offered ? "not-found" : "not-implemented";
+      for (const response of [
+        await doFetch(path, { headers: auth }),
+        await doFetch(`${path}?expectedVersion=${STALE_VERSION}&changeId=conformance-probe`, { method: "DELETE", headers: auth }),
+      ]) {
+        expectStatus(response, offered ? 404 : 501, offered ? "unknown schedule" : "schedule on a site without scheduled updates");
+        const code = await errorCode(response);
+        if (code !== expected) throw new Error(`error code ${code ?? "missing"}, expected ${expected}`);
+      }
+      return offered ? "404 not-found" : "501 not-implemented";
+    });
   }
 
   // ---------- media (v0.2.0), only for a site that offers it

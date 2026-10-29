@@ -17,12 +17,13 @@ const V050 = JSON.parse(readFileSync(new URL("./fixtures/contract-v0.5.0.json", 
   schemas: Record<string, JsonSchema>;
 };
 
-/** Every v0.5.0 schema v0.6.0 extends, and exactly the optional properties it adds to each. */
+/** Every v0.5.0 schema later versions extend, and exactly the optional properties each adds (v0.10.0: scheduled updates). */
 const ADDED: Record<string, string[]> = {
-  Capabilities: ["contentTags", "mediaLenses", "mentionReset"],
+  Capabilities: ["contentTags", "mediaLenses", "mentionReset", "scheduledUpdates"],
   Meta: [],
-  ContentSummary: ["tags", "version"],
-  ContentDoc: ["tags"],
+  ContentSummary: ["scheduledUpdate", "tags", "version"],
+  ContentDoc: ["scheduledUpdate", "tags"],
+  WriteResult: ["scheduledUpdate"],
   ListQuery: ["dir", "sort"],
   ContentList: ["sorted", "total"],
   MediaListQuery: ["dir", "lens", "sort"],
@@ -45,10 +46,10 @@ describe("the v0.5.0 contract", () => {
     expect(V050.routes.length).toBe(29);
   });
 
-  it("keeps every v0.5.0 route exactly, and adds only the content tags route", () => {
+  it("keeps every v0.5.0 route exactly, and adds only the content tags route and, in v0.10.0, the schedule's read and cancel", () => {
     for (const route of V050.routes) expect(contract.ROUTES, JSON.stringify(route)).toContainEqual(route);
     const fresh = contract.ROUTES.filter((r) => !V050.routes.some((old) => JSON.stringify(old) === JSON.stringify(r)));
-    expect(fresh.map((r) => `${r.method} ${r.path}`)).toEqual(["PUT /content/:id/tags"]);
+    expect(fresh.map((r) => `${r.method} ${r.path}`)).toEqual(["PUT /content/:id/tags", "GET /content/:id/schedule", "DELETE /content/:id/schedule"]);
   });
 
   for (const name of Object.keys(V050.schemas).filter((n) => !(n in ADDED) && n !== WIDENED)) {
@@ -73,8 +74,10 @@ describe("the v0.5.0 contract", () => {
     expect(strip(after)).toEqual(strip(before));
   });
 
-  it("adds only the new schemas v0.6.0 names", () => {
-    expect(exported.filter((n) => !(n in V050.schemas)).sort()).toEqual(["ContentTag", "ContentTagsInput", "ContentTags", "MediaLens", "SortDir"].sort());
+  it("adds only the new schemas v0.6.0 and v0.10.0 name", () => {
+    const v060 = ["ContentTag", "ContentTagsInput", "ContentTags", "MediaLens", "SortDir"];
+    const v0100 = ["ScheduleCancelQuery", "ScheduledUpdate", "ScheduledUpdateSummary"];
+    expect(exported.filter((n) => !(n in V050.schemas)).sort()).toEqual([...v060, ...v0100].sort());
   });
 
   it("parses v0.5.0 bodies with the v0.6.0 schemas", () => {

@@ -21,6 +21,7 @@ import type {
   Revision,
   SaveDraftInput,
   ScheduleInput,
+  ScheduledUpdate,
   SiteInfo,
   UnpublishInput,
   WriteResult,
@@ -139,6 +140,52 @@ export interface MentionsAdapter {
   sweep(input: { changeId: string }): Promise<{ failed: number; rejected: number }>;
 }
 
+/** One schedule whose time has come (v0.10.0): a scheduled item to publish, or a live item's update to apply. */
+export interface DueSchedule {
+  id: string;
+  /** publish: a scheduled item that was not live goes live. update: a live item's scheduled update replaces it. */
+  kind: "publish" | "update";
+  publishAt: string;
+  /** The change that made the schedule; the publish is recorded under it. */
+  changeId: string;
+}
+
+/**
+ * Scheduled updates (v0.10.0), optional per site: a live item carries one waiting update with its own source and time.
+ * The live version stays served until then, and at that time the update replaces it. The site stores the update beside
+ * the live item (D1 sites: `d1ScheduledUpdates` from `@dustinedwards/site-api/schedules`). With this group, the site's
+ * cron calls `api.runSchedules()`, which publishes scheduled items as well, and the publish hooks run for each.
+ *
+ * Every write here moves the item's version, since the update is part of what the item is, and throws
+ * VersionConflictError, NotFoundError or RefusedError like the content writes. Elsewhere in the adapter: a publish or an
+ * unpublish of the item drops its waiting update, as does a delete; a save or a tag change to the live item leaves it
+ * waiting, and the update's own source replaces the live one when it runs.
+ */
+export interface SchedulesAdapter {
+  /** The update waiting on a live item, with its source; null when the id does not exist or nothing waits. */
+  get(id: string): Promise<ScheduledUpdate | null>;
+  /**
+   * Stores the update on a live item, replacing any update already waiting (a reschedule). The item stays live and
+   * unchanged. Refuse (RefusedError) an item that is not live: the package sends only live items here.
+   */
+  update(id: string, input: { source: string; publishAt: string; expectedVersion: string; changeId: string }): Promise<WriteResult>;
+  /**
+   * Cancels the schedule. A live item drops its waiting update and stays live; a scheduled item that was never live
+   * returns to draft. Throws NotFoundError for a missing id (checked first), and RefusedError for an item with nothing
+   * scheduled.
+   */
+  cancel(id: string, input: { expectedVersion: string; changeId: string }): Promise<WriteResult>;
+  /** Every schedule due at `now`, scheduled items and live items' updates alike, oldest first, at most `limit`. */
+  due(input: { now: Date; limit: number }): Promise<DueSchedule[]>;
+  /**
+   * Runs one due schedule as one unit: publishes the scheduled item, or puts the update's source live and drops the
+   * update. Only when what the site holds still matches (the same kind, time and change id, and the time has come);
+   * otherwise it changes nothing and returns null, since a cancel, a reschedule or an unpublish got there first. A
+   * scheduled item's first publication records `publishAt` as its `publishedAt`, not the time the cron ran.
+   */
+  apply(id: string, input: DueSchedule & { now: Date }): Promise<WriteResult | null>;
+}
+
 export interface SiteAdapter {
   site: SiteInfo;
   content: ContentAdapter;
@@ -147,6 +194,11 @@ export interface SiteAdapter {
   media?: MediaAdapter;
   /** Absent on a site that does not receive webmentions: the mentions routes then answer 501. */
   mentions?: MentionsAdapter;
+  /**
+   * Absent on a site with no scheduled updates (v0.10.0): reading and canceling a schedule answer 501, and a schedule on
+   * a live item is refused, since the site's own schedule would take it off the site until the time.
+   */
+  schedules?: SchedulesAdapter;
 }
 
 /**
@@ -170,6 +222,7 @@ export function capabilitiesOf(adapter: SiteAdapter): Capabilities {
     ...(adapter.media?.trash && adapter.media.restore ? { mediaTrash: true } : {}),
     ...(adapter.mentions ? { mentions: true } : {}),
     ...(adapter.mentions?.reset ? { mentionReset: true } : {}),
+    ...(adapter.schedules ? { scheduledUpdates: true } : {}),
   };
 }
 
