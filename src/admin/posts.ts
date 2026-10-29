@@ -1,6 +1,8 @@
 // The posts half of the content kit: PostsList's view data and its intents.
 
+import { createTwoFilesPatch } from "diff";
 import { SiteApiError } from "../client.js";
+import { Timestamp } from "../contract/base.js";
 import {
   ContentId,
   ContentTag,
@@ -8,6 +10,7 @@ import {
   type ContentDoc,
   type ContentStatus,
   type ContentSummary,
+  type ScheduledUpdateSummary,
   type SortDir,
 } from "../contract.js";
 import { joinSource, readKey, setRawKey, setTags, splitSource, tagsOf } from "../frontmatter.js";
@@ -22,6 +25,7 @@ import {
   NOT_YOURS,
   text,
   refused,
+  texts,
   changeId,
   recordDone,
   targetsOf,
@@ -59,6 +63,11 @@ export interface PostRow {
   publishAt: string | null;
   publishedAt: string | null;
   updatedAt: string | null;
+  /**
+   * The update scheduled to replace a live post (v0.10.0): when it goes live, and where its source is shown
+   * (`ContentSource.scheduleHref`, else the editor). Absent when nothing waits.
+   */
+  scheduledUpdate?: { publishAt: string; href: string };
   /** Present when the site's list carries it. */
   version?: string;
   tags?: string[];
@@ -77,7 +86,8 @@ export interface PostsData {
   };
   counts?: Partial<Record<ContentStatus | "all", number>>;
   kinds: string[];
-  offers: { delete: boolean; schedule: boolean; tags: boolean; duplicate: boolean };
+  /** `scheduledUpdates` (v0.10.0): the site keeps an update waiting on a live post, so reschedule and cancel work on it. */
+  offers: { delete: boolean; schedule: boolean; tags: boolean; duplicate: boolean; scheduledUpdates: boolean };
   can: Permissions;
 }
 
@@ -113,6 +123,9 @@ function postRow(source: ContentSource, item: ContentSummary & { version?: strin
     publishAt: item.publishAt,
     publishedAt: item.publishedAt,
     updatedAt: item.updatedAt,
+    ...(item.scheduledUpdate
+      ? { scheduledUpdate: { publishAt: item.scheduledUpdate.publishAt, href: source.scheduleHref ? source.scheduleHref(item.id) : source.editorHref(item.id) } }
+      : {}),
     ...(item.version ? { version: item.version } : {}),
     ...(item.tags ? { tags: item.tags } : {}),
   };
@@ -160,12 +173,64 @@ export async function loadPosts(source: ContentSource, query: PostQuery = {}): P
     page: { nextCursor: list.nextCursor, ...(list.total !== undefined ? { total: list.total } : {}), ...(sortedOnPage ? { sortedOnPage } : {}) },
     ...(counts ? { counts } : {}),
     kinds,
-    offers: { delete: meta.capabilities.contentDelete === true, schedule: true, tags: true, duplicate: true },
+    offers: { delete: meta.capabilities.contentDelete === true, schedule: true, tags: true, duplicate: true, scheduledUpdates: meta.capabilities.scheduledUpdates === true },
     can: source.can,
   };
 }
 
-const POST_INTENTS = ["tag-add", "tag-remove", "duplicate", "unpublish", "republish", "delete"] as const;
+/** A time as the kit's messages say it: "2030-01-01 15:00 UTC", the same wherever the host runs. */
+export function scheduleLabel(publishAt: string): string {
+  return `${new Date(publishAt).toISOString().slice(0, 16).replace("T", " ")} UTC`;
+}
+
+/**
+ * The warning before a save to a live post that has an update waiting (v0.10.0): the save changes the live post now,
+ * and the update still replaces the whole post at its time. null when there is nothing to warn about. The editor
+ * shows it before saving; the kit adds it to a tag change's outcome.
+ */
+export function liveSaveWarning(doc: { status: ContentStatus; scheduledUpdate?: ScheduledUpdateSummary | null }): string | null {
+  if (doc.status !== "published" || !doc.scheduledUpdate) return null;
+  return `An update is scheduled for ${scheduleLabel(doc.scheduledUpdate.publishAt)}. Saving changes the live post now, and the scheduled update will still replace it then, without this change. Edit the scheduled update too, or cancel it.`;
+}
+
+/** The update waiting on a live post, with what it changes, for the page that shows its source (v0.10.0). */
+export interface ScheduledUpdateView {
+  id: string;
+  title: string;
+  publishAt: string;
+  /** "2030-01-01 15:00 UTC". */
+  when: string;
+  scheduledAt: string;
+  /** The update's own source, and the live one it replaces, for a side-by-side compare. */
+  source: string;
+  live: { source: string; version: string; href: string | null };
+  /** A unified diff from the live source to the update's. */
+  patch: string;
+  editorHref: string;
+  can: Permissions;
+}
+
+/** The update waiting on one post, or null when nothing waits (or the site keeps no scheduled updates). */
+export async function loadScheduledUpdate(source: ContentSource, id: string): Promise<ScheduledUpdateView | null> {
+  const doc = await orNull(source.client.get(id));
+  if (!doc?.scheduledUpdate) return null;
+  const update = await orNull(source.client.scheduledUpdate(id));
+  if (!update) return null;
+  return {
+    id,
+    title: doc.title || id,
+    publishAt: update.publishAt,
+    when: scheduleLabel(update.publishAt),
+    scheduledAt: update.scheduledAt,
+    source: update.source,
+    live: { source: doc.source, version: doc.version, href: doc.path ? absolute(source.site.origin, doc.path) : null },
+    patch: createTwoFilesPatch(`${id} (live)`, `${id} (scheduled)`, doc.source, update.source),
+    editorHref: source.editorHref(id),
+    can: source.can,
+  };
+}
+
+const POST_INTENTS = ["tag-add", "tag-remove", "duplicate", "unpublish", "republish", "delete", "reschedule", "cancel-schedule"] as const;
 export type PostIntent = (typeof POST_INTENTS)[number];
 
 /** A tag as a post's frontmatter list can hold it: one short piece of text with nothing that would break the list. */
@@ -186,7 +251,8 @@ const COPY_TRIES = 50;
 export async function runPostsIntent(source: ContentSource, input: IntentInput): Promise<IntentResult> {
   const intent = text(input, "intent") as PostIntent;
   if (!POST_INTENTS.includes(intent)) return refused("That is not something the posts list can do.");
-  const need: keyof Permissions = intent === "delete" ? "deleteContent" : intent === "unpublish" || intent === "republish" ? "publish" : "edit";
+  const need: keyof Permissions =
+    intent === "delete" ? "deleteContent" : intent === "unpublish" || intent === "republish" || intent === "reschedule" || intent === "cancel-schedule" ? "publish" : "edit";
   if (!source.can[need]) return refused(NOT_YOURS[need]);
 
   const { targets, invalid } = targetsOf(input, ContentId);
@@ -199,6 +265,14 @@ export async function runPostsIntent(source: ContentSource, input: IntentInput):
     tag = cleanPostTag(text(input, "tag"));
     if (tag === null) return refused("A tag is one short piece of text, with no commas, brackets, quotes or colons.");
   }
+  // A reschedule names one new time for every post, or (its Undo) one time per post in the order of `ids`.
+  const times = texts(input, "publishAts");
+  const time = text(input, "publishAt");
+  if (intent === "reschedule" && !(times.length > 0 ? times.every((t) => Timestamp.safeParse(t).success) : Timestamp.safeParse(time).success)) {
+    return refused("Choose the new time, with its time zone.");
+  }
+  const newTime = (id: string) => (times.length > 0 ? times[texts(input, "ids").indexOf(id)] : time) ?? time;
+  const undoTimes: string[] = [];
   let capabilities: Capabilities | null = null;
   if (intent !== "unpublish" && intent !== "republish") capabilities = (await source.client.meta()).capabilities;
   if (intent === "delete" && capabilities?.contentDelete !== true) return refused("This site does not delete posts through the site API.");
@@ -238,7 +312,8 @@ export async function runPostsIntent(source: ContentSource, input: IntentInput):
         undoIds.push(id);
         undoVersions.push(written.version);
         const note = await recordDone(source, `post-${intent}`, id, change);
-        return { id, ok: true, message: (intent === "tag-add" ? `Added the tag "${tag}".` : `Removed the tag "${tag}".`) + note };
+        const warning = liveSaveWarning(doc);
+        return { id, ok: true, message: (intent === "tag-add" ? `Added the tag "${tag}".` : `Removed the tag "${tag}".`) + note + (warning ? ` ${warning}` : "") };
       }
       case "duplicate": {
         const doc = await read(id, version);
@@ -291,6 +366,44 @@ export async function runPostsIntent(source: ContentSource, input: IntentInput):
         const note = await recordDone(source, "post-republish", id, change);
         return { id, ok: true, message: "Published again." + note };
       }
+      case "reschedule": {
+        const doc = await read(id, version);
+        const publishAt = newTime(id)!;
+        const change = changeId();
+        let before: string;
+        let written;
+        if (doc.status === "published" && doc.scheduledUpdate) {
+          // The update keeps its own source; only its time moves.
+          const update = await client.scheduledUpdate(id);
+          before = update.publishAt;
+          written = await client.schedule(id, { expectedVersion: doc.version, changeId: change, publishAt, source: update.source });
+        } else if (doc.status === "scheduled" && doc.publishAt) {
+          before = doc.publishAt;
+          written = await client.schedule(id, { expectedVersion: doc.version, changeId: change, publishAt });
+        } else return { id, ok: false, message: "Nothing is scheduled for this post. Schedule it from the editor." };
+        undoIds.push(id);
+        undoVersions.push(written.version);
+        undoTimes.push(before);
+        const note = await recordDone(source, "post-reschedule", id, change);
+        return { id, ok: true, message: `Rescheduled for ${scheduleLabel(publishAt)}.` + note };
+      }
+      case "cancel-schedule": {
+        const doc = await read(id, version);
+        const change = changeId();
+        let message: string;
+        if (doc.status === "published" && doc.scheduledUpdate) {
+          await client.cancelSchedule(id, { expectedVersion: doc.version, changeId: change });
+          message = "Canceled the scheduled update; the live post stays as it is.";
+        } else if (doc.status === "scheduled") {
+          // A site with no scheduled updates cancels a scheduled post by returning it to draft, as unpublish does.
+          if (capabilities?.scheduledUpdates === true) await client.cancelSchedule(id, { expectedVersion: doc.version, changeId: change });
+          else await client.unpublish(id, { expectedVersion: doc.version, changeId: change });
+          message = "Unscheduled; it is a draft again.";
+        } else return { id, ok: true, message: "Nothing was scheduled. Not changed." };
+        notUndoable++;
+        const note = await recordDone(source, "post-cancel-schedule", id, change);
+        return { id, ok: true, message: message + note };
+      }
       case "delete": {
         const doc = await read(id, version);
         const change = changeId();
@@ -306,7 +419,7 @@ export async function runPostsIntent(source: ContentSource, input: IntentInput):
   let tail = "";
   if (undoIds.length > 0) {
     const inverse = undoIntent(intent, capabilities, source.can);
-    if (inverse) extra.undo = { intent: inverse, fields: { ids: undoIds, versions: undoVersions, ...(tag ? { tag } : {}) } };
+    if (inverse) extra.undo = { intent: inverse, fields: { ids: undoIds, versions: undoVersions, ...(tag ? { tag } : {}), ...(undoTimes.length ? { publishAts: undoTimes } : {}) } };
     else if (intent === "duplicate") {
       tail =
         capabilities?.contentDelete === true
@@ -314,7 +427,12 @@ export async function runPostsIntent(source: ContentSource, input: IntentInput):
           : " This site does not delete posts through the site API, so remove a copy you do not want in the site's own admin.";
     }
   }
-  if (notUndoable > 0) tail += ` A post that was only scheduled has no Undo; schedule it again from the editor.`;
+  if (notUndoable > 0) {
+    tail +=
+      intent === "cancel-schedule"
+        ? " A canceled schedule has no Undo; schedule it again from the editor."
+        : " A post that was only scheduled has no Undo; schedule it again from the editor.";
+  }
   return result(all, summarize(all, DONE[intent], "post") + tail, extra);
 }
 
@@ -325,6 +443,8 @@ const DONE: Record<PostIntent, string> = {
   unpublish: "Unpublished",
   republish: "Republished",
   delete: "Deleted",
+  reschedule: "Rescheduled",
+  "cancel-schedule": "Canceled the schedule of",
 };
 
 const LIVE_POST = "Changing a live post is a publish, which is not yours to do here, so this one was left as it was.";
@@ -343,7 +463,11 @@ function undoIntent(intent: PostIntent, capabilities: Capabilities | null, can: 
     case "duplicate":
       // Undo deletes the copy, at the version the duplicate made: only where the site deletes and the person may.
       return capabilities?.contentDelete === true && can.deleteContent ? "delete" : null;
+    case "reschedule":
+      // Back to the times they had, one per post.
+      return "reschedule";
     case "delete":
+    case "cancel-schedule":
       return null;
   }
 }

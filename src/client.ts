@@ -24,6 +24,7 @@ import {
   PREFIX,
   RevisionList,
   RevisionSource,
+  ScheduledUpdate,
   WriteResult,
   type ContentTagsInput,
   type ListQuery,
@@ -104,7 +105,16 @@ export function createSiteClient(config: SiteClientConfig) {
     get: (id: string) => get(ContentDoc, "GET", `/content/${enc(id)}`),
     saveDraft: (id: string, input: SaveDraftInput) => get(WriteResult, "PUT", `/content/${enc(id)}/draft`, input),
     publish: (id: string, input: PublishInput) => get(WriteResult, "POST", `/content/${enc(id)}/publish`, input),
+    /**
+     * Schedules a draft to go live at `publishAt`, or (v0.10.0, where `scheduledUpdates`) a live item's update: the live
+     * version stays served and `source` replaces it then. Sent again, it reschedules.
+     */
     schedule: (id: string, input: ScheduleInput) => get(WriteResult, "POST", `/content/${enc(id)}/schedule`, input),
+    /** Optional per site (v0.10.0): the update waiting on a live item, with its source. 404 when none, 501 without the capability. */
+    scheduledUpdate: (id: string) => get(ScheduledUpdate, "GET", `/content/${enc(id)}/schedule`),
+    /** Optional per site (v0.10.0): cancels a schedule. A live item stays live; a scheduled one returns to draft. */
+    cancelSchedule: (id: string, input: { expectedVersion: string; changeId: string }) =>
+      get(WriteResult, "DELETE", `/content/${enc(id)}/schedule${query(input)}`),
     unpublish: (id: string, input: UnpublishInput) => get(WriteResult, "POST", `/content/${enc(id)}/unpublish`, input),
     revisions: (id: string) => get(RevisionList, "GET", `/content/${enc(id)}/revisions`),
     /** One revision's source (v0.3.0), so each revision in the list opens. */

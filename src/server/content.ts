@@ -1,7 +1,7 @@
 // The meta route, the content routes and the preview: what every site serves.
 
 import { createTwoFilesPatch } from "diff";
-import { capabilitiesOf, NotFoundError, type SiteAdapter } from "../adapter.js";
+import { capabilitiesOf, NotFoundError, RefusedError, VersionConflictError, type SiteAdapter } from "../adapter.js";
 import {
   ContentDeleteQuery,
   ContentDeleteResult,
@@ -19,7 +19,9 @@ import {
   RevisionList,
   RevisionSource,
   SaveDraftInput,
+  ScheduleCancelQuery,
   ScheduleInput,
+  ScheduledUpdate,
   UnpublishInput,
   Version,
   WriteResult,
@@ -76,7 +78,39 @@ export function contentRoutes(adapter: SiteAdapter): Route[] {
     {
       method: "POST",
       pattern: new RegExp(`^/content/${ID}/schedule$`),
-      run: (m, _u, r) => write(m, r, async (i, req) => adapter.content.schedule(i, await readBody(req, ScheduleInput))),
+      run: (m, _u, r) =>
+        write(m, r, async (i, req) => {
+          const input = await readBody(req, ScheduleInput);
+          const current = await adapter.content.get(i);
+          // v0.10.0: a live item keeps being served, and the schedule is an update that replaces it at the time.
+          if (current?.status !== "published") return adapter.content.schedule(i, input);
+          if (current.version !== input.expectedVersion) throw new VersionConflictError(current.version);
+          if (!adapter.schedules) {
+            throw new RefusedError("This site cannot schedule an update to a live post: scheduling it would take the post off the site until then. Publish the change now, or unpublish first.");
+          }
+          const { publishAt, expectedVersion, changeId } = input;
+          return adapter.schedules.update(i, { source: input.source ?? current.source, publishAt, expectedVersion, changeId });
+        }),
+    },
+    {
+      method: "GET",
+      pattern: new RegExp(`^/content/${ID}/schedule$`),
+      run: async (m) => {
+        const contentId = id(m);
+        if (!adapter.schedules) return fail("not-implemented", "This site does not schedule updates to live posts.");
+        const update = await adapter.schedules.get(contentId);
+        if (!update) throw new NotFoundError("Nothing is scheduled for this item.");
+        return json(200, checked(ScheduledUpdate, update, "scheduled update"));
+      },
+    },
+    {
+      method: "DELETE",
+      pattern: new RegExp(`^/content/${ID}/schedule$`),
+      run: async (m, url) => {
+        const contentId = id(m);
+        if (!adapter.schedules) return fail("not-implemented", "This site does not schedule updates to live posts.");
+        return json(200, checked(WriteResult, await adapter.schedules.cancel(contentId, readQuery(url, ScheduleCancelQuery)), "schedule cancel"));
+      },
     },
     {
       method: "POST",

@@ -32,11 +32,12 @@ describe("client round trip", () => {
       mediaTrash: true,
       mentions: true,
       mentionReset: true,
+      scheduledUpdates: true,
     });
   });
 
   it("reads a site with no media manager and no content delete as the v0.1.0 capabilities, with no limits", async () => {
-    const { client: c } = client(memoryAdapter({ media: false, contentDelete: false, contentTags: false, mentions: false }));
+    const { client: c } = client(memoryAdapter({ media: false, contentDelete: false, contentTags: false, mentions: false, schedules: false }));
     expect((await c.meta()).capabilities).toEqual({
       content: true,
       preview: true,

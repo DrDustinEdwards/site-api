@@ -9,7 +9,7 @@ import { Version, type ContentList, type ListQuery, type MediaUse } from "../con
 export interface Permissions {
   /** Tag, duplicate, upload, edit alt text and tags, trash and restore. */
   edit: boolean;
-  /** Change what the public sees: unpublish, republish, and any write to a post that is not a draft. */
+  /** Change what the public sees: unpublish, republish, reschedule, cancel a schedule, and any write to a post that is not a draft. */
   publish: boolean;
   deleteContent: boolean;
   deleteMedia: boolean;
@@ -29,6 +29,8 @@ export interface ContentSource {
   can: Permissions;
   /** Where a row's title links: Carrel's editor, or the site's own. */
   editorHref(id: string): string;
+  /** Optional (v0.10.0): where a row's scheduled update is shown, its source beside the live one. Defaults to the editor. */
+  scheduleHref?(id: string): string;
   /** Optional: a faster list than the site's own, such as Carrel's search index. Same answer as client.list. */
   postIndex?: { list(query: Partial<ListQuery> & { limit: number }): Promise<ContentList> };
   /** Optional: notes per post id, for the rows on this page. */
