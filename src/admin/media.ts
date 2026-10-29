@@ -571,7 +571,7 @@ async function stored(
 ): Promise<IntentResult> {
   if (item.duplicateOf) {
     const message = `${lead} as ${item.filename ?? item.id}, so no second copy was stored.`;
-    return result([{ id: item.id, ok: true, message }], message);
+    return result([{ id: item.id, ok: true, message, duplicate: true }], message);
   }
   const notes = [
     item.resizedFrom && item.width && item.height ? ` Shrunk from ${item.resizedFrom.width}x${item.resizedFrom.height} to ${item.width}x${item.height}.` : "",
