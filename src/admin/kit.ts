@@ -73,6 +73,22 @@ export interface IntentResult {
   undo?: { intent: string; fields: Fields };
   /** Set when one item changed on the site since the person saw it. */
   conflict?: { id: string; currentVersion: string | null };
+  /** Set instead of acting, for a step nothing can undo: what to ask, and the fields to post again with `confirm`. */
+  confirm?: ConfirmRequest;
+}
+
+/** What a one-way intent asks before it runs (Capsomer's confirm dialog with script, its confirm page without). */
+export interface ConfirmRequest {
+  intent: string;
+  title: string;
+  lead?: string;
+  /** The button that does it. */
+  action: string;
+  /** Typed into the dialog and posted back as `confirm`: the number of items, so the count is read. */
+  typeToConfirm?: string;
+  /** Every item it will change, one line each. Never shortened. */
+  items: string[];
+  fields: Fields;
 }
 
 /** The most items one intent acts on, as the site's own bulk route allows. */
@@ -93,6 +109,16 @@ export function texts(input: IntentInput, name: string): string[] {
 
 export function text(input: IntentInput, name: string): string {
   return texts(input, name)[0] ?? "";
+}
+
+/**
+ * Asks before a step nothing can undo, unless the form already carries the answer: `confirm` equal to
+ * the number of items, which the person typed. null means go on.
+ */
+export function askFirst(input: IntentInput, ask: Omit<ConfirmRequest, "typeToConfirm">): IntentResult | null {
+  const count = String(ask.items.length);
+  if (text(input, "confirm").trim() === count) return null;
+  return { ok: false, message: ask.title, confirm: { ...ask, typeToConfirm: count } };
 }
 
 export function refused(message: string): IntentResult {

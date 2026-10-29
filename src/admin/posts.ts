@@ -25,6 +25,8 @@ import {
   NOT_YOURS,
   text,
   refused,
+  askFirst,
+  plural,
   texts,
   changeId,
   recordDone,
@@ -280,6 +282,17 @@ export async function runPostsIntent(source: ContentSource, input: IntentInput):
   let capabilities: Capabilities | null = null;
   if (intent !== "unpublish" && intent !== "republish") capabilities = (await source.client.meta()).capabilities;
   if (intent === "delete" && capabilities?.contentDelete !== true) return refused("This site does not delete posts through the site API.");
+  if (intent === "delete" && targets.length > 0) {
+    const ask = askFirst(input, {
+      intent,
+      title: `Delete ${plural(targets.length, "post")} for good?`,
+      lead: "Each post leaves the site, and nothing here can bring it back.",
+      action: "Delete for good",
+      items: targets.map((t) => t.id),
+      fields: { ids: targets.map((t) => t.id), versions: targets.map((t) => t.version ?? "") },
+    });
+    if (ask) return ask;
+  }
 
   const client = source.client;
   const read = async (id: string, version: string | null): Promise<ContentDoc> => {
@@ -423,7 +436,7 @@ export async function runPostsIntent(source: ContentSource, input: IntentInput):
   let tail = "";
   if (undoIds.length > 0) {
     const inverse = undoIntent(intent, capabilities, source.can);
-    if (inverse) extra.undo = { intent: inverse, fields: { ids: undoIds, versions: undoVersions, ...(tag ? { tag } : {}), ...(undoTimes.length ? { publishAts: undoTimes } : {}) } };
+    if (inverse) extra.undo = { intent: inverse, fields: { ids: undoIds, versions: undoVersions, ...(tag ? { tag } : {}), ...(undoTimes.length ? { publishAts: undoTimes } : {}), ...(inverse === "delete" ? { confirm: String(undoIds.length) } : {}) } };
     else if (intent === "duplicate") {
       tail =
         capabilities?.contentDelete === true
