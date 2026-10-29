@@ -37,22 +37,33 @@ import {
   MediaBulkInput,
   MediaBulkResult,
   MediaCaptionInput,
+  MediaCreditInput,
   MediaDeleteQuery,
   MediaDeleteResult,
   MediaDetail,
   MediaFocusInput,
+  MediaHistory,
+  MediaImportInput,
   MediaItem,
   MediaLens,
   MediaList,
   MediaListQuery,
   MediaReplaceQuery,
   MediaReplaceResult,
+  MediaResize,
+  MediaResizePassInput,
+  MediaResizePassResult,
+  MediaRevertInput,
+  MediaSuggestions,
   MediaTagsInput,
+  MediaTransformInput,
+  MediaTransformResult,
   MediaTrashEmptyInput,
   MediaTrashEmptyResult,
   MediaTrashInput,
   MediaUploadLimits,
   MediaUploadQuery,
+  MediaUploadResult,
   MediaUse,
   MediaWriteResult,
 } from "./contract/media.js";
@@ -68,7 +79,7 @@ import {
   MentionWriteResult,
 } from "./contract/mentions.js";
 
-export const PACKAGE_VERSION = "0.12.0";
+export const PACKAGE_VERSION = "0.13.0";
 export const PREFIX = "/api/carrel/v1";
 
 export const Capabilities = z.object({
@@ -114,6 +125,31 @@ export const Capabilities = z.object({
    * for a file of the same size, and saves a crop as a new file rather than in place. Absent: any size is taken.
    */
   mediaReplaceKeepsSize: z.boolean().optional(),
+  // ---------- v0.13.0, each optional per site; absent or false, the route or the query answers 501 and the field is absent
+  /** True when an upload or import whose bytes match a stored file's answers that file with `duplicateOf`, and details carry `twins`. */
+  mediaDuplicates: z.boolean().optional(),
+  /** True when items carry `usedCount` and the list sorts by `used`. */
+  mediaUsage: z.boolean().optional(),
+  /** True when the list takes `orientation` and `kind`. */
+  mediaFilters: z.boolean().optional(),
+  /** True when the site fetches a file from an https address into its own storage, `POST /media/import`. */
+  mediaImport: z.boolean().optional(),
+  /** True when the site keeps credit, license, source and license end on files, `PUT /media/:id/credit`. */
+  mediaCredit: z.boolean().optional(),
+  /** True when the site turns and mirrors pictures keeping the old bytes, `POST /media/:id/transform`. */
+  mediaTransform: z.boolean().optional(),
+  /** True when the site keeps a file's earlier bytes and puts them back, `GET /media/:id/history` and `POST /media/:id/revert`. */
+  mediaHistory: z.boolean().optional(),
+  /** True when the list answers a `changeCursor` and takes `changedSince`, so a screen polls for what others changed. */
+  mediaChanges: z.boolean().optional(),
+  /** What the site shrinks large pictures to at upload, unless the upload says `resize=no`. Absent: it keeps every upload's size. */
+  mediaResize: MediaResize.optional(),
+  /** True when the site shrinks stored pictures to `mediaResize`, `POST /media/resize-pass`. Present only beside `mediaResize`. */
+  mediaResizePass: z.boolean().optional(),
+  /** True when the site fills empty credit, license, caption and taken date from a file's embedded metadata at upload. */
+  mediaEmbedded: z.boolean().optional(),
+  /** True when the site's model suggests tags and alt text for a file, `GET /media/:id/suggestions`. */
+  mediaSuggestions: z.boolean().optional(),
 });
 
 export const Meta = z.object({
@@ -162,7 +198,9 @@ export type ErrorBody = z.infer<typeof ErrorBody>;
  * text, tags, trash, restore and empty-trash, and one bulk route that applies any of them to many files.
  * v0.5.0 adds the mentions group: list, decide, delete and sweep, answering 501 for a site whose
  * adapter has no `mentions`. v0.10.0 adds reading and canceling a schedule, 501 for a site whose adapter
- * has no `schedules`, and a file's focal point, caption and replace, each 501 where the adapter lacks it.
+ * has no `schedules`, and a file's focal point, caption and replace, each 501 where the adapter lacks it. v0.13.0 adds
+ * import, credit, transform, history, revert, suggestions and the resize pass, each 501 where the adapter lacks it, and
+ * the upload answers MediaUploadResult, a MediaItem with three optional properties more.
  */
 export const ROUTES = [
   { group: "meta", method: "GET", path: "/meta", response: "Meta" },
@@ -181,7 +219,8 @@ export const ROUTES = [
   { group: "content", method: "DELETE", path: "/content/:id/schedule", query: "ScheduleCancelQuery", response: "WriteResult" },
   { group: "preview", method: "POST", path: "/preview", request: "PreviewInput", response: "text/html" },
   { group: "media", method: "GET", path: "/media", query: "MediaListQuery", response: "MediaList" },
-  { group: "media", method: "POST", path: "/media", query: "MediaUploadQuery", request: "the file's bytes", response: "MediaItem" },
+  { group: "media", method: "POST", path: "/media", query: "MediaUploadQuery", request: "the file's bytes", response: "MediaUploadResult" },
+  { group: "media", method: "POST", path: "/media/import", request: "MediaImportInput", response: "MediaUploadResult" },
   { group: "media", method: "GET", path: "/media/:id", response: "MediaDetail" },
   { group: "media", method: "DELETE", path: "/media/:id", query: "MediaDeleteQuery", response: "MediaDeleteResult" },
   { group: "media", method: "PUT", path: "/media/:id/alt", request: "MediaAltInput", response: "MediaWriteResult" },
@@ -189,10 +228,16 @@ export const ROUTES = [
   { group: "media", method: "PUT", path: "/media/:id/focus", request: "MediaFocusInput", response: "MediaWriteResult" },
   { group: "media", method: "PUT", path: "/media/:id/caption", request: "MediaCaptionInput", response: "MediaWriteResult" },
   { group: "media", method: "PUT", path: "/media/:id/file", query: "MediaReplaceQuery", request: "the file's bytes", response: "MediaReplaceResult" },
+  { group: "media", method: "PUT", path: "/media/:id/credit", request: "MediaCreditInput", response: "MediaWriteResult" },
+  { group: "media", method: "POST", path: "/media/:id/transform", request: "MediaTransformInput", response: "MediaTransformResult" },
+  { group: "media", method: "GET", path: "/media/:id/history", response: "MediaHistory" },
+  { group: "media", method: "POST", path: "/media/:id/revert", request: "MediaRevertInput", response: "MediaTransformResult" },
+  { group: "media", method: "GET", path: "/media/:id/suggestions", response: "MediaSuggestions" },
   { group: "media", method: "POST", path: "/media/:id/trash", request: "MediaTrashInput", response: "MediaWriteResult" },
   { group: "media", method: "POST", path: "/media/:id/restore", request: "MediaTrashInput", response: "MediaWriteResult" },
   { group: "media", method: "POST", path: "/media/trash/empty", request: "MediaTrashEmptyInput", response: "MediaTrashEmptyResult" },
   { group: "media", method: "POST", path: "/media/bulk", request: "MediaBulkInput", response: "MediaBulkResult" },
+  { group: "media", method: "POST", path: "/media/resize-pass", request: "MediaResizePassInput", response: "MediaResizePassResult" },
   { group: "mentions", method: "GET", path: "/mentions", query: "MentionListQuery", response: "MentionList" },
   { group: "mentions", method: "POST", path: "/mentions/sweep", request: "MentionSweepInput", response: "MentionSweepResult" },
   { group: "mentions", method: "POST", path: "/mentions/:id/decide", request: "MentionDecideInput", response: "MentionWriteResult" },
@@ -214,6 +259,8 @@ const HASHED = {
   ContentTagsInput,
   ScheduledUpdate, ScheduleCancelQuery,
   MediaFocusInput, MediaCaptionInput, MediaReplaceQuery, MediaReplaceResult,
+  MediaUploadResult, MediaImportInput, MediaCreditInput, MediaTransformInput, MediaTransformResult, MediaHistory,
+  MediaRevertInput, MediaResizePassInput, MediaResizePassResult, MediaSuggestions,
 };
 
 /** JSON with sorted keys, so the hash depends on the contract and not on property order. */

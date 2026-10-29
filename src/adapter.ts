@@ -11,6 +11,10 @@ import type {
   MediaList,
   MediaLens,
   MediaListQuery,
+  MediaEmbeddedField,
+  MediaResize,
+  MediaRevision,
+  MediaTransformOp,
   MediaUploadLimits,
   MediaUse,
   MentionList,
@@ -73,7 +77,24 @@ export interface MediaUpload {
   filename: string;
   alt: string;
   changeId: string;
+  /**
+   * v0.13.0: the SHA-256 of the bytes as lower case hex, which the site keeps to find duplicates (findByHash, the duplicates
+   * lens, twins). The package always sends it; optional only so a site's own code can call upload without it.
+   */
+  sha256?: string;
+  /** v0.13.0: true when the site shrinks the picture to its `resize`; false or absent when it has none or the upload said `resize=no`. */
+  resize?: boolean;
+  /** v0.13.0: on an import, the address it was fetched from, for the file's `sourceUrl`. */
+  sourceUrl?: string;
 }
+
+/** What an upload answers (v0.13.0): the stored file, and, where they apply, what the site did with it. */
+export type MediaUploaded = MediaItem & {
+  /** The fields the site filled from the file's embedded metadata (IPTC, EXIF), each only where it was empty. */
+  embedded?: MediaEmbeddedField[];
+  /** The picture's size before the site shrank it. */
+  resizedFrom?: { width: number; height: number; bytes: number };
+};
 
 /**
  * The media group (v0.2.0). Files stay in the site's own storage and are served by the site; Carrel
@@ -92,10 +113,29 @@ export interface MediaAdapter {
    * because the site's addresses or pages are sized by it. The package says so in capabilities.mediaReplaceKeepsSize.
    */
   replaceKeepsSize?: boolean;
+  /**
+   * Optional (v0.13.0): true when items carry `usedCount` from the site's reference check and `list` sorts by `used`
+   * (capabilities.mediaUsage). Absent: `sort=used` answers 501.
+   */
+  usage?: boolean;
+  /** Optional (v0.13.0): true when `list` applies `orientation` and `kind` (capabilities.mediaFilters). Absent: either answers 501. */
+  filters?: boolean;
+  /**
+   * Optional (v0.13.0): what the site shrinks large pictures to (capabilities.mediaResize). `upload` gets `resize: true` and
+   * shrinks a picture whose longer edge is over `maxEdge`, keeping its proportions, and answers `resizedFrom`.
+   */
+  resize?: MediaResize;
+  /** Optional (v0.13.0): true when `upload` fills empty credit, license, caption and takenAt from embedded metadata and names them in `embedded`. */
+  readsEmbedded?: boolean;
+  /**
+   * Optional (v0.13.0): the fetch the package imports with (capabilities.mediaImport), such as the Worker's own `fetch`. The
+   * package checks the address, fetches it, checks the answer as an upload, and hands the bytes to `upload` with `sourceUrl`.
+   */
+  importFetch?: typeof fetch;
   list(query: MediaListQuery): Promise<MediaList>;
   /** The file and every place it is used. null when the id does not exist. */
   get(id: string): Promise<MediaDetail | null>;
-  upload(input: MediaUpload): Promise<MediaItem>;
+  upload(input: MediaUpload): Promise<MediaUploaded>;
   /**
    * Deletes the file. Throws MediaInUseError naming each use when the site's reference check finds
    * one, NotFoundError for a missing id, and RefusedError when the check could not run: a delete the
@@ -135,6 +175,60 @@ export interface MediaAdapter {
    * `@dustinedwards/site-api/r2` writes the bytes and keeps the object's metadata.
    */
   replace?(id: string, input: MediaReplace): Promise<{ item: MediaItem; sizesNeedPurge: boolean }>;
+
+  // ---------- v0.13.0, each optional, answering 501 when absent
+
+  /**
+   * The stored file whose bytes have this SHA-256 (capabilities.mediaDuplicates), trashed or not; null when none. The package
+   * asks before every upload and import, and answers a match with that file and `duplicateOf`, so `upload` never runs for
+   * bytes the site already holds. A site with it also answers the `duplicates` lens and `twins` on a detail.
+   */
+  findByHash?(sha256: string): Promise<MediaItem | null>;
+  /** Sets the file's credit, license, source and license end as one write, moving the version like the writes above. */
+  setCredit?(
+    id: string,
+    input: { credit: string; license: string; sourceUrl: string | null; licenseExpires: string | null; expectedVersion: string; changeId: string },
+  ): Promise<{ version: string }>;
+  /**
+   * Turns or mirrors the picture (capabilities.mediaTransform). The package has checked that the file exists, is at
+   * `expectedVersion`, is `deletable` and is an image. In place (`asNewFile: false`): the same id and address, the old
+   * bytes kept in the file's history, the focal point moved with the picture (`transformFocus`), and a new version. With
+   * `asNewFile: true`, which the package sends for a quarter turn of a picture that is not square on a site whose
+   * `replaceKeepsSize`, the site stores the turned picture as a new file (alt, caption, tags and credit copied) and leaves
+   * the old one as it was. Throws RefusedError for a picture it cannot turn, such as an SVG.
+   */
+  transform?(
+    id: string,
+    input: { op: MediaTransformOp; asNewFile: boolean; expectedVersion: string; changeId: string },
+  ): Promise<{ item: MediaItem; sizesNeedPurge: boolean }>;
+  /** The file's byte history, newest first, exactly one `current` (capabilities.mediaHistory, with `revert`). null when the id does not exist. */
+  history?(id: string): Promise<MediaRevision[] | null>;
+  /**
+   * Puts earlier bytes back under the same id and address, as a new revision (so a revert is itself undone by another).
+   * The package has checked the file and its version, that `to` is in the history and is not current, and, on a site whose
+   * `replaceKeepsSize`, that its size is the current one's. Alt, caption, tags and credit stay; the focal point is cleared.
+   */
+  revert?(id: string, input: { to: string; expectedVersion: string; changeId: string }): Promise<{ item: MediaItem; sizesNeedPurge: boolean }>;
+  /**
+   * Every file changed since `since`, a `changeCursor` the site answered on a list (capabilities.mediaChanges: with it,
+   * every `list` answer carries `changeCursor`). A change is any write that moves a file's version or bytes, an upload,
+   * and a delete for good (`removed`). Each file once, as it is now, trashed ones included; at most `limit` files and
+   * removed ids together, the oldest changes first, `more` when others wait. `cursor` is where the next poll starts.
+   * Throws RefusedError for a cursor it can no longer answer from, and the screen reloads its page.
+   */
+  changes?(input: { since: string; limit: number }): Promise<{ items: MediaItem[]; removed: string[]; cursor: string; more: boolean }>;
+  /**
+   * Shrinks one stored picture to `resize` (capabilities.mediaResizePass), in place, keeping the old bytes where the site
+   * keeps history. Throws VersionConflictError, NotFoundError or RefusedError like the writes; `resized: false` and the
+   * same version for a picture already within the size. Not offered on a site whose `replaceKeepsSize`.
+   */
+  shrink?(id: string, input: { expectedVersion: string; changeId: string }): Promise<{ resized: boolean; item: MediaItem }>;
+  /**
+   * What the site's model suggests for the file (capabilities.mediaSuggestions): tags and alt text, never applied. The
+   * model is the site's choice (on Dustin's sites, Workers AI through Cloudflare AI Gateway). null when the id does not
+   * exist. The package keeps the tags that are tags in the contract's spelling, at most 12.
+   */
+  suggest?(id: string): Promise<{ tags: string[]; alt: string | null; model: string } | null>;
 }
 
 /** One replace (v0.10.0), already checked by the package. */
@@ -260,6 +354,18 @@ export function capabilitiesOf(adapter: SiteAdapter): Capabilities {
     ...(adapter.media?.setCaption ? { mediaCaption: true } : {}),
     ...(adapter.media?.replace ? { mediaReplace: true } : {}),
     ...(adapter.media?.replace && adapter.media.replaceKeepsSize ? { mediaReplaceKeepsSize: true } : {}),
+    ...(adapter.media?.findByHash ? { mediaDuplicates: true } : {}),
+    ...(adapter.media?.usage ? { mediaUsage: true } : {}),
+    ...(adapter.media?.filters ? { mediaFilters: true } : {}),
+    ...(adapter.media?.importFetch ? { mediaImport: true } : {}),
+    ...(adapter.media?.setCredit ? { mediaCredit: true } : {}),
+    ...(adapter.media?.transform ? { mediaTransform: true } : {}),
+    ...(adapter.media?.history && adapter.media.revert ? { mediaHistory: true } : {}),
+    ...(adapter.media?.changes ? { mediaChanges: true } : {}),
+    ...(adapter.media?.resize ? { mediaResize: { ...adapter.media.resize } } : {}),
+    ...(adapter.media?.resize && adapter.media.shrink && !adapter.media.replaceKeepsSize ? { mediaResizePass: true } : {}),
+    ...(adapter.media?.readsEmbedded ? { mediaEmbedded: true } : {}),
+    ...(adapter.media?.suggest ? { mediaSuggestions: true } : {}),
     ...(adapter.mentions ? { mentions: true } : {}),
     ...(adapter.mentions?.reset ? { mentionReset: true } : {}),
     ...(adapter.schedules ? { scheduledUpdates: true } : {}),

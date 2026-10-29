@@ -10,13 +10,19 @@ export type JsonSchema = { properties?: Record<string, unknown>; required?: stri
 
 export const now = (name: string) => z.toJSONSchema((contract as unknown as Record<string, z.ZodType>)[name]!, { io: "input" }) as JsonSchema;
 
-export function additiveOnly(before: JsonSchema, after: JsonSchema, where: string) {
+/**
+ * `widen` names the enums a later version may extend (path, such as "MediaListQuery.sort", to exactly the values it adds
+ * at the end): an enum, or an array of one, keeps every earlier value in order and gains only those.
+ */
+export function additiveOnly(before: JsonSchema, after: JsonSchema, where: string, widen: Record<string, readonly string[]> = {}) {
   for (const [prop, schema] of Object.entries(before.properties ?? {})) {
     const next = after.properties?.[prop] as JsonSchema | undefined;
-    expect(next, `${where}.${prop} is gone`).toBeDefined();
-    if ((schema as JsonSchema).type === "object") additiveOnly(schema as JsonSchema, next!, `${where}.${prop}`);
+    const path = `${where}.${prop}`;
+    expect(next, `${path} is gone`).toBeDefined();
+    if (path in widen) widened(schema as JsonSchema, next!, widen[path]!, path);
+    else if ((schema as JsonSchema).type === "object") additiveOnly(schema as JsonSchema, next!, path, widen);
     else if ((schema as JsonSchema).type === "array" && ((schema as JsonSchema).items as JsonSchema | undefined)?.type === "object") {
-      additiveOnly((schema as JsonSchema).items as JsonSchema, next!.items as JsonSchema, `${where}.${prop}[]`);
+      additiveOnly((schema as JsonSchema).items as JsonSchema, next!.items as JsonSchema, `${path}[]`, widen);
       const { items: _a, ...restBefore } = schema as JsonSchema;
       const { items: _b, ...restAfter } = next!;
       expect(restAfter, `${where}.${prop}`).toEqual(restBefore);
@@ -27,6 +33,14 @@ export function additiveOnly(before: JsonSchema, after: JsonSchema, where: strin
   const { properties: _a, required: _b, ...restBefore } = before;
   const { properties: _c, required: _d, ...restAfter } = after;
   expect(restAfter, `${where} other keywords`).toEqual(restBefore);
+}
+
+/** An enum, or an array of one, that keeps every earlier value in order and adds exactly `extra` at the end. */
+export function widened(before: JsonSchema, after: JsonSchema, extra: readonly string[], where: string) {
+  const at = (s: JsonSchema) => (s.enum ? s : (s.items as JsonSchema));
+  expect(at(after).enum, `${where} values`).toEqual([...(at(before).enum as string[]), ...extra]);
+  const strip = (s: JsonSchema) => (s.enum ? { ...s, enum: undefined } : { ...s, items: { ...(s.items as JsonSchema), enum: undefined } });
+  expect(strip(after), `${where} other keywords`).toEqual(strip(before));
 }
 
 /** The properties `after` has that `before` lacks. */

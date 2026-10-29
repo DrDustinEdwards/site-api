@@ -3,7 +3,7 @@
 // the bytes must look like the declared type where the type has a signature. The site's own checks
 // (measuring an image, its storage) come after these, never instead of them.
 
-import type { MediaUploadLimits } from "./contract.js";
+import type { MediaKind, MediaOrientation, MediaTransformOp, MediaUploadLimits } from "./contract.js";
 
 /** The media type without parameters, lower case: "image/png; x=1" is "image/png". */
 export function essence(contentType: string | null): string {
@@ -17,7 +17,7 @@ type UploadRefusal = { code: "invalid" | "too-large"; message: string };
  * refused without buffering the rest.
  */
 export async function readUpload(
-  request: Request,
+  request: { headers: Headers; body: ReadableStream<Uint8Array> | null },
   limits: MediaUploadLimits,
 ): Promise<{ ok: true; bytes: Uint8Array } | { ok: false; refusal: UploadRefusal }> {
   const tooLarge: UploadRefusal = { code: "too-large", message: `The file is larger than this site accepts (${limits.maxBytes} bytes).` };
@@ -92,3 +92,108 @@ export function checkUpload(contentType: string, bytes: Uint8Array | null, limit
   }
   return null;
 }
+
+// ---------- v0.13.0
+
+/** The SHA-256 of a file's bytes as lower case hex: the one content hash every site keys duplicates by. */
+export async function sha256Hex(bytes: Uint8Array): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", bytes as Uint8Array<ArrayBuffer>);
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+/** What a file is, from its type, for the list's `kind` filter: image, video and audio by their type, everything else a document. */
+export function kindOf(contentType: string): MediaKind {
+  const top = essence(contentType).split("/")[0];
+  return top === "image" || top === "video" || top === "audio" ? top : "document";
+}
+
+/**
+ * Which way a picture lies, for the list's `orientation` filter: square when its edges differ by at most 1% of the longer,
+ * so a 4000x3990 photo is square. null for a file with no size.
+ */
+export function orientationOf(width: number | null, height: number | null): MediaOrientation | null {
+  if (!width || !height) return null;
+  if (Math.abs(width - height) <= Math.max(width, height) / 100) return "square";
+  return width > height ? "landscape" : "portrait";
+}
+
+/** True when a transform swaps a picture's width and height. */
+export function turnsSize(op: MediaTransformOp): boolean {
+  return op === "rotate-90" || op === "rotate-270";
+}
+
+/**
+ * Where a focal point lands after a transform, so a site moves it with the picture rather than clearing it. rotate-90 is a
+ * quarter turn clockwise: the top left corner goes to the top right. In focusOf's spelling, or null for none.
+ */
+export function transformFocus(focus: string | null, op: MediaTransformOp): string | null {
+  const parsed = focus === null ? null : /^([\d.]+)x([\d.]+)$/.exec(focus);
+  if (!parsed) return null;
+  const [x, y] = [Number(parsed[1]), Number(parsed[2])];
+  const moved: Record<MediaTransformOp, [number, number]> = {
+    "rotate-90": [1 - y, x],
+    "rotate-180": [1 - x, 1 - y],
+    "rotate-270": [y, 1 - x],
+    "flip-h": [1 - x, y],
+    "flip-v": [x, 1 - y],
+  };
+  const spell = (n: number) => String(Math.round(n * 1000) / 1000);
+  return `${spell(moved[op][0])}x${spell(moved[op][1])}`;
+}
+
+/**
+ * Why an import may not fetch this address, or null when it may: https on the default port, no user name or password, and a
+ * host name that is neither an IP address nor a local name, so an import never reaches into a private network.
+ */
+export function importRefusal(raw: string): string | null {
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    return "That is not a web address.";
+  }
+  if (url.protocol !== "https:") return "Only https addresses are imported.";
+  if (url.username || url.password) return "An address carrying a user name or password is not imported.";
+  if (url.port !== "") return "Only the default https port is imported.";
+  const host = url.hostname.toLowerCase().replace(/\.$/, "");
+  if (host.startsWith("[") || /^[\d.]+$/.test(host) || /^0x/i.test(host)) return "An address by IP number is not imported; use its host name.";
+  if (!host.includes(".") || /(^|\.)(localhost|local|internal|lan|home|arpa)$/.test(host)) return "A local address is not imported.";
+  return null;
+}
+
+/** How long an import waits for the other site, and how many redirects it follows. */
+const IMPORT_TIMEOUT_MS = 15_000;
+const IMPORT_REDIRECTS = 3;
+
+/**
+ * Fetches an import with the given fetch, following at most three redirects by hand so each hop is checked as the first
+ * was. Throws ImportRefusal with words for the person; the response is the final one, unread, with its address.
+ */
+export async function fetchImport(doFetch: typeof fetch, raw: string): Promise<{ response: Response; address: string }> {
+  let address = raw;
+  for (let hop = 0; hop <= IMPORT_REDIRECTS; hop++) {
+    const refusal = importRefusal(address);
+    if (refusal) throw new ImportRefusal(refusal);
+    let response: Response;
+    try {
+      response = await doFetch(address, { redirect: "manual", signal: AbortSignal.timeout(IMPORT_TIMEOUT_MS), headers: { accept: "*/*" } });
+    } catch {
+      throw new ImportRefusal("The other site did not answer.");
+    }
+    const location = response.headers.get("location");
+    if (response.status >= 300 && response.status < 400 && location) {
+      await response.body?.cancel().catch(() => {});
+      address = new URL(location, address).toString();
+      continue;
+    }
+    if (!response.ok) {
+      await response.body?.cancel().catch(() => {});
+      throw new ImportRefusal(`The other site answered ${response.status}.`);
+    }
+    return { response, address };
+  }
+  throw new ImportRefusal("The address redirects too many times.");
+}
+
+/** An import the package would not fetch, or that the other site did not answer. */
+export class ImportRefusal extends Error {}
