@@ -186,11 +186,15 @@ export function scheduleLabel(publishAt: string): string {
 /**
  * The warning before a save to a live post that has an update waiting (v0.10.0): the save changes the live post now,
  * and the update still replaces the whole post at its time. null when there is nothing to warn about. The editor
- * shows it before saving; the kit adds it to a tag change's outcome.
+ * shows it before saving; the kit adds it to a tag change's outcome. `label` says the time; an admin that writes times its
+ * own way elsewhere passes its formatter, so the page says one time one way.
  */
-export function liveSaveWarning(doc: { status: ContentStatus; scheduledUpdate?: ScheduledUpdateSummary | null }): string | null {
+export function liveSaveWarning(
+  doc: { status: ContentStatus; scheduledUpdate?: ScheduledUpdateSummary | null },
+  label: (publishAt: string) => string = scheduleLabel,
+): string | null {
   if (doc.status !== "published" || !doc.scheduledUpdate) return null;
-  return `An update is scheduled for ${scheduleLabel(doc.scheduledUpdate.publishAt)}. Saving changes the live post now, and the scheduled update will still replace it then, without this change. Edit the scheduled update too, or cancel it.`;
+  return `An update is scheduled for ${label(doc.scheduledUpdate.publishAt)}. Saving changes the live post now, and the scheduled update will still replace it then, without this change. Edit the scheduled update too, or cancel it.`;
 }
 
 /** The update waiting on a live post, with what it changes, for the page that shows its source (v0.10.0). */
