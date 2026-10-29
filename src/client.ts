@@ -11,10 +11,14 @@ import {
   MediaBulkResult,
   MediaDeleteResult,
   MediaDetail,
-  MediaItem,
+  MediaHistory,
   MediaList,
   MediaReplaceResult,
+  MediaResizePassResult,
+  MediaSuggestions,
+  MediaTransformResult,
   MediaTrashEmptyResult,
+  MediaUploadResult,
   MediaWriteResult,
   MentionDecideInput,
   MentionDeleteResult,
@@ -32,7 +36,12 @@ import {
   type MediaAltInput,
   type MediaBulkInput,
   type MediaCaptionInput,
+  type MediaCreditInput,
   type MediaFocusInput,
+  type MediaImportInput,
+  type MediaResizePassInput,
+  type MediaRevertInput,
+  type MediaTransformInput,
   type MediaListQuery,
   type MediaTagsInput,
   type MediaTrashEmptyInput,
@@ -133,10 +142,14 @@ export function createSiteClient(config: SiteClientConfig) {
     media: {
       list: (q: Partial<MediaListQuery> = {}) => get(MediaList, "GET", `/media${query(q)}`),
       get: (id: string) => get(MediaDetail, "GET", `/media/${enc(id)}`),
-      upload: async (input: { bytes: Uint8Array; contentType: string; filename: string; alt?: string; changeId: string }) =>
-        MediaItem.parse(
+      /**
+       * v0.13.0: answers MediaUploadResult, the item with `duplicateOf` where the site already held these bytes (nothing new
+       * was stored), `embedded` and `resizedFrom`. `resize: "no"` keeps this file's size on a site that shrinks uploads.
+       */
+      upload: async (input: { bytes: Uint8Array; contentType: string; filename: string; alt?: string; changeId: string; resize?: "no" }) =>
+        MediaUploadResult.parse(
           await (
-            await call("POST", `/media${query({ filename: input.filename, alt: input.alt, changeId: input.changeId })}`, undefined, {
+            await call("POST", `/media${query({ filename: input.filename, alt: input.alt, changeId: input.changeId, resize: input.resize })}`, undefined, {
               bytes: input.bytes,
               contentType: input.contentType,
             })
@@ -172,6 +185,24 @@ export function createSiteClient(config: SiteClientConfig) {
             })
           ).json(),
         ),
+      /**
+       * v0.13.0, each optional per site (501 without; see meta().capabilities). `importUrl` has the site fetch an https
+       * address into its own storage (`mediaImport`), answering as an upload does.
+       */
+      importUrl: (input: Omit<MediaImportInput, "alt"> & { alt?: string }) => get(MediaUploadResult, "POST", "/media/import", input),
+      /** Credit, license, source and license end as one write (`mediaCredit`). */
+      setCredit: (id: string, input: MediaCreditInput) => get(MediaWriteResult, "PUT", `/media/${enc(id)}/credit`, input),
+      /** Turns or mirrors a picture (`mediaTransform`); `asNewFile` says the answer is a new file and the old one is as it was. */
+      transform: (id: string, input: MediaTransformInput) => get(MediaTransformResult, "POST", `/media/${enc(id)}/transform`, input),
+      /** A file's byte history, newest first, and a revert to one of its revisions (`mediaHistory`). */
+      history: (id: string) => get(MediaHistory, "GET", `/media/${enc(id)}/history`),
+      revert: (id: string, input: MediaRevertInput) => get(MediaTransformResult, "POST", `/media/${enc(id)}/revert`, input),
+      /** What the site's model suggests (`mediaSuggestions`). Nothing is applied: accepting one is an alt or tags write. */
+      suggestions: (id: string) => get(MediaSuggestions, "GET", `/media/${enc(id)}/suggestions`),
+      /** Every file changed since a list's `changeCursor` (`mediaChanges`), with `removed`, the next `changeCursor` and `moreChanges`. */
+      changes: (since: string, limit?: number) => get(MediaList, "GET", `/media${query({ changedSince: since, limit })}`),
+      /** Shrinks up to MAX_RESIZE_PASS stored pictures to the site's `mediaResize` (`mediaResizePass`); check each outcome's `ok`. */
+      resizePass: (input: MediaResizePassInput) => get(MediaResizePassResult, "POST", "/media/resize-pass", input),
       /** Deletes for good every trashed file the site allows, up to MAX_TRASH_EMPTY; `more` says to send it again. */
       emptyTrash: (input: MediaTrashEmptyInput) => get(MediaTrashEmptyResult, "POST", "/media/trash/empty", input),
       /** One request for many files; every file's outcome is its own, so check each `ok`. */

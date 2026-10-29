@@ -17,19 +17,27 @@ const V050 = JSON.parse(readFileSync(new URL("./fixtures/contract-v0.5.0.json", 
   schemas: Record<string, JsonSchema>;
 };
 
+/** What every file may carry from v0.13.0 (contract-v0.12.0.test.ts holds the rest of v0.13.0). */
+const V0130_ITEM = ["color", "credit", "downloadUrl", "license", "licenseExpires", "placeholder", "sourceUrl", "takenAt", "usedCount"];
+
 /** Every v0.5.0 schema later versions extend, and exactly the optional properties each adds (v0.10.0: scheduled updates, and a file's focal point and caption). */
 const ADDED: Record<string, string[]> = {
-  Capabilities: ["contentTags", "mediaCaption", "mediaFocus", "mediaLenses", "mediaReplace", "mediaReplaceKeepsSize", "mentionReset", "scheduledUpdates"],
-  MediaItem: ["caption", "focus"],
-  MediaDetail: ["caption", "focus"],
+  Capabilities: [
+    "contentTags", "mediaCaption", "mediaChanges", "mediaCredit", "mediaDuplicates", "mediaEmbedded", "mediaFilters", "mediaFocus",
+    "mediaHistory", "mediaImport", "mediaLenses", "mediaReplace", "mediaReplaceKeepsSize", "mediaResize", "mediaResizePass",
+    "mediaSuggestions", "mediaTransform", "mediaUsage", "mentionReset", "scheduledUpdates",
+  ],
+  MediaItem: ["caption", "focus", ...V0130_ITEM].sort(),
+  MediaDetail: ["caption", "focus", "twins", ...V0130_ITEM].sort(),
+  MediaUploadQuery: ["resize"],
   Meta: [],
   ContentSummary: ["scheduledUpdate", "tags", "version"],
   ContentDoc: ["scheduledUpdate", "tags"],
   WriteResult: ["scheduledUpdate"],
   ListQuery: ["dir", "sort"],
   ContentList: ["sorted", "total"],
-  MediaListQuery: ["dir", "lens", "sort"],
-  MediaList: ["sorted", "total"],
+  MediaListQuery: ["changedSince", "dir", "kind", "lens", "orientation", "sort"],
+  MediaList: ["changeCursor", "moreChanges", "removed", "sorted", "total"],
   MentionListQuery: ["q", "targetId"],
   MentionList: ["filtered"],
 };
@@ -48,16 +56,26 @@ describe("the v0.5.0 contract", () => {
     expect(V050.routes.length).toBe(29);
   });
 
-  it("keeps every v0.5.0 route exactly, and adds only the content tags route and, in v0.10.0, the schedule's read and cancel and the media focus, caption and replace", () => {
-    for (const route of V050.routes) expect(contract.ROUTES, JSON.stringify(route)).toContainEqual(route);
-    const fresh = contract.ROUTES.filter((r) => !V050.routes.some((old) => JSON.stringify(old) === JSON.stringify(r)));
+  it("keeps every v0.5.0 route exactly (the upload's answer named MediaUploadResult from v0.13.0), and adds only the routes later versions name", () => {
+    for (const route of V050.routes) {
+      const expected = route.method === "POST" && route.path === "/media" ? { ...route, response: "MediaUploadResult" } : route;
+      expect(contract.ROUTES, JSON.stringify(route)).toContainEqual(expected);
+    }
+    const fresh = contract.ROUTES.filter((r) => !V050.routes.some((old) => old.method === r.method && old.path === r.path));
     expect(fresh.map((r) => `${r.method} ${r.path}`)).toEqual([
       "PUT /content/:id/tags",
       "GET /content/:id/schedule",
       "DELETE /content/:id/schedule",
+      "POST /media/import",
       "PUT /media/:id/focus",
       "PUT /media/:id/caption",
       "PUT /media/:id/file",
+      "PUT /media/:id/credit",
+      "POST /media/:id/transform",
+      "GET /media/:id/history",
+      "POST /media/:id/revert",
+      "GET /media/:id/suggestions",
+      "POST /media/resize-pass",
     ]);
   });
 
@@ -83,13 +101,19 @@ describe("the v0.5.0 contract", () => {
     expect(strip(after)).toEqual(strip(before));
   });
 
-  it("adds only the new schemas v0.6.0 and v0.10.0 name", () => {
+  it("adds only the new schemas v0.6.0, v0.10.0 and v0.13.0 name", () => {
     const v060 = ["ContentTag", "ContentTagsInput", "ContentTags", "MediaLens", "SortDir"];
     const v0100 = [
       "ScheduleCancelQuery", "ScheduledUpdate", "ScheduledUpdateSummary",
       "MediaCaption", "MediaCaptionInput", "MediaFocus", "MediaFocusInput", "MediaReplaceQuery", "MediaReplaceResult",
     ];
-    expect(exported.filter((n) => !(n in V050.schemas)).sort()).toEqual([...v060, ...v0100].sort());
+    const v0130 = [
+      "MediaColor", "MediaCredit", "MediaCreditInput", "MediaHistory", "MediaImportInput", "MediaKind", "MediaLicense",
+      "MediaOrientation", "MediaPlaceholder", "MediaResize", "MediaResizeOutcome", "MediaResizePassInput",
+      "MediaResizePassResult", "MediaRevertInput", "MediaRevision", "MediaSourceUrl", "MediaSuggestions",
+      "MediaTransformInput", "MediaTransformOp", "MediaTransformResult", "MediaTwin", "MediaUploadResult",
+    ];
+    expect(exported.filter((n) => !(n in V050.schemas)).sort()).toEqual([...v060, ...v0100, ...v0130].sort());
   });
 
   it("parses v0.5.0 bodies with the v0.6.0 schemas", () => {

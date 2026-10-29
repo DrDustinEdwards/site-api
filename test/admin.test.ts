@@ -5,10 +5,12 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   loadMedia,
+  loadMediaChanges,
   loadMentions,
   liveSaveWarning,
   loadPosts,
   loadScheduledUpdate,
+  readMediaQuery,
   runMediaIntent,
   runMentionsIntent,
   runPostsIntent,
@@ -19,7 +21,7 @@ import {
 } from "../src/admin.js";
 import { createSiteClient, localClient, SiteApiError, type SiteClient } from "../src/client.js";
 import { memoryAdapter, type MemoryAdapterOptions } from "../src/testing.js";
-import { KEY, ORIGIN, site } from "./helpers.js";
+import { KEY, ORIGIN, png, site } from "./helpers.js";
 
 const OWNER: Permissions = { edit: true, publish: true, deleteContent: true, deleteMedia: true, decideMentions: true };
 const EDITOR: Permissions = { edit: true, publish: false, deleteContent: false, deleteMedia: false, decideMentions: false };
@@ -333,8 +335,8 @@ describe("media", () => {
     await upload(client, "a.png");
     const lensed = await loadMedia(source, { lens: "no-alt", sort: "name" });
     expect(lensed.rows.map((r) => r.filename)).toEqual(["a.png"]);
-    expect(lensed.page).toEqual({ nextCursor: null, total: 1 });
-    expect(lensed.offers.lenses).toEqual(["unattached", "no-alt", "large"]);
+    expect(lensed.page).toEqual({ nextCursor: null, total: 1, changeCursor: expect.any(String) });
+    expect(lensed.offers.lenses).toEqual(["unattached", "no-alt", "large", "license-expired", "oversized"]);
     expect((await loadMedia(source, { sort: "name" })).rows.map((r) => r.filename)).toEqual(["a.png", "b.png"]);
 
     const old = setup({ mediaLenses: false });
@@ -464,6 +466,63 @@ describe("media", () => {
     expect((await loadMedia(setup({ mediaReplaceKeepsSize: true }).source)).offers.replaceKeepsSize).toBe(true);
   });
 
+  it("imports from the web, says when an upload was already in the library, and saves credit and license (v0.13.0)", async () => {
+    const remote = (async () => new Response(png(30, 20) as Uint8Array<ArrayBuffer>, { headers: { "content-type": "image/png" } })) as typeof fetch;
+    const { adapter, source, records } = setup({ mediaDuplicates: true, mediaImportFetch: remote });
+    expect((await loadMedia(source)).offers).toMatchObject({ import: true, credit: true, duplicates: true, transform: true, history: true, live: true, resize: { maxEdge: 2048 }, resizePass: true });
+    const file = () => new File([png(10, 10) as Uint8Array<ArrayBuffer>], "a.png", { type: "image/png" });
+    expect(await runMediaIntent(source, { intent: "upload", file: file() })).toMatchObject({ ok: true, message: "Uploaded a.png." });
+    expect(await runMediaIntent(source, { intent: "upload", file: file() })).toMatchObject({ ok: true, message: "a.png is already in the library as a.png, so no second copy was stored." });
+    expect(await runMediaIntent(source, { intent: "import", url: "http://photos.example.com/b.png" })).toEqual({ ok: false, message: "Give the file's https address." });
+    expect(await runMediaIntent(source, { intent: "import", url: "https://photos.example.com/b.png", alt: "B" })).toMatchObject({ ok: true, message: "Imported b.png." });
+    expect(records.map((r) => r.kind)).toEqual(["media-upload", "media-import"]);
+
+    const [id] = [...adapter.mediaStore.keys()];
+    const version = adapter.mediaStore.get(id!)!.item.version!;
+    expect(await runMediaIntent(source, { intent: "credit", ids: [id!], versions: [version], licenseExpires: "soon" })).toEqual({ ok: false, message: "The license end is not a date." });
+    const credited = await runMediaIntent(source, { intent: "credit", ids: [id!], versions: [version], credit: "Ada Example", license: "CC BY 4.0", sourceUrl: "https://example.com/a", licenseExpires: "2030-01-01" });
+    expect(credited).toMatchObject({ ok: true, message: "Credit saved." });
+    expect(adapter.mediaStore.get(id!)!.item).toMatchObject({ credit: "Ada Example", license: "CC BY 4.0", sourceUrl: "https://example.com/a", licenseExpires: "2030-01-01" });
+  });
+
+  it("turns a picture as the Owner, and Undo puts its old bytes back; shrinks stored pictures after asking (v0.13.0)", async () => {
+    const { adapter, source } = setup();
+    const form = { intent: "upload", resize: "no", file: new File([png(4000, 3000) as Uint8Array<ArrayBuffer>], "big.png", { type: "image/png" }) };
+    await runMediaIntent(source, form);
+    const [id] = [...adapter.mediaStore.keys()];
+    const at = () => adapter.mediaStore.get(id!)!.item;
+    expect(at()).toMatchObject({ width: 4000, height: 3000 });
+    expect(await runMediaIntent({ ...source, can: EDITOR }, { intent: "transform", ids: [id!], versions: [at().version!], op: "rotate-90" })).toEqual({ ok: false, message: "Changing a file's picture is the Owner's step." });
+    const turned = await runMediaIntent(source, { intent: "transform", ids: [id!], versions: [at().version!], op: "rotate-90" });
+    expect(turned).toMatchObject({ ok: true, undo: { intent: "revert" } });
+    expect(at()).toMatchObject({ width: 3000, height: 4000 });
+    expect(await runMediaIntent(source, { intent: turned.undo!.intent, ...turned.undo!.fields })).toMatchObject({ ok: true, undo: { intent: "revert" } });
+    expect(at()).toMatchObject({ width: 4000, height: 3000 });
+    expect((await loadMedia(source, { inspect: id! })).detail?.history?.map((r) => r.reason)).toEqual(["revert", "transform", "upload"]);
+
+    const ask = await runMediaIntent(source, { intent: "resize", ids: [id!], versions: [at().version!] });
+    expect(ask.confirm).toMatchObject({ typeToConfirm: "1", items: [id] });
+    expect(at().width).toBe(4000);
+    expect(await runMediaIntent(source, { ...ask.confirm!.fields, intent: "resize", confirm: "1" })).toMatchObject({ ok: true, outcomes: [{ ok: true, message: "Shrunk to 2048x1536." }] });
+  });
+
+  it("shows the model's suggestions only when asked, less what the file has, and polls for what others changed (v0.13.0)", async () => {
+    const { adapter, client, source } = setup();
+    const a = await client.media.upload({ bytes: png(10, 10), contentType: "image/png", filename: "river-dusk.png", changeId: "u1" });
+    await client.media.setTags(a.id, { tags: ["river"], expectedVersion: a.version!, changeId: "t1" });
+    expect(readMediaQuery(new URLSearchParams(`inspect=${a.id}&suggest=1&orientation=square&kind=image`))).toEqual({ inspect: a.id, suggest: true, orientation: "square", kind: "image" });
+    const plain = await loadMedia(source, { inspect: a.id });
+    expect(plain.detail?.suggestions).toBeUndefined();
+    expect((await loadMedia(source, { inspect: a.id, suggest: true })).detail?.suggestions).toEqual({ tags: ["dusk"], alt: "A picture of river dusk.", model: "memory-suggester" });
+
+    // Someone else, in another admin, changes the file after this page loaded.
+    const other = localClient(adapter, { log: () => {} });
+    await other.media.setAlt(a.id, { alt: "The river at dusk", expectedVersion: adapter.mediaStore.get(a.id)!.item.version!, changeId: "o1" });
+    const changes = await loadMediaChanges(source, plain.page.changeCursor!);
+    expect(changes).toMatchObject({ rows: [{ id: a.id, alt: "The river at dusk", src: `https://memory.example/media/${a.id}` }], removed: [], more: false });
+    expect(await loadMediaChanges(source, "999")).toEqual({ reload: true });
+  });
+
   it("refuses what the site does not offer, before asking it", async () => {
     const { client, source } = setup({ mediaWrites: false });
     const a = await upload(client, "a.png");
@@ -557,7 +616,7 @@ describe("summary", () => {
     const { adapter, client, source } = setup({}, { waiting: async () => 3 });
     adapter.receiveMention({ sourceUrl: "https://a.example/1", targetId: "p" });
     await upload(client, "a.png");
-    expect(await summary(source)).toEqual({ site: { id: "memory", name: "Memory site" }, mentionsWaiting: 1, postsWaiting: 3, mediaWithoutAlt: 1 });
-    expect(await summary(setup({ mentions: false, mediaLenses: false }).source)).toMatchObject({ mentionsWaiting: null, postsWaiting: null, mediaWithoutAlt: null });
+    expect(await summary(source)).toEqual({ site: { id: "memory", name: "Memory site" }, mentionsWaiting: 1, postsWaiting: 3, mediaWithoutAlt: 1, mediaLicenseExpired: 0 });
+    expect(await summary(setup({ mentions: false, mediaLenses: false }).source)).toMatchObject({ mentionsWaiting: null, postsWaiting: null, mediaWithoutAlt: null, mediaLicenseExpired: null });
   });
 });

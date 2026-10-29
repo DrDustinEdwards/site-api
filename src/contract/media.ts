@@ -1,4 +1,5 @@
-// The media group (v0.2.0, writes v0.4.0, lenses v0.6.0, focal point, caption and replace v0.10.0).
+// The media group (v0.2.0, writes v0.4.0, lenses v0.6.0, focal point, caption and replace v0.10.0, the media library's
+// fourteen ideas v0.13.0).
 
 import { focusOf } from "@dustinedwards/site-runtime/image";
 import { z } from "zod";
@@ -18,9 +19,11 @@ export const MediaUploadLimits = z.object({
 
 /**
  * The ready-made views of a library (v0.6.0), each optional per site: files nothing uses (by the
- * site's own reference check), files with no alt text, and files larger than LARGE_MEDIA_BYTES.
+ * site's own reference check), files with no alt text, and files larger than LARGE_MEDIA_BYTES. v0.13.0 adds files whose
+ * bytes are exactly another file's (by content hash, never a picture's likeness), files whose license has run out
+ * (`licenseExpires` before today, in UTC), and pictures with an edge longer than the site's `mediaResize.maxEdge`.
  */
-export const MEDIA_LENSES = ["unattached", "no-alt", "large"] as const;
+export const MEDIA_LENSES = ["unattached", "no-alt", "large", "duplicates", "license-expired", "oversized"] as const;
 export const MediaLens = z.enum(MEDIA_LENSES);
 export const LARGE_MEDIA_BYTES = 1024 * 1024;
 
@@ -63,10 +66,46 @@ export const MediaFocus = z
 /** A file's caption (v0.10.0): what a figure shows under it, beside its alt text. "" for none. */
 export const MediaCaption = z.string().max(2000);
 
+/** Where the site serves a file, or offers it: a path on the site, such as /media/2026/09/photo.webp, or a full https URL. */
+const MediaAddress = z.string().min(1).max(2000).refine((u) => u.startsWith("/") || /^https:\/\//.test(u), "A path or an https URL");
+
+/** The longest placeholder a file may carry (v0.13.0): a tiny blurred picture, never the picture itself. */
+export const MAX_PLACEHOLDER_CHARS = 2048;
+
+/**
+ * A file's placeholder (v0.13.0): a tiny picture as a base64 data: URI in a raster type, which a page shows while the file
+ * loads. No SVG, so a placeholder never carries markup.
+ */
+export const MediaPlaceholder = z
+  .string()
+  .max(MAX_PLACEHOLDER_CHARS)
+  .regex(/^data:image\/(png|jpeg|gif|webp|avif);base64,[A-Za-z0-9+/]+={0,2}$/, "A base64 data: URI of a png, jpeg, gif, webp or avif");
+
+/** A file's main color (v0.13.0), as #rrggbb in lower case. */
+export const MediaColor = z.string().regex(/^#[0-9a-f]{6}$/, "A color as #rrggbb in lower case");
+
+/** Who made a file and the terms it is used under (v0.13.0): free text, "" for none. */
+export const MediaCredit = z.string().max(300);
+export const MediaLicense = z.string().max(300);
+
+/** Where a file came from (v0.13.0): the page or file it was taken from, http or https. */
+export const MediaSourceUrl = z.url({ protocol: /^https?$/ }).max(2000);
+
+/** What a file is, from its type (v0.13.0): kindOf in the package says which. */
+export const MEDIA_KINDS = ["image", "document", "video", "audio"] as const;
+export const MediaKind = z.enum(MEDIA_KINDS);
+
+/** Which way a picture lies (v0.13.0): orientationOf in the package says which. */
+export const MEDIA_ORIENTATIONS = ["landscape", "portrait", "square"] as const;
+export const MediaOrientation = z.enum(MEDIA_ORIENTATIONS);
+
+/** The fields a site may fill from a file's own embedded metadata (IPTC, EXIF) at upload (v0.13.0). */
+export const MEDIA_EMBEDDED_FIELDS = ["credit", "license", "caption", "takenAt"] as const;
+
 export const MediaItem = z.object({
   id: MediaId,
   /** Where the site serves it: a path on the site, such as /media/2026/09/photo.webp, or a full URL. */
-  url: z.string().min(1).max(2000).refine((u) => u.startsWith("/") || /^https:\/\//.test(u), "A path or an https URL"),
+  url: MediaAddress,
   /** The name it was uploaded with, when the site kept it. */
   filename: z.string().max(300).nullable(),
   contentType: z.string().min(1).max(200),
@@ -90,15 +129,39 @@ export const MediaItem = z.object({
   focus: MediaFocus.nullable().optional(),
   /** The file's caption (v0.10.0), on a site that keeps one: "" when it has none. */
   caption: MediaCaption.optional(),
+  // ---------- v0.13.0, each on a site that keeps it
+  /** How many places use the file, by the site's own reference check (capabilities.mediaUsage). */
+  usedCount: z.number().int().min(0).optional(),
+  /** A tiny placeholder picture and the main color, both made at upload. null when the site made none for this file. */
+  placeholder: MediaPlaceholder.nullable().optional(),
+  color: MediaColor.nullable().optional(),
+  /** Who made it, the terms it is used under, and where it came from (capabilities.mediaCredit). */
+  credit: MediaCredit.optional(),
+  license: MediaLicense.optional(),
+  sourceUrl: MediaSourceUrl.nullable().optional(),
+  /** The day the license runs out (YYYY-MM-DD); null for a license with no end. */
+  licenseExpires: z.iso.date().nullable().optional(),
+  /** When the picture was taken, as its embedded metadata says: with an offset where the file names one, local time where not. */
+  takenAt: z.iso.datetime({ offset: true, local: true }).nullable().optional(),
+  /** Where the original file downloads from, where the site offers it. It may be `url` itself. */
+  downloadUrl: MediaAddress.optional(),
 });
+
+/** Another file whose bytes are exactly this one's (v0.13.0). */
+export const MediaTwin = z.object({ id: MediaId, filename: z.string().max(300).nullable() });
 
 /** One file with the places it is used: what a delete would be refused over. */
 export const MediaDetail = MediaItem.extend({
   usedBy: z.array(MediaUse),
+  /** Files whose bytes are exactly this one's (v0.13.0, capabilities.mediaDuplicates): [] when there are none. */
+  twins: z.array(MediaTwin).max(50).optional(),
 });
 
-/** What a media list can be sorted by (v0.6.0). added runs newest first, size largest first and name A to Z, unless `dir` says otherwise. */
-export const MEDIA_SORTS = ["added", "name", "size"] as const;
+/**
+ * What a media list can be sorted by (v0.6.0). added runs newest first, size largest first and name A to Z, unless `dir`
+ * says otherwise. used (v0.13.0, capabilities.mediaUsage) runs most used first.
+ */
+export const MEDIA_SORTS = ["added", "name", "size", "used"] as const;
 
 export const MediaListQuery = z.object({
   q: z.string().max(200).optional(),
@@ -111,6 +174,14 @@ export const MediaListQuery = z.object({
   tag: MediaTag.optional(),
   /** "only" lists the trash (v0.4.0). Without it the trash is left out. A site without a trash ignores it. */
   trashed: z.enum(["only"]).optional(),
+  /** v0.13.0, on a site with capabilities.mediaFilters; any other site answers 501. A file with no size has no orientation. */
+  orientation: MediaOrientation.optional(),
+  kind: MediaKind.optional(),
+  /**
+   * v0.13.0, on a site with capabilities.mediaChanges: the `changeCursor` of an earlier answer. The list then answers every
+   * file changed since, trash included, and `removed`, and takes no other filter but `limit`.
+   */
+  changedSince: z.string().min(1).max(500).optional(),
   cursor: z.string().max(500).optional(),
   limit: z.coerce.number().int().min(1).max(200).default(50),
 });
@@ -122,6 +193,12 @@ export const MediaList = z.object({
   total: z.number().int().min(0).optional(),
   /** The order the site applied (v0.6.0). Absent: the site did not sort as asked. */
   sorted: z.object({ sort: z.enum(MEDIA_SORTS), dir: SortDir }).optional(),
+  /** v0.13.0, on a site with capabilities.mediaChanges: the point to poll from next, as `changedSince`. */
+  changeCursor: z.string().min(1).max(500).optional(),
+  /** On a `changedSince` answer only: the ids deleted for good since. */
+  removed: z.array(MediaId).optional(),
+  /** On a `changedSince` answer only: true when more changes wait than one answer holds; poll again at once from `changeCursor`. */
+  moreChanges: z.boolean().optional(),
 });
 
 /**
@@ -134,6 +211,21 @@ export const MediaUploadQuery = z.object({
   filename: z.string().min(1).max(200).regex(/^[^/\\\u0000-\u001f]+$/, "A file name, with no path"),
   alt: z.string().max(2000).default(""),
   changeId: ChangeId,
+  /** "no" keeps this file at its own size on a site that shrinks large pictures at upload (v0.13.0, capabilities.mediaResize). */
+  resize: z.enum(["no"]).optional(),
+});
+
+/**
+ * The answer to an upload or an import (v0.13.0; before it, a MediaItem): the file, and what the site did with it. The
+ * extra properties are each absent where they do not apply.
+ */
+export const MediaUploadResult = MediaItem.extend({
+  /** The id of the file already holding these exact bytes (capabilities.mediaDuplicates): the answer is that file, and nothing new was stored. */
+  duplicateOf: MediaId.optional(),
+  /** The fields the site filled from the file's own embedded metadata (capabilities.mediaEmbedded). */
+  embedded: z.array(z.enum(MEDIA_EMBEDDED_FIELDS)).optional(),
+  /** The picture's size before the site shrank it (capabilities.mediaResize). */
+  resizedFrom: z.object({ width: z.number().int().min(1), height: z.number().int().min(1), bytes: z.number().int().min(0) }).optional(),
 });
 
 export const MediaDeleteQuery = z.object({
@@ -278,6 +370,131 @@ export const MediaTrashEmptyResult = z.object({
   more: z.boolean(),
 });
 
+// ---------- the media library's ideas (v0.13.0), each optional per site
+
+/** What a site does to large pictures at upload: the longest edge it keeps, and the quality it encodes them at. */
+export const MediaResize = z.object({
+  maxEdge: z.number().int().min(256).max(16384),
+  quality: z.number().int().min(1).max(100),
+});
+
+/** Fetch a file from the web into the site's own storage. The site serves its own copy, never the source. */
+export const MediaImportInput = z.object({
+  url: z.url({ protocol: /^https$/ }).max(2000),
+  /** The name to keep; the last segment of the address when left out. */
+  // oxlint-disable-next-line no-control-regex
+  filename: z.string().min(1).max(200).regex(/^[^/\\\u0000-\u001f]+$/, "A file name, with no path").optional(),
+  alt: z.string().max(2000).default(""),
+  resize: z.enum(["no"]).optional(),
+  changeId: ChangeId,
+});
+
+/** The file's credit, license, source and license end, as one write: each is the whole value after it. */
+export const MediaCreditInput = z.object({
+  credit: MediaCredit,
+  license: MediaLicense,
+  sourceUrl: MediaSourceUrl.nullable(),
+  licenseExpires: z.iso.date().nullable(),
+  expectedVersion: Version,
+  changeId: ChangeId,
+});
+
+export const MEDIA_TRANSFORMS = ["rotate-90", "rotate-180", "rotate-270", "flip-h", "flip-v"] as const;
+export const MediaTransformOp = z.enum(MEDIA_TRANSFORMS);
+
+/** A quarter turn clockwise (rotate-90), a half turn, three quarters, or a mirror left to right (flip-h) or top to bottom. */
+export const MediaTransformInput = z.object({
+  op: MediaTransformOp,
+  expectedVersion: Version,
+  changeId: ChangeId,
+});
+
+/**
+ * The file after a transform or a revert. In place (`asNewFile: false`): the same id and address, alt, caption, tags and
+ * credit kept, the old bytes kept in the file's history. As a new file (`asNewFile: true`, a quarter turn of a picture
+ * that is not square on a site whose addresses carry the size): a new file, and the old one as it was.
+ */
+export const MediaTransformResult = MediaItem.extend({
+  changeId: ChangeId,
+  sizesNeedPurge: z.boolean(),
+  asNewFile: z.boolean(),
+});
+
+/** One earlier (or the current) set of a file's bytes. */
+export const MediaRevision = z.object({
+  /** The site's id for these bytes, which a revert names as `to`. */
+  rev: z.string().min(1).max(200),
+  at: Timestamp,
+  bytes: z.number().int().min(0),
+  width: z.number().int().min(1).nullable(),
+  height: z.number().int().min(1).nullable(),
+  /** What made these bytes. */
+  reason: z.enum(["upload", "import", "replace", "transform", "resize", "revert"]),
+  /** True for the bytes the file has now: exactly one revision is current. */
+  current: z.boolean(),
+});
+
+/** A file's byte history, newest first, at most 100. */
+export const MediaHistory = z.object({
+  id: MediaId,
+  revisions: z
+    .array(MediaRevision)
+    .max(100)
+    .refine((r) => r.filter((x) => x.current).length === 1, "Exactly one revision is current"),
+});
+
+export const MediaRevertInput = z.object({
+  to: z.string().min(1).max(200),
+  expectedVersion: Version,
+  changeId: ChangeId,
+});
+
+/** The most files one resize pass request shrinks: image work is slow, so the caller sends the rest in further requests. */
+export const MAX_RESIZE_PASS = 20;
+
+/** Shrink stored pictures to the site's `mediaResize`, each file with the version the caller saw and its own change id. */
+export const MediaResizePassInput = z.object({
+  items: z
+    .array(z.object({ id: MediaId, expectedVersion: Version, changeId: ChangeId }))
+    .min(1)
+    .max(MAX_RESIZE_PASS),
+});
+
+export const MediaResizeOutcome = z.discriminatedUnion("ok", [
+  z.object({
+    ok: z.literal(true),
+    id: MediaId,
+    changeId: ChangeId,
+    /** False when the picture was already within the size: nothing changed and the version did not move. */
+    resized: z.boolean(),
+    version: Version.optional(),
+    width: z.number().int().min(1).nullable(),
+    height: z.number().int().min(1).nullable(),
+    bytes: z.number().int().min(0),
+  }),
+  z.object({
+    ok: z.literal(false),
+    id: MediaId,
+    changeId: ChangeId,
+    error: z.enum(["not-found", "version-conflict", "refused", "invalid", "internal"]),
+    message: z.string(),
+    currentVersion: Version.nullable().optional(),
+  }),
+]);
+
+export const MediaResizePassResult = z.object({
+  results: z.array(MediaResizeOutcome),
+});
+
+/** What the site's model suggests for a file. The site never applies it: a person accepts or dismisses each. */
+export const MediaSuggestions = z.object({
+  id: MediaId,
+  tags: MediaTags,
+  alt: z.string().max(2000).nullable(),
+  /** The model that made them, as the site names it. */
+  model: z.string().min(1).max(200),
+});
+
 export type MediaUploadLimits = z.infer<typeof MediaUploadLimits>;
 export type MediaUse = z.infer<typeof MediaUse>;
 export type MediaItem = z.infer<typeof MediaItem>;
@@ -303,3 +520,21 @@ export type MediaBulkOutcome = z.infer<typeof MediaBulkOutcome>;
 export type MediaBulkResult = z.infer<typeof MediaBulkResult>;
 export type MediaTrashEmptyInput = z.infer<typeof MediaTrashEmptyInput>;
 export type MediaTrashEmptyResult = z.infer<typeof MediaTrashEmptyResult>;
+export type MediaKind = z.infer<typeof MediaKind>;
+export type MediaOrientation = z.infer<typeof MediaOrientation>;
+export type MediaEmbeddedField = (typeof MEDIA_EMBEDDED_FIELDS)[number];
+export type MediaTwin = z.infer<typeof MediaTwin>;
+export type MediaUploadResult = z.infer<typeof MediaUploadResult>;
+export type MediaResize = z.infer<typeof MediaResize>;
+export type MediaImportInput = z.infer<typeof MediaImportInput>;
+export type MediaCreditInput = z.infer<typeof MediaCreditInput>;
+export type MediaTransformOp = z.infer<typeof MediaTransformOp>;
+export type MediaTransformInput = z.infer<typeof MediaTransformInput>;
+export type MediaTransformResult = z.infer<typeof MediaTransformResult>;
+export type MediaRevision = z.infer<typeof MediaRevision>;
+export type MediaHistory = z.infer<typeof MediaHistory>;
+export type MediaRevertInput = z.infer<typeof MediaRevertInput>;
+export type MediaResizePassInput = z.infer<typeof MediaResizePassInput>;
+export type MediaResizeOutcome = z.infer<typeof MediaResizeOutcome>;
+export type MediaResizePassResult = z.infer<typeof MediaResizePassResult>;
+export type MediaSuggestions = z.infer<typeof MediaSuggestions>;

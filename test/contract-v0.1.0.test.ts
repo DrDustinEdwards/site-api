@@ -39,6 +39,7 @@ describe("the v0.1.0 contract", () => {
     expect(contract.ROUTES.filter((r) => r.group === "media").map((r) => `${r.method} ${r.path}`)).toEqual([
       "GET /media",
       "POST /media",
+      "POST /media/import",
       "GET /media/:id",
       "DELETE /media/:id",
       "PUT /media/:id/alt",
@@ -46,10 +47,16 @@ describe("the v0.1.0 contract", () => {
       "PUT /media/:id/focus",
       "PUT /media/:id/caption",
       "PUT /media/:id/file",
+      "PUT /media/:id/credit",
+      "POST /media/:id/transform",
+      "GET /media/:id/history",
+      "POST /media/:id/revert",
+      "GET /media/:id/suggestions",
       "POST /media/:id/trash",
       "POST /media/:id/restore",
       "POST /media/trash/empty",
       "POST /media/bulk",
+      "POST /media/resize-pass",
     ]);
   });
 

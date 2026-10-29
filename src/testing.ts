@@ -4,7 +4,8 @@
 import { MediaInUseError, NotFoundError, RefusedError, VersionConflictError, type DueSchedule, type MediaAdapter, type MediaReplace, type MentionsAdapter, type SchedulesAdapter, type SiteAdapter } from "./adapter.js";
 import { joinSource, setTags as writeTags, splitSource, tagsOf } from "./frontmatter.js";
 import { LARGE_MEDIA_BYTES, MEDIA_LENSES } from "./contract.js";
-import type { ContentDoc, ContentStatus, ContentSummary, MediaLens, MediaItem, MediaUploadLimits, MediaUse, MentionItem, MentionStatus, Revision, ScheduledUpdate, SiteInfo, WriteResult } from "./contract.js";
+import type { ContentDoc, ContentStatus, ContentSummary, MediaEmbeddedField, MediaLens, MediaItem, MediaResize, MediaRevision, MediaTransformOp, MediaUploadLimits, MediaUse, MentionItem, MentionStatus, Revision, ScheduledUpdate, SiteInfo, WriteResult } from "./contract.js";
+import { kindOf, orientationOf, transformFocus, turnsSize } from "./media.js";
 
 interface Stored {
   doc: ContentDoc;
@@ -30,6 +31,20 @@ export interface MemoryAdapterOptions {
   mediaLenses?: boolean;
   /** true for a site whose replace refuses a picture of another size, as dustinedwards.info's does (v0.11.0). Off by default. */
   mediaReplaceKeepsSize?: boolean;
+  /**
+   * false for a v0.12.0 media manager (v0.13.0): no duplicates, usage counts, filters, credit, transforms, history, changes,
+   * embedded metadata, suggestions or new lenses. On by default, with `mediaWrites`.
+   */
+  mediaExtras?: boolean;
+  /**
+   * true for a site that answers an upload of bytes it holds with that file (v0.13.0), and the duplicates lens. Off by
+   * default, since tests upload the same few bytes again and again.
+   */
+  mediaDuplicates?: boolean;
+  /** What uploads shrink to (v0.13.0), or false for none. { maxEdge: 2048, quality: 82 } by default, with `mediaExtras`. */
+  mediaResize?: MediaResize | false;
+  /** The fetch imports use (v0.13.0). Absent: the site does not import, so no test ever reaches the network. */
+  mediaImportFetch?: typeof fetch;
   /** false for a mentions group that ignores q and targetId (a v0.5.0 site) and so echoes no `filtered`. On by default. */
   mentionFilters?: boolean;
   /** false for a site that does not receive webmentions (its routes then answer 501). On by default. */
@@ -74,6 +89,37 @@ const EXTENSIONS: Record<string, string> = {
 interface StoredMedia {
   item: MediaItem;
   bytes: Uint8Array;
+  /** v0.13.0: the content hash the package sent, for duplicates. */
+  sha256?: string;
+  /** v0.13.0: every set of bytes the file has had, oldest first; the last is current. */
+  revisions?: Array<Omit<MediaRevision, "current"> & { data: Uint8Array }>;
+}
+
+/** A PNG's width and height from its IHDR chunk, as a site measures an upload; null for anything else. */
+function measure(bytes: Uint8Array): { width: number; height: number } | null {
+  const png = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a].every((v, i) => bytes[i] === v);
+  if (!png || bytes.length < 24 || String.fromCharCode(...bytes.subarray(12, 16)) !== "IHDR") return null;
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const [width, height] = [view.getUint32(16), view.getUint32(20)];
+  return width > 0 && height > 0 ? { width, height } : null;
+}
+
+/** A PNG's tEXt chunks, the embedded metadata the reference adapter reads (a real site reads IPTC and EXIF as well). */
+function pngText(bytes: Uint8Array): Record<string, string> {
+  const found: Record<string, string> = {};
+  if (!measure(bytes)) return found;
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  for (let at = 8; at + 8 <= bytes.length; ) {
+    const length = view.getUint32(at);
+    const type = String.fromCharCode(...bytes.subarray(at + 4, at + 8));
+    const data = bytes.subarray(at + 8, Math.min(at + 8 + length, bytes.length));
+    if (type === "tEXt") {
+      const nul = data.indexOf(0);
+      if (nul > 0) found[String.fromCharCode(...data.subarray(0, nul))] = String.fromCharCode(...data.subarray(nul + 1));
+    }
+    at += 12 + length;
+  }
+  return found;
 }
 
 /** The item with its tags (v0.6.0), where its frontmatter can hold them. */
@@ -180,7 +226,39 @@ export function memoryAdapter(
   function touchMedia(stored: StoredMedia, changes: Partial<MediaItem>): { version: string } {
     const version = nextMediaVersion();
     stored.item = { ...stored.item, ...changes, version };
+    logChange(stored.item.id);
     return { version };
+  }
+
+  // ---------- v0.13.0
+  const extras = mediaWrites && options.mediaExtras !== false;
+  const dedupe = extras && options.mediaDuplicates === true;
+  const resize = extras && options.mediaResize !== false ? (options.mediaResize ?? { maxEdge: 2048, quality: 82 }) : undefined;
+  /** Every change in order, as a site's own change log would hold it: what `changes` answers from. */
+  const changeLog: Array<{ seq: number; id: string }> = [];
+  let changeSeq = 0;
+  let revCounter = 0;
+  function logChange(id: string) {
+    changeLog.push({ seq: ++changeSeq, id });
+  }
+
+  /** Keeps a new set of bytes as the file's current revision; the earlier ones stay. */
+  function keepBytes(stored: StoredMedia, data: Uint8Array, size: { width: number | null; height: number | null }, reason: MediaRevision["reason"]) {
+    if (!extras) return;
+    stored.revisions ??= [];
+    stored.revisions.push({ rev: `r${++revCounter}`, at: now().toISOString(), bytes: data.byteLength, width: size.width, height: size.height, reason, data });
+  }
+
+  /** A size scaled so its longer edge is the site's maxEdge, or null when it already fits. */
+  function shrunk(width: number | null, height: number | null): { width: number; height: number } | null {
+    if (!resize || !width || !height || Math.max(width, height) <= resize.maxEdge) return null;
+    const scale = resize.maxEdge / Math.max(width, height);
+    return { width: Math.max(1, Math.round(width * scale)), height: Math.max(1, Math.round(height * scale)) };
+  }
+
+  /** An item as the site answers it: with its usage count, which moves whenever a post does. */
+  function shown(item: MediaItem): MediaItem {
+    return extras ? { ...item, usedCount: usesOf(item.id).length } : item;
   }
 
   /** The lenses, as the site would answer them: nothing uses it, it has no alt text, it is over the size line. */
@@ -188,7 +266,17 @@ export function memoryAdapter(
     unattached: (i) => usesOf(i.id).length === 0,
     "no-alt": (i) => i.alt.trim() === "",
     large: (i) => i.bytes > LARGE_MEDIA_BYTES,
+    duplicates: (i) => twinsOf(i.id).length > 0,
+    "license-expired": (i) => Boolean(i.licenseExpires && i.licenseExpires < now().toISOString().slice(0, 10)),
+    oversized: (i) => shrunk(i.width, i.height) !== null,
   };
+
+  /** The other files holding exactly this file's bytes. */
+  function twinsOf(id: string): Array<{ id: string; filename: string | null }> {
+    const hash = mediaStore.get(id)?.sha256;
+    if (!hash) return [];
+    return [...mediaStore.values()].filter((m) => m.sha256 === hash && m.item.id !== id).map((m) => ({ id: m.item.id, filename: m.item.filename }));
+  }
 
   /** The site's reference check: every post whose source carries the file's URL, as the real site scans. */
   function usesOf(id: string): MediaUse[] {
@@ -208,8 +296,11 @@ export function memoryAdapter(
       ? undefined
       : {
           limits: options.media ?? MEMORY_MEDIA_LIMITS,
-          ...(options.mediaLenses === false ? {} : { lenses: MEDIA_LENSES }),
+          ...(options.mediaLenses === false ? {} : { lenses: MEDIA_LENSES.filter((l) => (extras || ["unattached", "no-alt", "large"].includes(l)) && (l !== "oversized" || resize) && (l !== "duplicates" || dedupe)) }),
           ...(options.mediaReplaceKeepsSize ? { replaceKeepsSize: true } : {}),
+          ...(extras ? { usage: true, filters: true, readsEmbedded: true } : {}),
+          ...(resize ? { resize } : {}),
+          ...(extras && options.mediaImportFetch ? { importFetch: options.mediaImportFetch } : {}),
           async list(query) {
             const needle = query.q?.toLowerCase();
             const lensed = options.mediaLenses !== false;
@@ -219,11 +310,15 @@ export function memoryAdapter(
               .filter((i) => !query.tag || (i.tags ?? []).includes(query.tag))
               .filter((i) => !needle || [i.id, i.filename ?? "", i.alt].some((t) => t.toLowerCase().includes(needle)))
               .filter((i) => !lensed || !query.lens || LENS[query.lens](i))
+              .filter((i) => !query.orientation || orientationOf(i.width, i.height) === query.orientation)
+              .filter((i) => !query.kind || kindOf(i.contentType) === query.kind)
+              .map(shown)
               .reverse();
             // v0.6.0: sorted as asked, newest, largest or A to Z first unless dir says otherwise.
             const sorted = lensed && query.sort ? { sort: query.sort, dir: query.dir ?? (query.sort === "name" ? "asc" : "desc") } : undefined;
             if (sorted) {
-              const key = (i: MediaItem): string | number => (sorted.sort === "size" ? i.bytes : sorted.sort === "name" ? (i.filename ?? i.id).toLowerCase() : (i.uploadedAt ?? ""));
+              const key = (i: MediaItem): string | number =>
+                sorted.sort === "size" ? i.bytes : sorted.sort === "used" ? (i.usedCount ?? 0) : sorted.sort === "name" ? (i.filename ?? i.id).toLowerCase() : (i.uploadedAt ?? "");
               const order = [...all];
               all.sort((a, b) => {
                 const [x, y] = [key(a), key(b)];
@@ -238,30 +333,63 @@ export function memoryAdapter(
               nextCursor: start + query.limit < all.length ? String(start + query.limit) : null,
               ...(lensed ? { total: all.length } : {}),
               ...(sorted ? { sorted } : {}),
+              ...(extras ? { changeCursor: String(changeSeq) } : {}),
             };
           },
           async get(id) {
             const stored = mediaStore.get(id);
-            return stored ? { ...stored.item, usedBy: usesOf(id) } : null;
+            return stored ? { ...shown(stored.item), usedBy: usesOf(id), ...(dedupe ? { twins: twinsOf(id) } : {}) } : null;
           },
           async upload(input) {
             const base = input.filename.replace(/\.[^.]*$/, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "file";
             const id = `uploads/${++mediaCounter}-${base}.${EXTENSIONS[input.contentType] ?? "bin"}`;
+            const size = (extras ? measure(input.bytes) : null) ?? { width: null, height: null };
+            // v0.13.0: shrunk to the site's longest edge unless the upload said no. The reference adapter does not re-encode,
+            // so only the measured size moves.
+            const small = input.resize ? shrunk(size.width, size.height) : null;
+            // The embedded metadata fills only what the upload left empty.
+            const text = extras ? pngText(input.bytes) : {};
+            const taken = text["Creation Time"] && !Number.isNaN(Date.parse(text["Creation Time"])) ? new Date(text["Creation Time"]).toISOString() : null;
+            const embedded: MediaEmbeddedField[] = [
+              ...(text.Author ? (["credit"] as const) : []),
+              ...(text.Copyright ? (["license"] as const) : []),
+              ...(text.Description ? (["caption"] as const) : []),
+              ...(taken ? (["takenAt"] as const) : []),
+            ];
             const item: MediaItem = {
               id,
               url: `/media/${id}`,
               filename: input.filename,
               contentType: input.contentType,
               bytes: input.bytes.byteLength,
-              width: null,
-              height: null,
+              width: small?.width ?? size.width,
+              height: small?.height ?? size.height,
               alt: input.alt,
               uploadedAt: now().toISOString(),
               deletable: true,
-              ...(mediaWrites ? { version: nextMediaVersion(), tags: [], trashedAt: null, focus: null, caption: "" } : {}),
+              ...(mediaWrites ? { version: nextMediaVersion(), tags: [], trashedAt: null, focus: null, caption: text.Description?.slice(0, 2000) ?? "" } : {}),
+              ...(extras
+                ? {
+                    credit: text.Author?.slice(0, 300) ?? "",
+                    license: text.Copyright?.slice(0, 300) ?? "",
+                    sourceUrl: input.sourceUrl ?? null,
+                    licenseExpires: null,
+                    takenAt: taken,
+                    placeholder: null,
+                    color: null,
+                    downloadUrl: `/media/${id}`,
+                  }
+                : {}),
             };
-            mediaStore.set(id, { item, bytes: input.bytes });
-            return item;
+            const stored: StoredMedia = { item, bytes: input.bytes, ...(input.sha256 ? { sha256: input.sha256 } : {}) };
+            keepBytes(stored, input.bytes, item, input.sourceUrl ? "import" : "upload");
+            mediaStore.set(id, stored);
+            logChange(id);
+            return {
+              ...item,
+              ...(embedded.length > 0 ? { embedded } : {}),
+              ...(small && size.width && size.height ? { resizedFrom: { width: size.width, height: size.height, bytes: input.bytes.byteLength } } : {}),
+            };
           },
           async delete(id) {
             if (!mediaStore.has(id)) throw new NotFoundError("No such media.");
@@ -269,6 +397,7 @@ export function memoryAdapter(
             if (uses.length > 0) throw new MediaInUseError(uses);
             mediaStore.delete(id);
             deleted.push(id);
+            logChange(id);
           },
           ...(mediaWrites
             ? {
@@ -294,13 +423,104 @@ export function memoryAdapter(
                 // so no size can be stale.
                 async replace(id: string, input: MediaReplace) {
                   const stored = heldMedia(id, input.expectedVersion);
+                  const size = (extras ? measure(input.bytes) : null) ?? { width: null, height: null };
+                  if (options.mediaReplaceKeepsSize && (size.width !== stored.item.width || size.height !== stored.item.height)) {
+                    throw new RefusedError("The new picture is another size; this site's addresses carry the size.");
+                  }
                   stored.bytes = input.bytes;
-                  touchMedia(stored, { filename: input.filename, bytes: input.bytes.byteLength, width: null, height: null, focus: null, uploadedAt: now().toISOString() });
-                  return { item: stored.item, sizesNeedPurge: false };
+                  keepBytes(stored, input.bytes, size, "replace");
+                  touchMedia(stored, { filename: input.filename, bytes: input.bytes.byteLength, ...size, focus: null, uploadedAt: now().toISOString() });
+                  return { item: shown(stored.item), sizesNeedPurge: false };
                 },
               }
             : {}),
+          ...(extras ? extraMedia() : {}),
         };
+
+  /** The v0.13.0 methods, as a site that offers every one of them would write them. */
+  function extraMedia(): Partial<MediaAdapter> {
+    return {
+      ...(dedupe
+        ? {
+            async findByHash(sha256: string) {
+              const found = [...mediaStore.values()].find((m) => m.sha256 === sha256);
+              return found ? shown(found.item) : null;
+            },
+          }
+        : {}),
+      async setCredit(id, input) {
+        const { credit, license, sourceUrl, licenseExpires } = input;
+        return touchMedia(heldMedia(id, input.expectedVersion), { credit, license, sourceUrl, licenseExpires });
+      },
+      // The reference adapter does not decode pictures, so a turn moves the size and the focal point and keeps the bytes.
+      async transform(id, input: { op: MediaTransformOp; asNewFile: boolean; expectedVersion: string; changeId: string }) {
+        const stored = heldMedia(id, input.expectedVersion);
+        const { width, height } = stored.item;
+        const size = turnsSize(input.op) ? { width: height, height: width } : { width, height };
+        const focus = transformFocus(stored.item.focus ?? null, input.op);
+        if (input.asNewFile) {
+          const newId = id.replace(/(\.[a-z0-9]+)?$/, (ext) => `-${input.op}${ext}`);
+          const copy: StoredMedia = { item: { ...stored.item, ...size, focus, id: newId, url: `/media/${newId}`, downloadUrl: `/media/${newId}`, version: nextMediaVersion(), uploadedAt: now().toISOString() }, bytes: stored.bytes };
+          keepBytes(copy, stored.bytes, size, "transform");
+          mediaStore.set(newId, copy);
+          logChange(newId);
+          return { item: shown(copy.item), sizesNeedPurge: false };
+        }
+        keepBytes(stored, stored.bytes, size, "transform");
+        touchMedia(stored, { ...size, focus });
+        return { item: shown(stored.item), sizesNeedPurge: false };
+      },
+      async history(id) {
+        const revisions = mediaStore.get(id)?.revisions;
+        if (!revisions) return null;
+        return revisions.map(({ data: _d, ...r }, n) => ({ ...r, current: n === revisions.length - 1 })).reverse();
+      },
+      async revert(id, input) {
+        const stored = heldMedia(id, input.expectedVersion);
+        const target = stored.revisions?.find((r) => r.rev === input.to);
+        if (!target) throw new NotFoundError("This file has no such earlier version.");
+        stored.bytes = target.data;
+        keepBytes(stored, target.data, target, "revert");
+        touchMedia(stored, { bytes: target.bytes, width: target.width, height: target.height, focus: null });
+        return { item: shown(stored.item), sizesNeedPurge: false };
+      },
+      async changes({ since, limit }) {
+        const from = Number(since);
+        if (!Number.isInteger(from) || from < 0 || from > changeSeq) throw new RefusedError("That change cursor is not this site's; reload the library.");
+        // Each file once, at its latest change, oldest first.
+        const latest = new Map<string, number>();
+        for (const entry of changeLog) if (entry.seq > from) latest.set(entry.id, entry.seq);
+        const order = [...latest].sort((a, b) => a[1] - b[1]);
+        const taken = order.slice(0, limit);
+        const more = order.length > limit;
+        return {
+          items: taken.filter(([id]) => mediaStore.has(id)).map(([id]) => shown(mediaStore.get(id)!.item)),
+          removed: taken.filter(([id]) => !mediaStore.has(id)).map(([id]) => id),
+          cursor: String(more ? taken[taken.length - 1]![1] : changeSeq),
+          more,
+        };
+      },
+      ...(resize && !options.mediaReplaceKeepsSize
+        ? {
+            async shrink(id: string, input: { expectedVersion: string; changeId: string }) {
+              const stored = heldMedia(id, input.expectedVersion);
+              const small = shrunk(stored.item.width, stored.item.height);
+              if (!small) return { resized: false, item: shown(stored.item) };
+              keepBytes(stored, stored.bytes, small, "resize");
+              touchMedia(stored, small);
+              return { resized: true, item: shown(stored.item) };
+            },
+          }
+        : {}),
+      // What a model might say, made from the file name, so tests see suggestions without one.
+      async suggest(id) {
+        const item = mediaStore.get(id)?.item;
+        if (!item) return null;
+        const words = (item.filename ?? id).replace(/\.[^.]*$/, "").split(/[^A-Za-z]+/).filter((w) => w.length >= 3);
+        return { tags: words.map((w) => w.toLowerCase()), alt: words.length > 0 ? `A picture of ${words.join(" ").toLowerCase()}.` : null, model: "memory-suggester" };
+      },
+    };
+  }
 
   // ---------- mentions: what dustinedwards.info does, in memory
 

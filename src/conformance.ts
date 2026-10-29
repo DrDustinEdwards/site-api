@@ -290,11 +290,29 @@ export async function runConformance(config: ConformanceConfig): Promise<Conform
         ["restore", capabilities.mediaTrash, "POST", "restore", stale],
         ["focus", capabilities.mediaFocus, "PUT", "focus", { focus: "0.5x0.5", ...stale }],
         ["caption", capabilities.mediaCaption, "PUT", "caption", { caption: "probe", ...stale }],
+        // v0.13.0
+        ["credit", capabilities.mediaCredit, "PUT", "credit", { credit: "probe", license: "", sourceUrl: null, licenseExpires: null, ...stale }],
+        ["transform", capabilities.mediaTransform, "POST", "transform", { op: "flip-h", ...stale }],
+        ["revert", capabilities.mediaHistory, "POST", "revert", { to: "probe", ...stale }],
       ];
       for (const [name, offered, method, route, body] of writes) {
         await check(`media ${name} of an unknown id: refused, or not implemented where the site lacks it`, async () =>
           refusedOrAbsent(Boolean(offered), await send(method, `/media/${probeId}/${route}`, body), 404, "not-found", `media ${name}`));
       }
+
+      // v0.13.0 reads of the probe id: a site answers 404 before it would ask its model anything.
+      const reads: Array<[string, boolean | undefined, string]> = [
+        ["history", capabilities.mediaHistory, "history"],
+        ["suggestions", capabilities.mediaSuggestions, "suggestions"],
+      ];
+      for (const [name, offered, route] of reads) {
+        await check(`media ${name} of an unknown id: refused, or not implemented where the site lacks it`, async () =>
+          refusedOrAbsent(Boolean(offered), await doFetch(`${origin}${PREFIX}/media/${probeId}/${route}`, { headers: auth }), 404, "not-found", `media ${name}`));
+      }
+
+      // An import of an http address is refused before anything is fetched.
+      await check("media import of an http address: refused, or not implemented where the site lacks it", async () =>
+        refusedOrAbsent(Boolean(capabilities.mediaImport), await send("POST", "/media/import", { url: "http://example.com/a.png", changeId: "conformance-probe" }), 400, "invalid", "media import over http"));
 
       await check("media alt with a body outside the contract: refused, or not implemented where the site lacks it", async () =>
         refusedOrAbsent(Boolean(capabilities.mediaAlt), await send("PUT", `/media/${probeId}/alt`, { alt: 7 }), 400, "invalid", "malformed alt"));

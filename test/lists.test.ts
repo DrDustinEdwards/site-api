@@ -27,7 +27,7 @@ describe("media lenses and sort (v0.6.0)", () => {
     const bySize = await c.media.list({ sort: "size", limit: 1 });
     expect(bySize).toMatchObject({ items: [{ id: used.id }], total: 2, sorted: { sort: "size", dir: "desc" } });
     expect((await c.media.list({ sort: "name", dir: "desc" })).items.map((i) => i.filename)).toEqual(["used.png", "bare.png"]);
-    expect((await c.meta()).capabilities.mediaLenses).toEqual(["unattached", "no-alt", "large"]);
+    expect((await c.meta()).capabilities.mediaLenses).toEqual(["unattached", "no-alt", "large", "license-expired", "oversized"]);
   });
 
   it("PLANT: answers a lens the site does not name with 501, and an unknown lens or sort with 400, before the adapter", async () => {
