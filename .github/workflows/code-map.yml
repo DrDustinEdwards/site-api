@@ -25,7 +25,7 @@ jobs:
     # A called workflow holds no more than this job grants: the write lets it push code-map.json to the code-map branch.
     permissions:
       contents: write
-    uses: DrDustinEdwards/devkit/.github/workflows/code-map.yml@a793fd1aecc646bbf2bbbf76032d9034d840e007 # v0.16.1
+    uses: DrDustinEdwards/devkit/.github/workflows/code-map.yml@766881e150d2de96689523c4e3530cc748c64cc0 # v0.17.0
     with:
       node-version-file: package.json
       coverage-command: npx vitest run --coverage.enabled --coverage.provider=v8 --coverage.reporter=json --coverage.include=src/**
