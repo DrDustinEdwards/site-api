@@ -27,6 +27,7 @@ import {
   texts,
   text,
   refused,
+  askFirst,
   plural,
   changeId,
   recordDone,
@@ -211,7 +212,19 @@ export async function runMediaIntent(source: ContentSource, input: IntentInput):
   if (lacking) return refused("This site does not offer that.");
 
   if (intent === "upload") return uploadOne(source, input, offers.upload!);
-  if (intent === "empty-trash") return emptyTrash(source);
+  if (intent === "empty-trash") {
+    const trash = await source.client.media.list({ trashed: "only", limit: 200 });
+    if (trash.items.length === 0) return { ok: true, message: "The trash was already empty.", outcomes: [] };
+    const ask = askFirst(input, {
+      intent,
+      title: `Delete ${plural(trash.items.length, "file")} in the trash for good?`,
+      lead: "Each file leaves the site's storage, and nothing can bring it back. A file a page still uses stays in the trash." + (trash.nextCursor ? " The trash holds more than these; empty it again for the rest." : ""),
+      action: "Empty the trash",
+      items: trash.items.map((i) => i.filename ?? i.id),
+      fields: {},
+    });
+    return ask ?? emptyTrash(source);
+  }
 
   const { targets, invalid } = targetsOf(input, MediaId);
   const tooMany = checkCount(targets.length + invalid.length, "file");
@@ -265,6 +278,20 @@ export async function runMediaIntent(source: ContentSource, input: IntentInput):
   const settled = checks.filter((c) => !c.ok || c.message !== "");
   const all: Outcome[] = [...early, ...settled];
   if (plan.length === 0) return result(all, summarize(all, MEDIA_DONE[intent], "file"), staleRead ? { conflict: staleRead } : {});
+
+  if (intent === "delete") {
+    // Asked once the kit knows which files would really go: none still in the library, none refused above.
+    const ids = plan.map((p) => p.id);
+    const ask = askFirst(input, {
+      intent,
+      title: `Delete ${plural(ids.length, "file")} for good?`,
+      lead: "Each file leaves the site's storage, and nothing can bring it back. A file a page still uses is kept.",
+      action: "Delete for good",
+      items: ids,
+      fields: { ids },
+    });
+    if (ask) return ask;
+  }
 
   const op = intent === "tag-add" ? "add-tags" : intent === "tag-remove" ? "remove-tags" : intent;
   const sent = plan.map((p) => ({ ...p, changeId: changeId() }));

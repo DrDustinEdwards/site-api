@@ -211,7 +211,7 @@ describe("posts", () => {
     const copy = await client.get("a-copy-2");
     expect(copy.status).toBe("draft");
     expect(copy.source).toContain('title: "Alpha (copy 2)"\nslug: a-copy-2\ndraft: true');
-    expect(copied.undo).toEqual({ intent: "delete", fields: { ids: ["a-copy-2"], versions: [copy.version] } });
+    expect(copied.undo).toEqual({ intent: "delete", fields: { ids: ["a-copy-2"], versions: [copy.version], confirm: "1" } });
     expect((await runPostsIntent(source, { intent: copied.undo!.intent, ...copied.undo!.fields })).ok).toBe(true);
     expect(adapter.deletedContent).toEqual(["a-copy-2"]);
     expect(adapter.store.has("a")).toBe(true);
@@ -284,7 +284,10 @@ describe("posts", () => {
   it("deletes where the site offers it, and refuses on a site that does not, before asking", async () => {
     const { adapter, client, source } = setup();
     await post(client, "a", "title: A");
-    expect(await runPostsIntent(source, { intent: "delete", ids: ["a"] })).toMatchObject({ ok: true, message: "Deleted 1 post." });
+    // Nothing goes before the person types the count.
+    expect((await runPostsIntent(source, { intent: "delete", ids: ["a"] })).confirm).toMatchObject({ typeToConfirm: "1", items: ["a"] });
+    expect(adapter.deletedContent).toEqual([]);
+    expect(await runPostsIntent(source, { intent: "delete", ids: ["a"], confirm: "1" })).toMatchObject({ ok: true, message: "Deleted 1 post." });
     expect(adapter.deletedContent).toEqual(["a"]);
     const none = setup({ contentDelete: false });
     await post(none.client, "a", "title: A");
@@ -399,7 +402,7 @@ describe("media", () => {
     expect((await runMediaIntent(source, { intent: "delete", ids: [a.id] })).outcomes![0]).toMatchObject({ ok: false, message: expect.stringContaining("trash first") });
     const t = await client.media.trash(a.id, { expectedVersion: a.version!, changeId: "t1" });
     await post(client, "uses", `title: U\n---\n![x](/media/${a.id})`);
-    const refusedDelete = await runMediaIntent(source, { intent: "delete", ids: [a.id], versions: [t.version] });
+    const refusedDelete = await runMediaIntent(source, { intent: "delete", ids: [a.id], versions: [t.version], confirm: "1" });
     expect(refusedDelete.outcomes![0]).toMatchObject({ ok: false, usedBy: [expect.objectContaining({ id: "uses" })] });
     expect(adapter.deleted).toEqual([]);
     expect(await runMediaIntent({ ...source, can: EDITOR }, { intent: "delete", ids: [a.id] })).toEqual({ ok: false, message: "Deleting a file for good is the Owner's step." });
@@ -413,7 +416,9 @@ describe("media", () => {
     }
     const [first, second] = [...adapter.mediaStore.keys()];
     await post(client, "uses", `title: U\n---\n![x](/media/${second})`);
-    const emptied = await runMediaIntent(source, { intent: "empty-trash" });
+    expect((await runMediaIntent(source, { intent: "empty-trash" })).confirm).toMatchObject({ typeToConfirm: "2" });
+    expect(adapter.deleted).toEqual([]);
+    const emptied = await runMediaIntent(source, { intent: "empty-trash", confirm: "2" });
     const trashOrder = [second, first];
     expect(records.filter((r) => r.kind === "media-delete").map((r) => r.changeId)).toEqual([expect.stringMatching(new RegExp(`-${trashOrder.indexOf(first!) + 1}$`))]);
     expect(emptied.message).toBe("Deleted 1 file from the trash for good. 1 file is still used and stayed in the trash.");

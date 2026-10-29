@@ -12,7 +12,8 @@
 // the site's own stays behind the contract; the kit adds only "who may" and "what the inverse is".
 
 export { localClient } from "./local.js";
-export type { Permissions, RowNote, ContentSource, Fields, IntentInput, Outcome, IntentResult } from "./admin/kit.js";
+export { askFirst } from "./admin/kit.js";
+export type { Permissions, RowNote, ContentSource, Fields, IntentInput, Outcome, IntentResult, ConfirmRequest } from "./admin/kit.js";
 export * from "./admin/posts.js";
 export * from "./admin/media.js";
 export * from "./admin/mentions.js";
