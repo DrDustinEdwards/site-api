@@ -439,13 +439,21 @@ describe("media", () => {
     const a = await upload(client, "a.png");
     const focused = await runMediaIntent(source, { intent: "focus", ids: [a.id], versions: [a.version!], focus: "0.3x0.6" });
     expect(focused).toMatchObject({ ok: true, message: "Focal point saved." });
+    // A form with no script posts the point as two percents.
+    const fromForm = await runMediaIntent(source, { intent: "focus", ids: [a.id], versions: [adapter.mediaStore.get(a.id)!.item.version!], x: "25.5", y: "100" });
+    expect(fromForm).toMatchObject({ ok: true });
+    expect(adapter.mediaStore.get(a.id)!.item.focus).toBe("0.255x1");
+    expect(await runMediaIntent(source, { intent: "focus", ids: [a.id], versions: [adapter.mediaStore.get(a.id)!.item.version!], x: "120", y: "5" })).toEqual({ ok: false, message: "That is not a point on the picture." });
     const v = adapter.mediaStore.get(a.id)!.item.version!;
     const file = new File([PNG, new Uint8Array([7])], "a2.png", { type: "image/png" });
     expect(await runMediaIntent({ ...source, can: EDITOR }, { intent: "replace", ids: [a.id], versions: [v], file })).toEqual({ ok: false, message: "Replacing a file is the Owner's step." });
     const replaced = await runMediaIntent(source, { intent: "replace", ids: [a.id], versions: [v], file });
     expect(replaced).toMatchObject({ ok: true, message: expect.stringMatching(/^Replaced\. Every page/) });
     expect(adapter.mediaStore.get(a.id)!.item).toMatchObject({ focus: null, filename: "a2.png" });
-    expect(records.map((r) => r.kind)).toEqual(["media-focus", "media-replace"]);
+    expect(records.map((r) => r.kind)).toEqual(["media-focus", "media-focus", "media-replace"]);
+    // A site whose replace must keep the picture's size says so (v0.11.0), and the library's offers carry it.
+    expect((await loadMedia(source)).offers.replaceKeepsSize).toBe(false);
+    expect((await loadMedia(setup({ mediaReplaceKeepsSize: true }).source)).offers.replaceKeepsSize).toBe(true);
   });
 
   it("refuses what the site does not offer, before asking it", async () => {

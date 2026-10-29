@@ -83,6 +83,8 @@ export interface MediaData {
     focus: boolean;
     caption: boolean;
     replace: boolean;
+    /** v0.11.0: a replace must keep the picture's size (capabilities.mediaReplaceKeepsSize), so a crop is saved as a new file. */
+    replaceKeepsSize: boolean;
   };
   can: Permissions;
 }
@@ -120,6 +122,7 @@ function mediaOffers(capabilities: Capabilities): MediaData["offers"] {
     focus: media && capabilities.mediaFocus === true,
     caption: media && capabilities.mediaCaption === true,
     replace: media && capabilities.mediaReplace === true,
+    replaceKeepsSize: media && capabilities.mediaReplace === true && capabilities.mediaReplaceKeepsSize === true,
   };
 }
 
@@ -225,7 +228,7 @@ export async function runMediaIntent(source: ContentSource, input: IntentInput):
     const file = { id: sendable[0]!.id, version: sendable[0]!.version! };
     if (intent === "alt") return setAlt(source, file, text(input, "alt"));
     if (intent === "tags") return setFileTags(source, file, texts(input, "tags"));
-    if (intent === "focus") return setFocus(source, file, text(input, "focus"));
+    if (intent === "focus") return setFocus(source, file, focusField(input));
     if (intent === "caption") return setCaption(source, file, text(input, "caption"));
     return replaceFile(source, input, file, offers.upload!);
   }
@@ -377,6 +380,22 @@ async function setAlt(source: ContentSource, file: { id: string; version: string
     return { id, ok: true, message: "Alt text saved." + (await recordDone(source, "media-alt", id, change)) };
   });
   return result(outcomes, outcomes[0]!.message, conflict ? { conflict } : {});
+}
+
+/**
+ * The focal point a form posted: `clear=yes` clears it; `x` and `y`, each a percent from the top left, are what a form
+ * with no script sends (MediaLibrary's focal point); otherwise `focus` as "XxY". "" clears it.
+ */
+function focusField(input: IntentInput): string {
+  if (text(input, "clear") === "yes") return "";
+  const x = text(input, "x").trim();
+  const y = text(input, "y").trim();
+  if (x === "" && y === "") return text(input, "focus");
+  const part = (v: string) => {
+    const n = Number(v);
+    return v !== "" && n >= 0 && n <= 100 ? String(Math.round(n * 10) / 1000) : "bad";
+  };
+  return `${part(x)}x${part(y)}`;
 }
 
 /** Sets the point a file's crops are cut around: `focus` is "XxY", each 0 to 1 from the top left, or "" to clear it. */

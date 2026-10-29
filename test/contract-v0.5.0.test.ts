@@ -19,7 +19,7 @@ const V050 = JSON.parse(readFileSync(new URL("./fixtures/contract-v0.5.0.json", 
 
 /** Every v0.5.0 schema later versions extend, and exactly the optional properties each adds (v0.10.0: scheduled updates, and a file's focal point and caption). */
 const ADDED: Record<string, string[]> = {
-  Capabilities: ["contentTags", "mediaCaption", "mediaFocus", "mediaLenses", "mediaReplace", "mentionReset", "scheduledUpdates"],
+  Capabilities: ["contentTags", "mediaCaption", "mediaFocus", "mediaLenses", "mediaReplace", "mediaReplaceKeepsSize", "mentionReset", "scheduledUpdates"],
   MediaItem: ["caption", "focus"],
   MediaDetail: ["caption", "focus"],
   Meta: [],

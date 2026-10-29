@@ -108,6 +108,12 @@ export const Capabilities = z.object({
   mediaCaption: z.boolean().optional(),
   /** True when the site replaces a file's bytes under the same id and address (v0.10.0), `PUT /media/:id/file`. Absent or false: that route answers 501. */
   mediaReplace: z.boolean().optional(),
+  /**
+   * True when the site refuses a replace whose picture is not the size of the one it replaces (v0.11.0): its addresses
+   * or its pages are sized by the file's own width and height. Present only beside `mediaReplace`. A screen then asks
+   * for a file of the same size, and saves a crop as a new file rather than in place. Absent: any size is taken.
+   */
+  mediaReplaceKeepsSize: z.boolean().optional(),
 });
 
 export const Meta = z.object({
