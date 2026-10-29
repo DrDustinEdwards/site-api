@@ -288,6 +288,8 @@ export async function runConformance(config: ConformanceConfig): Promise<Conform
         ["tags", capabilities.mediaTags, "PUT", "tags", { tags: ["probe"], ...stale }],
         ["trash", capabilities.mediaTrash, "POST", "trash", stale],
         ["restore", capabilities.mediaTrash, "POST", "restore", stale],
+        ["focus", capabilities.mediaFocus, "PUT", "focus", { focus: "0.5x0.5", ...stale }],
+        ["caption", capabilities.mediaCaption, "PUT", "caption", { caption: "probe", ...stale }],
       ];
       for (const [name, offered, method, route, body] of writes) {
         await check(`media ${name} of an unknown id: refused, or not implemented where the site lacks it`, async () =>
@@ -296,6 +298,20 @@ export async function runConformance(config: ConformanceConfig): Promise<Conform
 
       await check("media alt with a body outside the contract: refused, or not implemented where the site lacks it", async () =>
         refusedOrAbsent(Boolean(capabilities.mediaAlt), await send("PUT", `/media/${probeId}/alt`, { alt: 7 }), 400, "invalid", "malformed alt"));
+
+      await check("media focus outside 0 to 1: refused, or not implemented where the site lacks it", async () =>
+        refusedOrAbsent(Boolean(capabilities.mediaFocus), await send("PUT", `/media/${probeId}/focus`, { focus: "2x2", ...stale }), 400, "invalid", "focus outside the picture"));
+
+      // v0.10.0: a replace of the probe id, in a type the site accepts, is a 404 before any byte is read.
+      await check("media replace of an unknown id: refused, or not implemented where the site lacks it", async () => {
+        const type = capabilities.mediaUpload?.types[0] ?? "image/png";
+        const response = await doFetch(`${origin}${PREFIX}/media/${probeId}/file?filename=probe&expectedVersion=${STALE_VERSION}&changeId=conformance-probe`, {
+          method: "PUT",
+          headers: { ...auth, "content-type": type },
+          body: new Uint8Array([0]),
+        });
+        return refusedOrAbsent(Boolean(capabilities.mediaReplace), response, 404, "not-found", "media replace");
+      });
 
       await check("media bulk: an unknown id is that file's own not-found, and the request answers 200", async () => {
         const response = await send("POST", "/media/bulk", { op: "trash", items: [{ id: MEDIA_PROBE_ID, ...stale }] });

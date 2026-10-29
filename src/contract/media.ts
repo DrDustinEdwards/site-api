@@ -1,5 +1,6 @@
-// The media group (v0.2.0, writes v0.4.0, lenses v0.6.0).
+// The media group (v0.2.0, writes v0.4.0, lenses v0.6.0, focal point, caption and replace v0.10.0).
 
+import { focusOf } from "@dustinedwards/site-runtime/image";
 import { z } from "zod";
 import { ChangeId, SortDir, Timestamp, Version } from "./base.js";
 
@@ -49,6 +50,19 @@ export const MediaTag = z.string().min(1).max(32).regex(/^[a-z0-9]+(?:-[a-z0-9]+
 /** A file's whole tag set (v0.4.0). The most any file carries is 12. */
 export const MediaTags = z.array(MediaTag).max(12);
 
+/**
+ * A file's focal point (v0.10.0): "XxY", each from 0 to 1 from the top left with up to three decimals, such as
+ * "0.25x0.4". The site keeps it where site-runtime's ./image reads it for its crops (an R2 object's customMetadata
+ * `focus`, FOCUS_METADATA), so the package takes only what that module's `focusOf` takes.
+ */
+export const MediaFocus = z
+  .string()
+  .max(20)
+  .refine((v) => focusOf(v) !== null, 'A focal point is "XxY", each from 0 to 1 with up to three decimals');
+
+/** A file's caption (v0.10.0): what a figure shows under it, beside its alt text. "" for none. */
+export const MediaCaption = z.string().max(2000);
+
 export const MediaItem = z.object({
   id: MediaId,
   /** Where the site serves it: a path on the site, such as /media/2026/09/photo.webp, or a full URL. */
@@ -72,6 +86,10 @@ export const MediaItem = z.object({
   tags: MediaTags.optional(),
   /** When the file was moved to the trash (v0.4.0); null or absent when it is in the library. */
   trashedAt: Timestamp.nullable().optional(),
+  /** The file's focal point (v0.10.0), on a site that keeps one: null when it has none, and the crop is the site's guess. */
+  focus: MediaFocus.nullable().optional(),
+  /** The file's caption (v0.10.0), on a site that keeps one: "" when it has none. */
+  caption: MediaCaption.optional(),
 });
 
 /** One file with the places it is used: what a delete would be refused over. */
@@ -157,6 +175,44 @@ export const MediaWriteResult = z.object({
   changeId: ChangeId,
 });
 
+// ---------- focal point, caption and replace (v0.10.0)
+
+/** Sets or clears (null) the point a file's crops are cut around. */
+export const MediaFocusInput = z.object({
+  focus: MediaFocus.nullable(),
+  expectedVersion: Version,
+  changeId: ChangeId,
+});
+
+export const MediaCaptionInput = z.object({
+  caption: MediaCaption,
+  expectedVersion: Version,
+  changeId: ChangeId,
+});
+
+/**
+ * A replace is the new bytes as the body, their type as Content-Type (the file's own type: the address names it), and
+ * these as the query, like an upload.
+ */
+export const MediaReplaceQuery = MediaUploadQuery.pick({ filename: true, changeId: true }).extend({
+  expectedVersion: Version,
+});
+
+/**
+ * The file after a replace: the same id and address, its alt, caption and tags kept, its focal point cleared (it named a
+ * place in the old picture), and a new version.
+ */
+export const MediaReplaceResult = MediaItem.extend({
+  changeId: ChangeId,
+  /**
+   * True when the site's cache may still serve sizes made from the old bytes, so they need purging (or wait out their
+   * cache lifetime). False when none can be stale: the site's image route keys its cache by the file's etag
+   * (site-runtime ./image 0.27.0 and later) or the site purged them in the write. Either way, a browser that already
+   * holds the old file under a long cache lifetime keeps it until that runs out.
+   */
+  sizesNeedPurge: z.boolean(),
+});
+
 export const MEDIA_BULK_OPS = ["trash", "restore", "delete", "add-tags", "remove-tags"] as const;
 export const MAX_MEDIA_BULK = 100;
 
@@ -237,6 +293,10 @@ export type MediaAltInput = z.infer<typeof MediaAltInput>;
 export type MediaTagsInput = z.infer<typeof MediaTagsInput>;
 export type MediaTrashInput = z.infer<typeof MediaTrashInput>;
 export type MediaWriteResult = z.infer<typeof MediaWriteResult>;
+export type MediaFocusInput = z.infer<typeof MediaFocusInput>;
+export type MediaCaptionInput = z.infer<typeof MediaCaptionInput>;
+export type MediaReplaceQuery = z.infer<typeof MediaReplaceQuery>;
+export type MediaReplaceResult = z.infer<typeof MediaReplaceResult>;
 export type MediaBulkItem = z.infer<typeof MediaBulkItem>;
 export type MediaBulkInput = z.infer<typeof MediaBulkInput>;
 export type MediaBulkOutcome = z.infer<typeof MediaBulkOutcome>;

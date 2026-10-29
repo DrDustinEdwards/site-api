@@ -110,6 +110,37 @@ export interface MediaAdapter {
   /** Soft delete: hides the file from list and removes nothing. Both trash and restore, or neither. */
   trash?(id: string, input: { expectedVersion: string; changeId: string }): Promise<{ version: string }>;
   restore?(id: string, input: { expectedVersion: string; changeId: string }): Promise<{ version: string }>;
+  /**
+   * Optional (v0.10.0), each answering 501 when absent, and each throwing and moving the version like the writes above.
+   * `focus` is already in the form site-runtime's ./image writes (`focusOf`), or null to clear it; a site on R2 keeps it
+   * as the object's customMetadata `focus` (FOCUS_METADATA), which `writeFocus` from `@dustinedwards/site-api/r2` does.
+   * Every item the site answers then carries `focus`.
+   */
+  setFocus?(id: string, input: { focus: string | null; expectedVersion: string; changeId: string }): Promise<{ version: string }>;
+  /** Every item the site answers then carries `caption` ("" for none). */
+  setCaption?(id: string, input: { caption: string; expectedVersion: string; changeId: string }): Promise<{ version: string }>;
+  /**
+   * Optional (v0.10.0): replaces the file's bytes under the same id and address, so every page that uses it shows the
+   * new one. The package has already checked the bytes against the site's limits, that the file exists, that its version
+   * is `expectedVersion`, that it is `deletable` (the site's own static assets are never replaced) and that `contentType`
+   * is the file's own type. The site keeps alt, caption and tags, clears the focal point (it named a place in the old
+   * picture), measures the new picture, moves the version, and answers the item. `sizesNeedPurge` says whether its cache
+   * may still serve sizes made from the old bytes: false when its image route keys the cache by the object's etag
+   * (site-runtime ./image 0.27.0 and later), or when it purged them as part of the write. On R2, `replaceObject` from
+   * `@dustinedwards/site-api/r2` writes the bytes and keeps the object's metadata.
+   */
+  replace?(id: string, input: MediaReplace): Promise<{ item: MediaItem; sizesNeedPurge: boolean }>;
+}
+
+/** One replace (v0.10.0), already checked by the package. */
+export interface MediaReplace {
+  bytes: Uint8Array;
+  /** The file's own type, without parameters. */
+  contentType: string;
+  /** The name the new file was sent with. */
+  filename: string;
+  expectedVersion: string;
+  changeId: string;
 }
 
 /**
@@ -220,6 +251,9 @@ export function capabilitiesOf(adapter: SiteAdapter): Capabilities {
     ...(adapter.media?.lenses?.length ? { mediaLenses: [...adapter.media.lenses] } : {}),
     ...(adapter.media?.setTags ? { mediaTags: true } : {}),
     ...(adapter.media?.trash && adapter.media.restore ? { mediaTrash: true } : {}),
+    ...(adapter.media?.setFocus ? { mediaFocus: true } : {}),
+    ...(adapter.media?.setCaption ? { mediaCaption: true } : {}),
+    ...(adapter.media?.replace ? { mediaReplace: true } : {}),
     ...(adapter.mentions ? { mentions: true } : {}),
     ...(adapter.mentions?.reset ? { mentionReset: true } : {}),
     ...(adapter.schedules ? { scheduledUpdates: true } : {}),

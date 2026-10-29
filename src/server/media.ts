@@ -1,4 +1,7 @@
-// The media routes (v0.2.0, writes v0.4.0), mounted only when the site's adapter has media.
+// The media routes (v0.2.0, writes v0.4.0, focal point, caption and replace v0.10.0), mounted only when the site's
+// adapter has media.
+
+import { focusOf } from "@dustinedwards/site-runtime/image";
 
 import { NotFoundError, RefusedError, VersionConflictError, type MediaAdapter } from "../adapter.js";
 import {
@@ -6,13 +9,17 @@ import {
   MediaAltInput,
   MediaBulkInput,
   MediaBulkResult,
+  MediaCaptionInput,
   MediaDeleteQuery,
   MediaDeleteResult,
   MediaDetail,
+  MediaFocusInput,
   MediaId,
   MediaItem,
   MediaList,
   MediaListQuery,
+  MediaReplaceQuery,
+  MediaReplaceResult,
   MediaTagsInput,
   MediaTrashEmptyInput,
   MediaTrashEmptyResult,
@@ -23,7 +30,7 @@ import {
   type MediaUse,
 } from "../contract.js";
 import { checkUpload, essence, readUpload } from "../media.js";
-import { BadRequest, ID, checked, describeFailure, fail, json, pathParam, readBody, readQuery, type Log, type Route } from "./http.js";
+import { BadRequest, ContractBreach, ID, checked, describeFailure, fail, json, pathParam, readBody, readQuery, type Log, type Route } from "./http.js";
 
 /** How many trashed files one page of the empty-trash gather asks the site for. */
 const TRASH_PAGE = 200;
@@ -98,6 +105,66 @@ export function mediaRoutes(media: MediaAdapter, log: Log): Route[] {
         const input = await readBody(request, MediaTagsInput);
         const result = await media.setTags(id, { ...input, tags: [...new Set(input.tags)].sort() });
         return json(200, checked(MediaWriteResult, { id, version: result.version, changeId: input.changeId }, "media tags"));
+      },
+    },
+    // v0.10.0, each 501 where the adapter lacks it.
+    {
+      method: "PUT",
+      pattern: new RegExp(`^/media/${ID}/focus$`),
+      run: async (m, _u, request) => {
+        const id = mediaId(m);
+        if (!media.setFocus) return fail("not-implemented", "This site does not keep a focal point on files.");
+        const input = await readBody(request, MediaFocusInput);
+        // In the one spelling site-runtime's ./image writes into a crop's URL, so the stored point and the URL agree.
+        const focus = input.focus === null ? null : focusOf(input.focus);
+        const result = await media.setFocus(id, { ...input, focus });
+        return json(200, checked(MediaWriteResult, { id, version: result.version, changeId: input.changeId }, "media focus"));
+      },
+    },
+    {
+      method: "PUT",
+      pattern: new RegExp(`^/media/${ID}/caption$`),
+      run: async (m, _u, request) => {
+        const id = mediaId(m);
+        if (!media.setCaption) return fail("not-implemented", "This site does not keep captions on files.");
+        const input = await readBody(request, MediaCaptionInput);
+        const result = await media.setCaption(id, input);
+        return json(200, checked(MediaWriteResult, { id, version: result.version, changeId: input.changeId }, "media caption"));
+      },
+    },
+    {
+      method: "PUT",
+      pattern: new RegExp(`^/media/${ID}/file$`),
+      run: async (m, url, request) => {
+        const id = mediaId(m);
+        if (!media.replace) return fail("not-implemented", "This site does not replace files.");
+        const query = readQuery(url, MediaReplaceQuery);
+        const contentType = essence(request.headers.get("content-type"));
+        // As an upload: a type the site does not accept is refused unread.
+        const wrongType = checkUpload(contentType, null, media.limits);
+        if (wrongType) throw new BadRequest(wrongType.code, wrongType.message);
+        const current = await media.get(id);
+        if (!current) throw new NotFoundError("No such media.");
+        if (current.version !== query.expectedVersion) throw new VersionConflictError(current.version ?? null, "The file changed since it was loaded.");
+        if (!current.deletable) throw new RefusedError("This file is one of the site's own, so it is never replaced through this API.");
+        // The address names the type (photo.png), so a file of another type would be served under a name that lies.
+        if (essence(current.contentType) !== contentType) {
+          throw new BadRequest("invalid", `This file is ${current.contentType}, and the replacement is ${contentType}. A replacement keeps the address, so it must be the same type; upload it as a new file instead.`);
+        }
+        const read = await readUpload(request, media.limits);
+        if (!read.ok) throw new BadRequest(read.refusal.code, read.refusal.message);
+        const wrongBytes = checkUpload(contentType, read.bytes, media.limits);
+        if (wrongBytes) throw new BadRequest(wrongBytes.code, wrongBytes.message);
+        const { item, sizesNeedPurge } = await media.replace(id, {
+          bytes: read.bytes,
+          contentType,
+          filename: query.filename,
+          expectedVersion: query.expectedVersion,
+          changeId: query.changeId,
+        });
+        // Every page that uses the file links this id and address; a site that moved either broke them.
+        if (item.id !== id || item.url !== current.url) throw new ContractBreach(`replace moved ${id} to ${item.id} at ${item.url}; a replace keeps the id and the address`);
+        return json(200, checked(MediaReplaceResult, { ...item, changeId: query.changeId, sizesNeedPurge }, "media replace"));
       },
     },
     {

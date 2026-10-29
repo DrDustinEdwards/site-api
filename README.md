@@ -96,6 +96,9 @@ All paths sit under `/api/carrel/v1`. Bodies are JSON, checked on the way in and
 | media | `DELETE /media/:id?changeId` | | `MediaDeleteResult`, or `422 refused` naming each use |
 | media | `PUT /media/:id/alt` | `MediaAltInput` | `MediaWriteResult` (v0.4.0, optional) |
 | media | `PUT /media/:id/tags` | `MediaTagsInput` | `MediaWriteResult` (v0.4.0, optional) |
+| media | `PUT /media/:id/focus` | `MediaFocusInput` | `MediaWriteResult` (v0.10.0, optional) |
+| media | `PUT /media/:id/caption` | `MediaCaptionInput` | `MediaWriteResult` (v0.10.0, optional) |
+| media | `PUT /media/:id/file?filename&expectedVersion&changeId` | the new bytes, typed by `Content-Type` | `MediaReplaceResult` (v0.10.0, optional) |
 | media | `POST /media/:id/trash` | `MediaTrashInput` | `MediaWriteResult` (v0.4.0, optional) |
 | media | `POST /media/:id/restore` | `MediaTrashInput` | `MediaWriteResult` (v0.4.0, optional) |
 | media | `POST /media/trash/empty` | `MediaTrashEmptyInput` | `MediaTrashEmptyResult` (v0.4.0, optional) |
@@ -154,7 +157,7 @@ Additive: every v0.4.0 route and body is unchanged, and the schema hash and pack
 
 ## Changes in v0.10.0
 
-Additive: every v0.9.0 route and body is unchanged, and the schema hash and package version move on purpose. Two new routes, one new optional capability, and optional `scheduledUpdate` on `ContentSummary`, `ContentDoc` and `WriteResult`. One behavior change: a schedule on a live post is refused on a site without scheduled updates, where before the site's own schedule took the post off the site until the time.
+Additive: every v0.9.0 route and body is unchanged, and the schema hash and package version move on purpose. Five new routes, four new optional capabilities, optional `scheduledUpdate` on `ContentSummary`, `ContentDoc` and `WriteResult`, and optional `focus` and `caption` on `MediaItem`. One behavior change: a schedule on a live post is refused on a site without scheduled updates, where before the site's own schedule took the post off the site until the time.
 
 **Scheduled updates to a live post, optional per site** (`meta.capabilities.scheduledUpdates`). Modeled on EmDash's scheduled publishing: a published post can carry one pending revision with its own publish time. The live version stays served until then, and at that time the revision replaces it.
 
@@ -181,6 +184,16 @@ Additive: every v0.9.0 route and body is unchanged, and the schema hash and pack
     - `reschedule` with `publishAt`: moves a live post's update, or a scheduled post, to the new time, keeping the update's source. Its Undo moves each back, through `publishAts`, one time per post.
     - `cancel-schedule`: drops the update and keeps the post live, or returns a scheduled post to draft. It has no Undo.
   - `liveSaveWarning(doc, label?)` is the sentence an editor shows before a save to a live post with an update waiting (null otherwise). A tag change on such a post adds it to its outcome. `label` formats the time (default `scheduleLabel`, "2030-01-01 15:00 UTC"), so an admin that writes times its own way says this one the same way.
+
+**A file's focal point, caption and replace, each optional per site** (`meta.capabilities.mediaFocus`, `mediaCaption`, `mediaReplace`), for Carrel's focal point picker, captions and replace-file. A site whose adapter lacks the method answers that route `501` whatever the body says. Each write takes the version the caller saw and a change id, answers `409` with `currentVersion` for a stale one, `404` for a missing id and `422 refused` for the site's own rules, and moves the file's version, like alt and tags.
+
+- **Focal point.** `PUT /media/:id/focus` `{ focus, expectedVersion, changeId }` answers `MediaWriteResult`. `focus` is `"XxY"`, each from 0 to 1 from the top left with up to three decimals, or `null` to clear it and leave the crop to the site's guess. It is what site-runtime's `./image` takes: the package checks it with that module's `focusOf` (`400 invalid` otherwise) and hands the adapter `focusOf`'s spelling (`"0.250x0.4"` arrives as `"0.25x0.4"`), the spelling `./image` writes into a crop's `fp=`. A site on R2 keeps it as the object's customMetadata `focus` (`FOCUS_METADATA`), where `./image` reads it. Items carry `focus` (`null` for none) on a site that keeps it.
+- **Caption.** `PUT /media/:id/caption` `{ caption, expectedVersion, changeId }`, up to 2,000 characters, `""` for none, answers `MediaWriteResult`. Items carry `caption` on a site that keeps it. It is longer than R2's 2 KB of custom metadata allows, so it lives in the site's own index.
+- **Replace.** `PUT /media/:id/file?filename&expectedVersion&changeId` with the new bytes as the body and their type as `Content-Type`, like an upload. The package refuses, before the adapter runs: a type the site does not accept (unread, `400`), a missing id (`404`), a stale version (`409`), a file that is not `deletable`, the site's own (`422`), a type other than the file's own (`400`: the address names the type, so a new type is a new upload), and then the upload checks (size, signature, active content). The id and the address stay, so every page that uses the file shows the new one; alt, caption and tags stay; the focal point is cleared, since it named a place in the old picture. It answers `MediaReplaceResult`: the item with `changeId` and `sizesNeedPurge`. `sizesNeedPurge: true` means the site's cache may still serve resized copies made from the old bytes, and they need purging (or must wait out their lifetime); `false` means none can be stale, because the site's image route keys its cache by the object's etag (site-runtime `./image` 0.27.0 and later) or the site purged them in the write. A browser that already holds the old file or a size under a long `immutable` lifetime keeps it until that runs out, whatever the site does.
+- **The adapter.** `MediaAdapter.setFocus`, `setCaption` and `replace`, each optional. `replace(id, { bytes, contentType, filename, expectedVersion, changeId })` answers `{ item, sizesNeedPurge }`; an item whose id or address moved is a site failure (`500`).
+- **Storage.** `@dustinedwards/site-api/r2` is the R2 half: `writeFocus(bucket, key, focus)` puts the object again with its own bytes and `focus` set (or removed for `null`), since R2 has no metadata-only update, and `replaceObject(bucket, key, { bytes, contentType })` puts the new bytes keeping the object's HTTP and custom metadata but the focal point, refusing another type. Each put is conditional on the etag it read, so a write that raced another is refused (`RefusedError`), never lost. The site's own index (version, size, caption) is the adapter's.
+- **Conformance** adds a focus and a caption write and a replace of the probe id (`404` where offered, `501` where not), and a focus outside 0 to 1 (`400` where offered).
+- **The media kit** (`./admin`): `offers.focus`, `offers.caption` and `offers.replace`, and three intents on one file: `focus` (`focus` is `"XxY"`, `""` clears it), `caption`, and `replace` (the new `file`, checked against the site's limits first, as an upload is). A replace is the Owner's, like a delete (`deleteMedia`): it changes every live page that uses the file. Its message says when the site's cache may still serve the old sizes.
 
 **Publish hooks.** `createSiteApi({ hooks })` takes `PublishHook`s, `{ name, run(event) }`, run when a public page changes: on a publish, an unpublish, a delete of a live item, a save or tag change to a live item, and each schedule `runSchedules` applies. The event is `{ action, id, path, url, trigger, changeId, request? }`: `action` is `publish`, `update`, `unpublish` or `delete`; `trigger` is `request` or `schedule`; `url` is the site's origin and the path. The hooks run together, after the write, under the request's `waitUntil`, so Carrel's answer never waits. A hook that throws or resolves `false` is logged (`hook-failed`, with the hook's name and the event) and the write stands. The first hook is `indexNowHook({ submit, origin, key })`: it sends the changed URL through the `submitIndexNow` the site passes in, Prelum's, so this package holds no copy of it; a request on another origin (a preview) sends nothing.
 
@@ -295,6 +308,10 @@ interface SiteAdapter {
     setTags?(id: string, input: { tags: string[]; expectedVersion: string; changeId: string }): Promise<{ version: string }>;
     trash?(id: string, input: { expectedVersion: string; changeId: string }): Promise<{ version: string }>;   // with restore, or neither
     restore?(id: string, input: { expectedVersion: string; changeId: string }): Promise<{ version: string }>;
+    // v0.10.0, each optional, throwing and moving the version like the writes above.
+    setFocus?(id: string, input: { focus: string | null; expectedVersion: string; changeId: string }): Promise<{ version: string }>;
+    setCaption?(id: string, input: { caption: string; expectedVersion: string; changeId: string }): Promise<{ version: string }>;
+    replace?(id: string, input: MediaReplace): Promise<{ item: MediaItem; sizesNeedPurge: boolean }>; // same id and address
   };
 }
 ```
@@ -308,7 +325,7 @@ An adapter signals refusals by throwing these errors:
 
 The package computes diffs, and serves the source at a revision, from `revisionSource`, so a site only has to return old source. `content.delete` throws `VersionConflictError`, `NotFoundError` or `RefusedError` like the writes.
 
-`@dustinedwards/site-api/testing` exports `memoryAdapter()`, a conforming reference adapter held in memory, media included (its reference check scans each post's source for `/media/<id>`, as dustinedwards.info's does). `memoryAdapter({ media: false })` is a site with no media manager, `memoryAdapter({ contentDelete: false })` one with no content delete, `memoryAdapter({ contentTags: false })` one that keeps no post tags through the API, `memoryAdapter({ mediaWrites: false })` a v0.2.0 media manager with no alt, tag or trash writes, `memoryAdapter({ mediaLenses: false })` one with no lenses and no sort, `memoryAdapter({ mentionFilters: false })` a mentions group that ignores `q` and `targetId`, `memoryAdapter({ mentions: false })` one with no webmentions, `memoryAdapter({ mentionReset: false })` a v0.5.0 mentions group with no reset, and `memoryAdapter({ schedules: false })` a v0.9.0 site with no scheduled updates. Its files carry a `version` that every metadata write moves. Its mentions are seeded with `adapter.receiveMention({ sourceUrl, targetId, status?, ... })`, as the site's endpoint would write them. Carrel's tests run against it.
+`@dustinedwards/site-api/testing` exports `memoryAdapter()`, a conforming reference adapter held in memory, media included (its reference check scans each post's source for `/media/<id>`, as dustinedwards.info's does). `memoryAdapter({ media: false })` is a site with no media manager, `memoryAdapter({ contentDelete: false })` one with no content delete, `memoryAdapter({ contentTags: false })` one that keeps no post tags through the API, `memoryAdapter({ mediaWrites: false })` a v0.2.0 media manager with no alt, tag, trash, focal point, caption or replace writes, `memoryAdapter({ mediaLenses: false })` one with no lenses and no sort, `memoryAdapter({ mentionFilters: false })` a mentions group that ignores `q` and `targetId`, `memoryAdapter({ mentions: false })` one with no webmentions, `memoryAdapter({ mentionReset: false })` a v0.5.0 mentions group with no reset, and `memoryAdapter({ schedules: false })` a v0.9.0 site with no scheduled updates. Its files carry a `version` that every metadata write moves. Its mentions are seeded with `adapter.receiveMention({ sourceUrl, targetId, status?, ... })`, as the site's endpoint would write them. Carrel's tests run against it.
 
 ## Carrel's side
 
@@ -323,7 +340,7 @@ The package computes diffs, and serves the source at a revision, from `revisionS
   - on a site that offers media (v0.2.0): the upload limits are declared, the media list answers in shape, a delete of an id no site holds is refused, and an upload of a type no site accepts is refused;
   - on a site that offers media (v0.4.0): each media write is refused on the probe id (or answers 501 where the site lacks it), as above under Changes in v0.4.0;
   - the mentions checks of v0.5.0, listed above under Changes in v0.5.0;
-  - the schedule read and cancel of v0.10.0, listed above under Changes in v0.10.0.
+  - the schedule read and cancel and the media focal point, caption and replace probes of v0.10.0, listed above under Changes in v0.10.0.
 
   Every write it sends must be refused, so it never changes a conforming site. `probeMediaUpload: true` adds one real round trip: it uploads a 1x1 PNG of its own, reads it back, and deletes that file and no other. It is off by default.
 

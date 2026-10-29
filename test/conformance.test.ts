@@ -27,7 +27,11 @@ describe("conformance", () => {
       "media tags of an unknown id: refused, or not implemented where the site lacks it",
       "media trash of an unknown id: refused, or not implemented where the site lacks it",
       "media restore of an unknown id: refused, or not implemented where the site lacks it",
+      "media focus of an unknown id: refused, or not implemented where the site lacks it",
+      "media caption of an unknown id: refused, or not implemented where the site lacks it",
       "media alt with a body outside the contract: refused, or not implemented where the site lacks it",
+      "media focus outside 0 to 1: refused, or not implemented where the site lacks it",
+      "media replace of an unknown id: refused, or not implemented where the site lacks it",
       "media bulk: an unknown id is that file's own not-found, and the request answers 200",
       "media bulk tag op with no tags: refused, or not implemented where the site lacks tags",
       "media empty trash with a body outside the contract: refused, or not implemented where the site has no trash",
@@ -221,8 +225,8 @@ describe("conformance", () => {
   it("expects 501 from every media write on a v0.2.0 site, and passes it", async () => {
     const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: site(memoryAdapter({ mediaWrites: false })).fetch });
     expect(failing(report)).toEqual([]);
-    const details = report.checks.filter((c) => /^media (alt|tags|trash|restore|bulk|empty)/.test(c.name)).map((c) => c.detail);
-    expect(details).toHaveLength(8);
+    const details = report.checks.filter((c) => /^media (alt|tags|trash|restore|focus|caption|replace|bulk|empty)/.test(c.name)).map((c) => c.detail);
+    expect(details).toHaveLength(12);
     expect(details.every((d) => d.startsWith("501"))).toBe(true);
   });
 
