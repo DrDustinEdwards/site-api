@@ -472,7 +472,7 @@ describe("media", () => {
     expect((await loadMedia(source)).offers).toMatchObject({ import: true, credit: true, duplicates: true, transform: true, history: true, live: true, resize: { maxEdge: 2048 }, resizePass: true });
     const file = () => new File([png(10, 10) as Uint8Array<ArrayBuffer>], "a.png", { type: "image/png" });
     expect(await runMediaIntent(source, { intent: "upload", file: file() })).toMatchObject({ ok: true, message: "Uploaded a.png." });
-    expect(await runMediaIntent(source, { intent: "upload", file: file() })).toMatchObject({ ok: true, message: "a.png is already in the library as a.png, so no second copy was stored." });
+    expect(await runMediaIntent(source, { intent: "upload", file: file() })).toMatchObject({ ok: true, message: "a.png is already in the library as a.png, so no second copy was stored.", outcomes: [{ duplicate: true }] });
     expect(await runMediaIntent(source, { intent: "import", url: "http://photos.example.com/b.png" })).toEqual({ ok: false, message: "Give the file's https address." });
     expect(await runMediaIntent(source, { intent: "import", url: "https://photos.example.com/b.png", alt: "B" })).toMatchObject({ ok: true, message: "Imported b.png." });
     expect(records.map((r) => r.kind)).toEqual(["media-upload", "media-import"]);

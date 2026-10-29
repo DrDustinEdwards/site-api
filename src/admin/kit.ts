@@ -60,6 +60,8 @@ export interface Outcome {
   usedBy?: MediaUse[];
   /** The new copy's id, after a duplicate. */
   copyId?: string;
+  /** True when an upload or import matched a file already stored, which is `id` (v0.13.0); nothing new was stored. */
+  duplicate?: boolean;
   /** The version this item's write made, so the screen's next write to it (another field of the same file) sends it. */
   version?: string;
 }
