@@ -55,9 +55,19 @@ export const ContentDoc = ContentSummary.extend({
   version: Version,
 });
 
+/** The list filters a site may offer (v0.15.0), named in capabilities.contentFilters; `published` is the pair of dates. */
+export const CONTENT_FILTERS = ["kind", "tag", "author", "published", "trashed"] as const;
+
 export const ListQuery = z.object({
   status: ContentStatus.optional(),
+  /** Matches the title and the body. Without `sort`, the newest updated come first. */
   q: z.string().max(200).optional(),
+  /** v0.15.0 filters, each answering 501 on a site that does not name it in capabilities.contentFilters. */
+  kind: z.string().min(1).max(64).optional(),
+  tag: ContentTag.optional(),
+  author: AuthorName.optional(),
+  publishedAfter: Timestamp.optional(),
+  publishedBefore: Timestamp.optional(),
   /** v0.6.0. A site that sorts says so in the answer's `sorted`; one that does not leaves its own order. */
   sort: z.enum(CONTENT_SORTS).optional(),
   dir: SortDir.optional(),
@@ -220,6 +230,7 @@ export type ListQuery = z.infer<typeof ListQuery>;
 export type ContentList = z.infer<typeof ContentList>;
 export type ContentTagsInput = z.infer<typeof ContentTagsInput>;
 export type ContentSort = (typeof CONTENT_SORTS)[number];
+export type ContentFilter = (typeof CONTENT_FILTERS)[number];
 export type SaveDraftInput = z.infer<typeof SaveDraftInput>;
 export type PublishInput = z.infer<typeof PublishInput>;
 export type ScheduleInput = z.infer<typeof ScheduleInput>;

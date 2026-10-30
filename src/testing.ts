@@ -702,15 +702,22 @@ export function memoryAdapter(
     deletedContent,
     ...(mediaAdapter ? { media: mediaAdapter } : {}),
     content: {
-      ...(contentExtras ? { publishedAtSettable: true, postFields: POST_FIELDS } : {}),
+      ...(contentExtras ? { publishedAtSettable: true, postFields: POST_FIELDS, filters: ["kind", "tag", "author", "published"] as const } : {}),
       async list(query) {
         const needle = query.q?.toLowerCase();
         const all = [...store.values()]
           .map((s) => s.doc)
           .filter((d) => !query.status || d.status === query.status)
           .filter((d) => Boolean(d.trashedAt) === Boolean(query.trashed))
+          .filter((d) => !query.kind || d.kind === query.kind)
+          .filter((d) => !query.tag || (withTags(d).tags ?? []).some((t) => t.toLowerCase() === query.tag!.toLowerCase()))
+          .filter((d) => !query.author || (withTags(d).authors ?? []).includes(query.author))
+          .filter((d) => !query.publishedAfter || (d.publishedAt !== null && at(d.publishedAt) >= at(query.publishedAfter)))
+          .filter((d) => !query.publishedBefore || (d.publishedAt !== null && at(d.publishedAt) < at(query.publishedBefore)))
           .filter((d) => !needle || d.title.toLowerCase().includes(needle) || d.source.toLowerCase().includes(needle))
           .sort((a, b) => a.id.localeCompare(b.id));
+        // A search without a sort answers the newest updated first (v0.15.0), as every site's does.
+        if (needle && !query.sort) all.sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? "") || a.id.localeCompare(b.id));
         // v0.6.0: sorted as asked, newest first for the dates and A to Z for titles unless dir says otherwise.
         const sorted = query.sort ? { sort: query.sort, dir: query.dir ?? (query.sort === "title" ? "asc" : "desc") } : undefined;
         if (sorted) {

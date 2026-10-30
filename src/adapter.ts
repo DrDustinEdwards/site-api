@@ -1,9 +1,11 @@
 // What each site implements. The package owns the route, the key, the rate limit and the shape of
 // every body; the adapter owns the site's storage, its rules and its render.
 
+import { CONTENT_FILTERS } from "./contract.js";
 import type {
   Capabilities,
   ContentDoc,
+  ContentFilter,
   ContentList,
   ListQuery,
   MediaDetail,
@@ -46,6 +48,12 @@ export interface ContentAdapter {
    * capabilities.postFields), each under its shared name in `@dustinedwards/site-api/frontmatter`. Absent: none.
    */
   searchFields?: readonly SearchField[];
+  /**
+   * Optional (v0.15.0): the list filters `list` applies (capabilities.contentFilters): `kind`, `tag`, `author` (one of
+   * the item's authors), `published` (publishedAfter and publishedBefore, either or both). The package answers any other
+   * with 501. `trashed` is offered with the trash, not here.
+   */
+  filters?: readonly Exclude<ContentFilter, "trashed">[];
   postFields?: readonly PostField[];
   list(query: ListQuery): Promise<ContentList>;
   /** null when the id does not exist. */
@@ -381,6 +389,7 @@ export function capabilitiesOf(adapter: SiteAdapter, options: { store?: boolean 
     ...(adapter.content.publishedAtSettable ? { contentPublishedAt: true } : {}),
     ...(adapter.content.rename ? { contentRename: true } : {}),
     ...(hasContentTrash(adapter) ? { contentTrash: true } : {}),
+    ...(contentFiltersOf(adapter).length ? { contentFilters: contentFiltersOf(adapter) } : {}),
     ...(adapter.content.searchFields?.length ? { searchFields: [...adapter.content.searchFields] } : {}),
     ...(adapter.content.postFields?.length ? { postFields: [...adapter.content.postFields] } : {}),
     ...(adapter.media?.setAlt ? { mediaAlt: true } : {}),
@@ -415,6 +424,13 @@ export function capabilitiesOf(adapter: SiteAdapter, options: { store?: boolean 
 export function hasContentTrash(adapter: SiteAdapter): boolean {
   const { content } = adapter;
   return content.trash !== undefined && content.restore !== undefined && content.delete !== undefined;
+}
+
+/** The list filters the site applies (v0.15.0), in the contract's order. */
+export function contentFiltersOf(adapter: SiteAdapter): ContentFilter[] {
+  const offered = new Set<ContentFilter>(adapter.content.filters ?? []);
+  if (hasContentTrash(adapter)) offered.add("trashed");
+  return CONTENT_FILTERS.filter((f) => offered.has(f));
 }
 
 /** @deprecated Since v0.2.0 capabilities depend on the adapter: use capabilitiesOf(adapter). */

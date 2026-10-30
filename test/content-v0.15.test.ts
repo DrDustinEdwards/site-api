@@ -81,3 +81,21 @@ describe("the content trash (v0.15.0)", () => {
     await expect(other.trash("a", { expectedVersion: "v1", changeId: "c1" })).rejects.toMatchObject({ status: 501 });
   });
 });
+
+describe("list filters (v0.15.0)", () => {
+  it("filters by tag, author and published dates where the site offers them, and answers 501 for one it does not", async () => {
+    const { c } = client();
+    const a = await c.saveDraft("a", { source: '---\ntitle: A\ntags: [news]\nauthors: ["Ada", "Grace"]\n---\nA\n', expectedVersion: null, changeId: "c1" });
+    await c.publish("a", { expectedVersion: a.version, changeId: "c2", publishedAt: "2020-01-01T00:00:00Z" });
+    await c.saveDraft("b", { source: "---\ntitle: B\n---\nB\n", expectedVersion: null, changeId: "c3" });
+    const ids = async (q: Parameters<typeof c.list>[0]) => (await c.list(q)).items.map((i) => i.id);
+    expect(await ids({ tag: "news" })).toEqual(["a"]);
+    expect(await ids({ author: "Grace" })).toEqual(["a"]);
+    expect(await ids({ publishedAfter: "2019-01-01T00:00:00Z", publishedBefore: "2021-01-01T00:00:00Z" })).toEqual(["a"]);
+    expect((await c.list({ author: "Ada" })).items[0]).toMatchObject({ authors: ["Ada", "Grace"] });
+
+    const other = client(memoryAdapter({ contentExtras: false })).c;
+    await expect(other.list({ tag: "news" })).rejects.toMatchObject({ status: 501 });
+    expect((await other.list({ trashed: false })).items).toEqual([]);
+  });
+});

@@ -1,8 +1,9 @@
 // The meta route, the content routes and the preview: what every site serves.
 
 import { createTwoFilesPatch } from "diff";
-import { capabilitiesOf, hasContentTrash, NotFoundError, RefusedError, VersionConflictError, type SiteAdapter } from "../adapter.js";
+import { capabilitiesOf, contentFiltersOf, hasContentTrash, NotFoundError, RefusedError, VersionConflictError, type SiteAdapter } from "../adapter.js";
 import {
+  CONTENT_FILTERS,
   ContentDeleteQuery,
   ContentDeleteResult,
   ContentDoc,
@@ -29,6 +30,7 @@ import {
   Version,
   WriteResult,
   schemaHash,
+  type ContentFilter,
 } from "../contract.js";
 import { BadRequest, BASE_HEADERS, ContractBreach, ID, checked, fail, json, pathParam, readBody, readQuery, type Route } from "./http.js";
 
@@ -59,7 +61,16 @@ export function contentRoutes(adapter: SiteAdapter, options: { store: boolean })
       pattern: /^\/content$/,
       run: async (_m, url) => {
         const query = readQuery(url, ListQuery);
-        if (query.trashed && !hasContentTrash(adapter)) return fail("not-implemented", "This site has no content trash.");
+        const offered = contentFiltersOf(adapter);
+        const asked: Record<ContentFilter, boolean> = {
+          kind: query.kind !== undefined,
+          tag: query.tag !== undefined,
+          author: query.author !== undefined,
+          published: query.publishedAfter !== undefined || query.publishedBefore !== undefined,
+          trashed: query.trashed === true,
+        };
+        const missing = CONTENT_FILTERS.find((f) => asked[f] && !offered.includes(f));
+        if (missing) return fail("not-implemented", `This site does not filter its content list by ${missing}.`);
         return json(200, checked(ContentList, await adapter.content.list(query), "content list"));
       },
     },

@@ -14,6 +14,7 @@ export * from "./contract/media.js";
 export * from "./contract/mentions.js";
 import { SiteInfo, Version } from "./contract/base.js";
 import {
+  CONTENT_FILTERS,
   ContentDeleteQuery,
   ContentDeleteResult,
   ContentDoc,
@@ -171,6 +172,8 @@ export const Capabilities = z.object({
    * trash. A trashed item is deleted for good after TRASH_DAYS by the site's cron.
    */
   contentTrash: z.boolean().optional(),
+  /** The list filters the site applies; any other answers 501. `trashed` comes with `contentTrash`. Absent: none. */
+  contentFilters: z.array(z.enum(CONTENT_FILTERS)).optional(),
   /** True when a publish takes `publishedAt`, the date it is published under. */
   contentPublishedAt: z.boolean().optional(),
   /** The post fields the site renders from a post's frontmatter, each under its shared name. Absent: none. */
