@@ -6,6 +6,7 @@ import { anthropicRoute } from "@dustinedwards/site-runtime/ai-gateway";
 import { toBase64 } from "@dustinedwards/site-runtime/encoding";
 import { escapeHtml } from "@dustinedwards/site-runtime/html";
 import { editImage, type ImagesLike } from "@dustinedwards/site-runtime/image";
+import { checkProse } from "@dustinedwards/site-runtime/prose";
 
 import { NotFoundError, RefusedError, VersionConflictError } from "./adapter.js";
 
@@ -65,6 +66,16 @@ export const SUGGEST_MODEL = "@cf/meta/llama-4-scout-17b-16e-instruct";
 /** The longest edge the model is shown: enough to name what is in a picture, and a small request. */
 const VIEW_EDGE = 768;
 
+/** How long a suggestion may take before the call is abandoned; a person is waiting on it. */
+const SUGGEST_TIMEOUT_MS = 30_000;
+
+/** The answer's shape, asked of the model through Workers AI's JSON mode (`response_format`, in Llama 4 Scout's schema). */
+const SUGGESTION_SCHEMA = {
+  type: "object",
+  properties: { alt: { type: "string" }, tags: { type: "array", items: { type: "string" } } },
+  required: ["alt", "tags"],
+};
+
 /** The shape of the Workers AI binding the suggester calls, so a site passes its `AI` binding straight in. */
 export interface AiLike {
   run(model: string, input: unknown, options?: object): Promise<unknown>;
@@ -78,6 +89,8 @@ export interface SuggestEnv {
   IMAGES: ImagesLike;
   /** The site's AI Gateway (`https://gateway.ai.cloudflare.com/v1/{account_id}/{gateway_id}/anthropic`); unset calls Workers AI directly. */
   AI_GATEWAY_BASE_URL?: string;
+  /** The gateway's id, for an AI_GATEWAY_BASE_URL on a custom domain, whose URL does not name it. */
+  AI_GATEWAY_ID?: string;
 }
 
 /** The tokens one suggestion spent, as Workers AI reports them (0 where it did not). */
@@ -124,15 +137,25 @@ function promptFor(describe: string, rules: string[]): string {
 }
 
 /**
- * The gateway Workers AI runs through: its id from AI_GATEWAY_BASE_URL, the URL site-runtime's ./ai-gateway checks, with
- * the policy that module sets on Anthropic calls: bodies not logged, and the site named on each log entry. Undefined when
- * the site has no gateway.
+ * The gateway Workers AI runs through: its id as site-runtime's anthropicRoute reads it (from the standard URL, else
+ * AI_GATEWAY_ID), with the policy that module sets on Anthropic calls: bodies not logged, and the site named on each log
+ * entry. Undefined when the site has no gateway; a gateway set up wrong is warned about and skipped, so a suggestion
+ * still runs.
  */
 function gatewayOf(env: SuggestEnv, app: string): { id: string; collectLog: false; metadata: { app: string } } | undefined {
-  const route = anthropicRoute({ AI_GATEWAY_BASE_URL: env.AI_GATEWAY_BASE_URL }, app);
-  if (!route.gateway) return undefined;
-  const id = /\/v1\/[^/]+\/([^/]+)\/anthropic$/.exec(route.baseURL)?.[1];
-  if (!id) throw new Error("AI_GATEWAY_BASE_URL names no gateway id; set it to https://gateway.ai.cloudflare.com/v1/{account_id}/{gateway_id}/anthropic");
+  let id: string | null;
+  try {
+    const route = anthropicRoute({ AI_GATEWAY_BASE_URL: env.AI_GATEWAY_BASE_URL, AI_GATEWAY_ID: env.AI_GATEWAY_ID }, app);
+    if (!route.gateway) return undefined;
+    id = route.gatewayId;
+  } catch (error) {
+    console.warn(`${app} media suggester: calling Workers AI without the gateway: ${error instanceof Error ? error.message : String(error)}`);
+    return undefined;
+  }
+  if (!id) {
+    console.warn(`${app} media suggester: AI_GATEWAY_BASE_URL names no gateway id and AI_GATEWAY_ID is unset; calling Workers AI without the gateway`);
+    return undefined;
+  }
   return { id, collectLog: false, metadata: { app } };
 }
 
@@ -183,14 +206,18 @@ export function mediaSuggester<E extends SuggestEnv>(options: MediaSuggesterOpti
         ],
         max_tokens: 300,
         temperature: 0.2,
+        response_format: { type: "json_schema", json_schema: SUGGESTION_SCHEMA },
       },
-      gateway ? { gateway } : {},
+      { ...(gateway ? { gateway } : {}), signal: AbortSignal.timeout(SUGGEST_TIMEOUT_MS) },
     );
     if (options.afterCall) {
       const usage = (answer as { usage?: { prompt_tokens?: number; completion_tokens?: number } } | null)?.usage;
       await options.afterCall(env, { model: SUGGEST_MODEL, promptTokens: usage?.prompt_tokens ?? 0, completionTokens: usage?.completion_tokens ?? 0 }, id);
     }
-    return { ...readSuggestion(answer), model: SUGGEST_MODEL };
+    const { tags, alt } = readSuggestion(answer);
+    // Alt text with a chatbot's leftovers or a high-severity tell in it is not offered (site-runtime's prose check).
+    const flagged = alt !== null && checkProse(alt).some((issue) => issue.severity === "high" || issue.severity === "critical");
+    return { tags, alt: flagged ? null : alt, model: SUGGEST_MODEL };
   };
 }
 

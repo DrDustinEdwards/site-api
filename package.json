@@ -53,7 +53,7 @@
     "lint:promises": "oxlint --type-aware --tsconfig tsconfig.json src"
   },
   "dependencies": {
-    "@dustinedwards/site-runtime": "github:DrDustinEdwards/site-runtime#v0.32.0",
+    "@dustinedwards/site-runtime": "github:DrDustinEdwards/site-runtime#b4bdd0c515cfc4566e87640683722d45007d8468",
     "diff": "9.0.0",
     "zod": "4.6.7"
   },
