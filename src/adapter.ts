@@ -331,6 +331,8 @@ export interface SchedulesAdapter {
 
 export interface SiteAdapter {
   site: SiteInfo;
+  /** Optional (v0.15.0): the Prelum `RENDER_VERSION` the site's stored HTML was rendered with (capabilities.render). */
+  renderVersion?: string;
   content: ContentAdapter;
   preview: PreviewAdapter;
   /** Absent on a site with no media manager: the media routes then answer 501, as in v0.1.0. */
@@ -386,6 +388,7 @@ export function capabilitiesOf(adapter: SiteAdapter, options: { store?: boolean 
     ...(adapter.mentions?.reset ? { mentionReset: true } : {}),
     ...(adapter.schedules ? { scheduledUpdates: true } : {}),
     ...(options.store ? { replay: true } : {}),
+    ...(adapter.renderVersion ? { render: { version: adapter.renderVersion } } : {}),
   };
 }
 

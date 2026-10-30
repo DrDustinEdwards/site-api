@@ -165,6 +165,8 @@ export const Capabilities = z.object({
   contentPublishedAt: z.boolean().optional(),
   /** The post fields the site renders from a post's frontmatter, each under its shared name. Absent: none. */
   postFields: z.array(z.enum(POST_FIELDS)).optional(),
+  /** The Prelum RENDER_VERSION the site's stored HTML was rendered with (v0.15.0); a site re-renders when it is behind. Absent: the site does not say. */
+  render: z.object({ version: z.string() }).optional(),
 });
 
 export const Meta = z.object({

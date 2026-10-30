@@ -1,7 +1,7 @@
 // What v0.15.0 adds to the contract, in one place for each earlier contract's test (contract-v*.test.ts): optional
 // properties, one error code at the end of the enum, new schemas and new routes. Nothing earlier changes.
 
-export const V0150_CAPABILITIES = ["contentPublishedAt", "postFields", "replay", "searchFields"];
+export const V0150_CAPABILITIES = ["contentPublishedAt", "postFields", "render", "replay", "searchFields"];
 
 /** The schemas v0.15.0 extends and the optional properties each gains; [] for one that changes only through a schema it holds. */
 export const V0150_ADDED: Record<string, string[]> = {
