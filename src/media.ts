@@ -95,11 +95,11 @@ export function checkUpload(contentType: string, bytes: Uint8Array | null, limit
 
 // ---------- v0.13.0
 
-/** The SHA-256 of a file's bytes as lower case hex: the one content hash every site keys duplicates by. */
-export async function sha256Hex(bytes: Uint8Array): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", bytes as Uint8Array<ArrayBuffer>);
-  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
-}
+/**
+ * The SHA-256 of a file's bytes as lower case hex: the one content hash every site keys duplicates by. site-runtime's, the
+ * family's one copy (v0.14.0; the same digest this package wrote itself before).
+ */
+export { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 
 /** What a file is, from its type, for the list's `kind` filter: image, video and audio by their type, everything else a document. */
 export function kindOf(contentType: string): MediaKind {

@@ -18,6 +18,14 @@ export interface RateLimiter {
   limit(options: { key: string }): Promise<{ success: boolean }>;
 }
 
+/**
+ * The secrets a site holds for the API (v0.14.0), for its Env: `CARREL_SITE_KEY`, set with `wrangler secret put
+ * CARREL_SITE_KEY` and passed to `createSiteApi` as `key`.
+ */
+export interface SiteApiSecrets {
+  CARREL_SITE_KEY: string;
+}
+
 export interface SiteApiConfig {
   adapter: SiteAdapter;
   /** The site's Carrel key, from its secrets. Shorter than 32 characters refuses every request. */
@@ -33,7 +41,7 @@ export interface SiteApiConfig {
    */
   hooks?: PublishHook[];
   /**
-   * v0.9.0, still served: called with the changed page's path wherever `hooks` run. For a schedule, which has no
+   * @deprecated v0.14.0: pass `hooks: [indexNowHook(...)]` instead. Still served: called with the changed page's path wherever `hooks` run. For a schedule, which has no
    * request, a GET of the page on the site's origin stands in for it. New sites pass `hooks: [indexNowHook(...)]`.
    */
   onPageChange?: (paths: string[], request: Request) => Promise<unknown> | void;
