@@ -33,6 +33,7 @@ const ADDED: Record<string, string[]> = {
   MediaList: ["changeCursor", "moreChanges", "removed"],
   MediaListQuery: ["changedSince", "kind", "orientation"],
   MediaUploadQuery: ["resize"],
+  ErrorBody: ["detail", "status", "title", "type"],
 };
 
 const NEW_LENSES = ["duplicates", "license-expired", "oversized"];
@@ -44,6 +45,7 @@ const WIDEN: Record<string, readonly string[]> = {
   "MediaListQuery.lens": NEW_LENSES,
   "MediaListQuery.sort": ["used"],
   "MediaList.sorted.sort": ["used"],
+  "ErrorBody.error": ["in-progress"],
 };
 
 const NEW_SCHEMAS = [
@@ -86,7 +88,7 @@ describe("the v0.12.0 contract", () => {
     expect(added(V0120.schemas.MediaItem!, now("MediaUploadResult")).sort()).toEqual([...ITEM, "duplicateOf", "embedded", "resizedFrom"].sort());
   });
 
-  for (const name of Object.keys(V0120.schemas).filter((n) => !(n in ADDED) && n !== "MediaLens")) {
+  for (const name of Object.keys(V0120.schemas).filter((n) => !(n in ADDED) && n !== "MediaLens" && n !== "ErrorCode")) {
     it(`keeps ${name} identical`, () => {
       expect(now(name)).toEqual(V0120.schemas[name]);
     });
@@ -101,6 +103,10 @@ describe("the v0.12.0 contract", () => {
 
   it("widens the lenses by duplicates, license-expired and oversized, and nothing else", () => {
     widened(V0120.schemas.MediaLens!, now("MediaLens"), NEW_LENSES, "MediaLens");
+  });
+
+  it("widens the error codes by in-progress (v0.15.0), and nothing else", () => {
+    widened(V0120.schemas.ErrorCode!, now("ErrorCode"), ["in-progress"], "ErrorCode");
   });
 
   it("adds only the new schemas v0.13.0 names", () => {

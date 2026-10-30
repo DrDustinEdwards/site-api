@@ -178,11 +178,21 @@ export const ErrorCode = z.enum([
   "refused",
   "not-implemented",
   "internal",
+  /** v0.15.0: a write under this change id is still running; send it again once that one has answered. */
+  "in-progress",
 ]);
 
+/**
+ * Every error answer, sent as `application/problem+json` (RFC 9457) from v0.15.0: `type`, `title`, `status` and
+ * `detail` (the message again) are the standard's fields, optional so an earlier site's answer still parses.
+ */
 export const ErrorBody = z.object({
   error: ErrorCode,
   message: z.string(),
+  type: z.url().optional(),
+  title: z.string().optional(),
+  status: z.number().int().optional(),
+  detail: z.string().optional(),
   /** On version-conflict only: what the site holds now, or null when the id does not exist. */
   currentVersion: Version.nullable().optional(),
   /** On a refused media delete only (v0.2.0): every place the file is used. */

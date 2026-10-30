@@ -127,6 +127,26 @@ Every write carries an `expectedVersion` and a Carrel `changeId`.
 - **First publish.** A first publish from Carrel's key is allowed (Carrel design decision 2). Carrel decides who may trigger it.
 - **Deletes.** Unpublish returns an item to draft. A delete is the separate `DELETE /content/:id` of v0.3.0, below.
 
+## Errors
+
+Every error answer is `application/problem+json` (RFC 9457, v0.15.0): `{ error, message, type, title, status, detail }`. `error` and `message` are what every earlier reader reads; `type` is this table's anchor for the code, `title` the code's fixed title, `status` the HTTP status and `detail` the message again. A version conflict adds `currentVersion`, and a refused media delete `usedBy`.
+
+| Code | Status | Title | When |
+|---|---|---|---|
+| <a id="error-unauthorized"></a>`unauthorized` | 401 | Unauthorized | No key, or not the site's key. Every route, known or not, answers this to a caller without the key. |
+| <a id="error-rate-limited"></a>`rate-limited` | 429 | Too many requests | The caller's address spent the site's limit. |
+| <a id="error-not-configured"></a>`not-configured` | 503 | Not configured | The site's key is unset or shorter than 32 characters. |
+| <a id="error-unavailable"></a>`unavailable` | 503 | Unavailable | The rate limiter failed, so the request was refused. |
+| <a id="error-not-found"></a>`not-found` | 404 | Not found | No such route, id or version. |
+| <a id="error-method-not-allowed"></a>`method-not-allowed` | 405 | Method not allowed | The route exists, but not with this method. |
+| <a id="error-invalid"></a>`invalid` | 400 | Invalid request | The body or query is outside the contract. |
+| <a id="error-too-large"></a>`too-large` | 413 | Too large | The body or file is over the limit. |
+| <a id="error-version-conflict"></a>`version-conflict` | 409 | Version conflict | `expectedVersion` is not what the site holds; `currentVersion` says what it does (null: no such id). |
+| <a id="error-in-progress"></a>`in-progress` | 409 | In progress | A write under this change id is still running (v0.15.0, on a site with `replay`). Send it again once it has answered. |
+| <a id="error-refused"></a>`refused` | 422 | Refused | The site's own rules said no; the message says why. |
+| <a id="error-not-implemented"></a>`not-implemented` | 501 | Not implemented | The site does not offer this route, query or option; `meta.capabilities` says so beforehand. |
+| <a id="error-internal"></a>`internal` | 500 | Internal error | The site failed, or answered outside the contract. Logged on the site; nothing of it is passed on. |
+
 ## Changes in v0.3.0
 
 Additive: every v0.2.0 route and body is unchanged, and the schema hash and package version move on purpose.

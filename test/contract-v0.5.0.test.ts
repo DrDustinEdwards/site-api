@@ -8,7 +8,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import * as contract from "../src/contract.js";
-import { additiveOnly, added, now, type JsonSchema } from "./additive.js";
+import { additiveOnly, added, now, widened, type JsonSchema } from "./additive.js";
 
 const V050 = JSON.parse(readFileSync(new URL("./fixtures/contract-v0.5.0.json", import.meta.url), "utf8")) as {
   version: string;
@@ -40,7 +40,11 @@ const ADDED: Record<string, string[]> = {
   MediaList: ["changeCursor", "moreChanges", "removed", "sorted", "total"],
   MentionListQuery: ["q", "targetId"],
   MentionList: ["filtered"],
+  ErrorBody: ["detail", "status", "title", "type"],
 };
+
+/** v0.15.0 adds the in-progress error, at the end. */
+const NEW_CODES = ["in-progress"];
 
 /** The one v0.5.0 schema v0.6.0 widens rather than extends: a decision may also be reset. */
 const WIDENED = "MentionDecideInput";
@@ -79,7 +83,7 @@ describe("the v0.5.0 contract", () => {
     ]);
   });
 
-  for (const name of Object.keys(V050.schemas).filter((n) => !(n in ADDED) && n !== WIDENED)) {
+  for (const name of Object.keys(V050.schemas).filter((n) => !(n in ADDED) && n !== WIDENED && n !== "ErrorCode")) {
     it(`keeps ${name} identical`, () => {
       expect(now(name)).toEqual(V050.schemas[name]);
     });
@@ -87,10 +91,14 @@ describe("the v0.5.0 contract", () => {
 
   for (const [name, props] of Object.entries(ADDED)) {
     it(`extends ${name} by optional properties only: ${props.join(", ") || "none of its own"}`, () => {
-      additiveOnly(V050.schemas[name]!, now(name), name);
+      additiveOnly(V050.schemas[name]!, now(name), name, { "ErrorBody.error": NEW_CODES });
       expect(added(V050.schemas[name]!, now(name)).sort()).toEqual(props);
     });
   }
+
+  it("widens the error codes by in-progress, and nothing else", () => {
+    widened(V050.schemas.ErrorCode!, now("ErrorCode"), NEW_CODES, "ErrorCode");
+  });
 
   it("widens the mention decision by reset, and nothing else", () => {
     const before = V050.schemas[WIDENED]!;
