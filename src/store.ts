@@ -1,6 +1,6 @@
 // What the package keeps for itself on a site that gives it a store (v0.15.0): the answers to writes, so a retry under
 // the same change id is answered rather than run twice, the publish hooks that failed, so the cron tries them again, and
-// the shareable preview links. A D1 site passes `d1SiteApiStore(env.DB)` as `store` and adds
+// the shareable preview links and the webmentions each page last sent. A D1 site passes `d1SiteApiStore(env.DB)` as `store` and adds
 // `SITE_API_STORE_SQL` as its next migration. Exported as `@dustinedwards/site-api/store`.
 
 import type { D1Like } from "./schedules.js";
@@ -40,6 +40,10 @@ export interface SiteApiStore {
   activePreviewLinks(contentId: string, now: string): Promise<PreviewLinkRow[]>;
   /** Revokes the unrevoked link whose hash starts with `prefix` (its id); false when none. */
   revokePreviewLink(prefix: string, at: string): Promise<boolean>;
+  /** The targets the webmention hook last sent for a source page (v0.15.0); [] when none. */
+  webmentionTargets(source: string): Promise<string[]>;
+  /** Replaces a source's targets with the ones it links to now, and drops the row when there are none. */
+  putWebmentionTargets(source: string, targets: string[], sentAt: string): Promise<void>;
 }
 
 /** One shareable preview link (v0.15.0). Times are UTC ISO text; `revokedAt` null while it works. */
@@ -91,6 +95,11 @@ CREATE TABLE IF NOT EXISTS preview_links (
   change_id TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS preview_links_content ON preview_links (content_id, expires_at);
+CREATE TABLE IF NOT EXISTS webmention_targets (
+  source TEXT PRIMARY KEY,
+  targets TEXT NOT NULL,
+  sent_at TEXT NOT NULL
+);
 `;
 
 interface WriteRow {
@@ -194,6 +203,18 @@ export function d1SiteApiStore(db: D1Like): SiteApiStore {
         .bind(at, `${prefix}%`)
         .first();
       return row !== null;
+    },
+    async webmentionTargets(source) {
+      const row = await db.prepare("SELECT targets FROM webmention_targets WHERE source = ?").bind(source).first<{ targets: string }>();
+      return row ? (JSON.parse(row.targets) as string[]) : [];
+    },
+    async putWebmentionTargets(source, targets, sentAt) {
+      await (targets.length === 0
+        ? db.prepare("DELETE FROM webmention_targets WHERE source = ?").bind(source)
+        : db
+            .prepare("INSERT INTO webmention_targets (source, targets, sent_at) VALUES (?, ?, ?) ON CONFLICT (source) DO UPDATE SET targets = excluded.targets, sent_at = excluded.sent_at")
+            .bind(source, JSON.stringify(targets), sentAt)
+      ).run();
     },
   };
 }
