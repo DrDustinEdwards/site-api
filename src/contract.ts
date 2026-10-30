@@ -3,6 +3,7 @@
 // A site and Carrel agree when their schema hashes match. The hash covers these schemas and the
 // route table, so any change to either is a new contract, and Carrel's health check sees it.
 
+import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 import { z } from "zod";
 
 export { ChangeId, ContentId, SiteInfo, SortDir, Version } from "./contract/base.js";
@@ -283,9 +284,7 @@ export function schemaHash(): Promise<string> {
     const schemas = Object.fromEntries(
       Object.entries(HASHED).map(([name, schema]) => [name, z.toJSONSchema(schema, { io: "input" })]),
     );
-    const bytes = new TextEncoder().encode(canonical({ prefix: PREFIX, routes: ROUTES, schemas }));
-    const digest = await crypto.subtle.digest("SHA-256", bytes);
-    return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+    return sha256Hex(canonical({ prefix: PREFIX, routes: ROUTES, schemas }));
   })();
   return cachedHash;
 }
