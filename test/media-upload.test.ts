@@ -1,8 +1,8 @@
 // The upload step (v0.15.0): the parts a mistake in would ship silently. A location left in a photo is published with
 // it, and a strip that broke a file's offsets or checksums would store a picture no browser opens; a HEIC must reach the
-// site as a JPEG of the size it asked for.
+// site as a JPEG of the size it asked for, with a placeholder and a main color read from the binding's one-pixel PNG.
 
-import { crc32 } from "node:zlib";
+import { crc32, deflateSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
 import { toArrayBuffer } from "../src/media-kit.js";
 import { prepareUpload, readEmbedded, stripLocation, type UploadImages } from "../src/media-upload.js";
@@ -108,6 +108,9 @@ describe("stripLocation", () => {
 describe("prepareUpload", () => {
   it("stores a HEIC as a JPEG, shrunk to the site's longest edge, without asking editImage for a format change alone", async () => {
     const heic = cat(new Uint8Array([0, 0, 0, 24]), bytes("ftypheic\0\0\0\0mif1heic"));
+    const ihdr = new Uint8Array(13);
+    ihdr.set([0, 0, 0, 1, 0, 0, 0, 1, 8, 6]);
+    const pixel = cat(new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), pngChunk("IHDR", ihdr), pngChunk("IDAT", deflateSync(new Uint8Array([4, 0x12, 0xab, 0xcd, 0xff]))), pngChunk("IEND", new Uint8Array()));
     const transforms: object[] = [];
     const outputs: string[] = [];
     let call = 0;
@@ -119,7 +122,9 @@ describe("prepareUpload", () => {
           return {
             output: async ({ format }) => {
               outputs.push(format);
-              return { response: () => new Response(toArrayBuffer(jpeg())) };
+              // The placeholder's WebP is any bytes here; the pixel is RGBA under the Paeth filter, which predicts zero.
+              const out = format === "image/png" ? pixel : format === "image/webp" ? bytes("RIFF\0\0\0\0WEBPVP8 ") : jpeg();
+              return { response: () => new Response(toArrayBuffer(out)) };
             },
           };
         },
@@ -127,8 +132,9 @@ describe("prepareUpload", () => {
     };
     const prepared = await prepareUpload(images, { bytes: heic, contentType: "image/heic", filename: "IMG_0001.HEIC", alt: "", changeId: "c-1", resize: true }, { resize: { maxEdge: 3000, quality: 85 } });
     expect(prepared).toMatchObject({ contentType: "image/jpeg", filename: "IMG_0001.jpg", converted: true, width: 3000, height: 2000, resizedFrom: { width: 6000, height: 4000 } });
-    expect(transforms).toEqual([{}, { width: 3000, height: 3000, fit: "scale-down" }]);
-    expect(outputs).toEqual(["image/jpeg", "image/jpeg"]);
+    expect(prepared).toMatchObject({ placeholder: `data:image/webp;base64,${btoa("RIFF\0\0\0\0WEBPVP8 ")}`, color: "#12abcd" });
+    expect(transforms).toEqual([{}, { width: 3000, height: 3000, fit: "scale-down" }, { width: 16, height: 16, fit: "scale-down", blur: 2 }, { width: 1, height: 1, fit: "squeeze" }]);
+    expect(outputs).toEqual(["image/jpeg", "image/jpeg", "image/webp", "image/png"]);
     // The fake binding answers a JPEG that still has a location, which the real one drops: it is out of the copy kept.
     expect(located(prepared.original!)).toBe(false);
     expect(prepared.sha256).not.toBe(prepared.uploadSha256);

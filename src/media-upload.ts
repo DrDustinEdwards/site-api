@@ -1,13 +1,14 @@
 // The upload step every site's media adapter ran for itself (v0.15.0), once: the checks, HEIC and HEIF to JPEG, a
-// photo's location taken out, the shrink to the site's longest edge, what the picture says about itself, and the hashes.
-// A site's `upload` calls prepareUpload and stores what it answers. readEmbedded and stripLocation are byte work on Web
-// APIs alone, so they run in a Worker; the conversion and the shrink go through the Images binding.
+// photo's location taken out, the shrink to the site's longest edge, what the picture says about itself, the placeholder
+// and main color, and the hashes. A site's `upload` calls prepareUpload and stores what it answers. readEmbedded,
+// stripLocation and the PNG reader are byte work on Web APIs alone, so they run in a Worker; the conversion, the shrink
+// and the placeholder go through the Images binding.
 
-import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
+import { sha256Hex, toBase64, toHex } from "@dustinedwards/site-runtime/encoding";
 import { IMAGE_QUALITY, editImage, type ImagesLike } from "@dustinedwards/site-runtime/image";
 
 import { RefusedError, type MediaUpload } from "./adapter.js";
-import type { MediaResize, MediaUploadLimits } from "./contract.js";
+import { MediaPlaceholder, type MediaResize, type MediaUploadLimits } from "./contract.js";
 import { checkUpload } from "./media.js";
 import { toArrayBuffer } from "./media-kit.js";
 
@@ -448,6 +449,92 @@ function webpWithoutLocation(b: Uint8Array): Uint8Array {
   return out;
 }
 
+// ---------- Placeholder and main color
+
+/**
+ * The placeholder fits inside this square, so a tall or a wide picture's stays as small as a square one's. Moved from
+ * dustinedwards.info's placeholderFor (v0.15.0), the one site that made one, at 20 pixels wide and unblurred.
+ */
+const PLACEHOLDER_EDGE = 16;
+
+/** The placeholder's encoding: always with a quality, without which the binding writes a lossless WebP, and one still frame of a GIF. */
+const PLACEHOLDER_OUTPUT = { format: "image/webp", quality: 60, anim: false };
+
+/** The bytes of one transform through the binding, or null where it failed. */
+async function transformed(images: ImagesLike, bytes: Uint8Array, transform: object, output: { format: string; quality?: number }): Promise<Uint8Array | null> {
+  try {
+    const result = await images.input(new Response(toArrayBuffer(bytes)).body!).transform(transform).output(output);
+    return new Uint8Array(await result.response().arrayBuffer());
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The single pixel of a one-pixel PNG as #rrggbb, or null: any bit depth and color type, the zlib stream inflated by
+ * DecompressionStream. With one pixel in one row, every PNG filter predicts zero, so the bytes after the filter byte are
+ * the pixel itself. A pixel with no opacity (alpha 0, or a palette entry tRNS makes clear) has no color.
+ */
+async function pngColor(b: Uint8Array): Promise<string | null> {
+  if (u32be(b, 0) !== 0x89504e47 || ascii(b, 12, 4) !== "IHDR") return null;
+  const [depth, type] = [b[24]!, b[25]!];
+  const idat: Uint8Array[] = [];
+  let palette: Uint8Array | undefined;
+  let alphas: Uint8Array | undefined;
+  for (let at = 8; at + 12 <= b.length; at += 12 + u32be(b, at)) {
+    const chunk = ascii(b, at + 4, 4);
+    const data = b.subarray(at + 8, at + 8 + u32be(b, at));
+    if (chunk === "IDAT") idat.push(data);
+    else if (chunk === "PLTE") palette = data;
+    else if (chunk === "tRNS") alphas = data;
+    else if (chunk === "IEND") break;
+  }
+  const row = new Uint8Array(await new Response(new Blob([toArrayBuffer(concat(idat))]).stream().pipeThrough(new DecompressionStream("deflate"))).arrayBuffer());
+  // A sample is its first byte (the high one of a 16-bit sample), or for a smaller depth the top bits of that byte.
+  const step = depth === 16 ? 2 : 1;
+  const sample = (i: number) => (depth < 8 ? row[1]! >> (8 - depth) : row[1 + i * step]!);
+  const scale = (v: number) => (depth < 8 ? Math.round((v * 255) / (2 ** depth - 1)) : v);
+  let rgb: number[];
+  let alpha = 255;
+  if (type === 3) {
+    const i = sample(0);
+    if (!palette || palette.length < i * 3 + 3) return null;
+    rgb = [palette[i * 3]!, palette[i * 3 + 1]!, palette[i * 3 + 2]!];
+    alpha = alphas?.[i] ?? 255;
+  } else if (type === 0 || type === 4) {
+    rgb = Array(3).fill(scale(sample(0)));
+    if (type === 4) alpha = sample(1);
+  } else if (type === 2 || type === 6) {
+    rgb = [sample(0), sample(1), sample(2)];
+    if (type === 6) alpha = sample(3);
+  } else {
+    return null;
+  }
+  return alpha === 0 || rgb.some((v) => v === undefined) ? null : `#${toHex(new Uint8Array(rgb))}`;
+}
+
+/**
+ * A tiny blurred WebP of the stored picture, as a data: URI the contract carries (MediaPlaceholder), and the picture's
+ * main color: two transforms through the binding, each billed, the second from the placeholder's few bytes rather than
+ * the picture. The color is the blurred placeholder squeezed to one pixel, so every part of the picture weighs in, and
+ * read from a PNG (WebP needs a decoder a Worker does not have). Null for either where the binding fails or the result
+ * is outside the contract; no color without a placeholder, so a picture the binding cannot read costs one call.
+ * prepareUpload calls it for every picture the binding measured; a site calls it alone to fill files stored before.
+ */
+export async function placeholderAndColor(images: ImagesLike, bytes: Uint8Array): Promise<{ placeholder: string | null; color: string | null }> {
+  // A light blur: the page scales these few pixels up, and a soft edge reads as loading rather than as a blocky picture.
+  const tiny = await transformed(images, bytes, { width: PLACEHOLDER_EDGE, height: PLACEHOLDER_EDGE, fit: "scale-down", blur: 2 }, PLACEHOLDER_OUTPUT);
+  const placeholder = tiny && `data:image/webp;base64,${toBase64(tiny)}`;
+  if (!tiny || !MediaPlaceholder.safeParse(placeholder).success) return { placeholder: null, color: null };
+  const pixel = await transformed(images, tiny, { width: 1, height: 1, fit: "squeeze" }, { format: "image/png" });
+  try {
+    return { placeholder, color: pixel && (await pngColor(pixel)) };
+  } catch {
+    // A PNG too malformed to read is no color, never a refused upload.
+    return { placeholder, color: null };
+  }
+}
+
 // ---------- The upload step
 
 /** The Images binding as prepareUpload uses it: site-runtime's ImagesLike, and `info`, which measures a picture for free. */
@@ -490,6 +577,10 @@ export interface PreparedUpload {
   converted: boolean;
   /** True when a location was taken out of the file without re-encoding it. */
   located: boolean;
+  /** A 16 pixel blurred WebP as a data: URI (MediaPlaceholder); null for a file the binding cannot read, as an SVG. */
+  placeholder: string | null;
+  /** The picture's main color, #rrggbb in lower case (MediaColor); null where there is no placeholder or no reading of it. */
+  color: string | null;
   /** The picture's size before the shrink, for the upload's answer. */
   resizedFrom?: { width: number; height: number; bytes: number };
   /** The bytes before the shrink (converted, without a location), for the site's backup and the file's history. */
@@ -511,7 +602,8 @@ async function measure(images: UploadImages, bytes: Uint8Array): Promise<{ width
  * metadata, read first because every re-encode by the binding drops it; HEIC and HEIF to JPEG through the Images binding,
  * which applies the EXIF orientation and keeps only the copyright; the location taken out of what is not re-encoded
  * (stripLocation); the shrink to `resize.maxEdge` where the upload asked for it (site-runtime's editImage, in the
- * picture's own type, the binding applying the orientation again); the stored size; and the hashes. Throws RefusedError
+ * picture's own type, the binding applying the orientation again); the stored size; the placeholder and main color, from
+ * the stored bytes where the binding could measure them; and the hashes. Throws RefusedError
  * for bytes outside the limits or a HEIC the binding cannot convert.
  */
 export async function prepareUpload(images: UploadImages, input: MediaUpload, options: PrepareUploadOptions = {}): Promise<PreparedUpload> {
@@ -556,6 +648,7 @@ export async function prepareUpload(images: UploadImages, input: MediaUpload, op
     size = (await measure(images, bytes)) ?? { width: Math.round(size.width * scale), height: Math.round(size.height * scale) };
   }
 
+  const { placeholder, color } = size ? await placeholderAndColor(images, bytes) : { placeholder: null, color: null };
   const sha256 = await sha256Hex(bytes);
   const uploadSha256 = input.sha256 ?? (bytes === input.bytes ? sha256 : await sha256Hex(input.bytes));
   return {
@@ -569,6 +662,8 @@ export async function prepareUpload(images: UploadImages, input: MediaUpload, op
     embedded,
     converted,
     located,
+    placeholder,
+    color,
     ...(resizedFrom ? { resizedFrom, original } : {}),
   };
 }
