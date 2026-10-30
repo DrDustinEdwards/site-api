@@ -9,7 +9,7 @@ Each site mounts one handler at `/api/carrel/v1` and implements an adapter over 
 Installed by git tag, never from a registry:
 
 ```sh
-npm install github:DrDustinEdwards/site-api#v0.10.1
+npm install github:DrDustinEdwards/site-api#v0.14.0
 ```
 
 npm builds `dist/` on install through the `prepare` script.
@@ -48,7 +48,7 @@ export default {
 };
 ```
 
-A v0.9.0 site's `onPageChange: (paths, request) => submitIndexNow(...)` still works, and from v0.10.0 it also hears the pages a schedule changes.
+**`onPageChange` is deprecated** in favor of `hooks: [indexNowHook(...)]`. A v0.9.0 site's `onPageChange: (paths, request) => submitIndexNow(...)` still works, and from v0.10.0 it also hears the pages a schedule changes, but it will be removed in a later breaking release; move to the hook.
 
 The guard runs in this order: prefix, rate limit, key, route.
 
@@ -162,6 +162,19 @@ Additive: every v0.4.0 route and body is unchanged, and the schema hash and pack
 - **Sweep.** `POST /mentions/sweep` with `{ changeId }` removes the failed and rejected mentions past the site's own retention windows (dustinedwards.info: 30 days for failed, 90 for rejected; pending and approved ones never expire) and answers `{ changeId, removed: { failed, rejected } }`. It names no version because it is not about one mention, and the windows are the site's, not the package's.
 - **Versions.** A mention's `version` is opaque, like a content version, and must move whenever its status, its verification or its decision does, and not when another mention changes. A write with a version the site no longer holds is `409 version-conflict` with `currentVersion`; a missing mention is `404`. dustinedwards.info's table has no `updated_at` and no version column, so its adapter derives one: a hash of `status`, `received_at`, `verified_at` and `decided_at` (a re-send resets all three timestamps and the status, an approve or reject sets the status and `decided_at`). It checks the version and then writes with the same values in the `WHERE`, so a change between the check and the write matches no row and is reported as a conflict.
 - **Conformance** adds, for every site: the list in shape (or `501` where the site has no group), writes without the key or with a wrong one refused, a decide and a delete of an id no site holds refused (`404`, or `501` without the group), and, where the site has the group, a decide with a stale version refused on the first real mention, a sweep with no change id refused (`400`, before anything is removed), and an unknown status refused. It never decides, deletes or sweeps anything real.
+
+## Changes in v0.14.0
+
+Additive: no route, body or schema changes. The pieces every site's media adapter and preview wrote for itself, exported from the package root, and site-runtime moves to v0.29.0 (its `editImage`).
+
+- **Versions.** `mediaVersion(rev)` is a file's version, `r` and its index row's rev; `mediaRev(version)` reads it back, or -1 (which no row holds) for anything else; `MEDIA_VERSION_PATTERN` is the pattern.
+- **Writes.** `MediaWrite` is one versioned write's outcome: `{ ok: true, rev, changed? }`, `{ ok: false, reason: "missing" }`, `{ ok: false, reason: "stale", rev }` or `{ ok: false, reason: "refused", message }`. `answerWrite(write)` answers `{ version }` or throws `NotFoundError`, `VersionConflictError` (with the row's version) or `RefusedError`, which the handler answers 404, 409 and 422.
+- **`toArrayBuffer(bytes)`**: a fresh ArrayBuffer of a view's bytes, for R2 and the Images binding, never `bytes.buffer`, which may be larger.
+- **AI suggestions.** `mediaSuggester({ app, describe, rules?, beforeCall?, afterCall? })` returns `suggest(env, picture, id?)`, the suggester behind an adapter's `suggest`: a 768px JPEG through site-runtime's `editImage`, shown to Workers AI (`SUGGEST_MODEL`, Llama 4 Scout) through the site's AI Gateway when `AI_GATEWAY_BASE_URL` names one (site-runtime's `anthropicRoute` checks it; bodies are not logged and `app` names the site on each entry). `describe` finishes "one picture ..." ("on a scientist's personal website"), `rules` adds the site's own sentences, `beforeCall(env, id)` may throw to stop the call before the model runs (a daily cost cap), and `afterCall(env, { model, promptTokens, completionTokens }, id)` meters it. `env` is `SuggestEnv`: `AI`, `IMAGES` and `AI_GATEWAY_BASE_URL`. `readSuggestion(answer)` is the reader of the model's JSON.
+- **`previewDocument({ title, body, lang?, stylesheets?, origin?, attributes?, style? })`**: the plain page a preview renders into, `noindex`, with the title, language, attributes and stylesheet addresses escaped (relative stylesheets resolved against `origin`, since Carrel shows the preview on its own origin). The body is the site's own rendered HTML, written as it is.
+- **`SiteApiSecrets`**: `{ CARREL_SITE_KEY: string }`, for a site's Env.
+- **`sha256Hex`** is site-runtime's (`./encoding`), re-exported: the same digest for the same bytes, and it also takes an ArrayBuffer or a string.
+- **`onPageChange`** is deprecated in favor of `hooks: [indexNowHook(...)]`; it still runs.
 
 ## Changes in v0.13.1
 
