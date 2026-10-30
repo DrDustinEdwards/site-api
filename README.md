@@ -9,7 +9,7 @@ Each site mounts one handler at `/api/carrel/v1` and implements an adapter over 
 Installed by git tag, never from a registry:
 
 ```sh
-npm install github:DrDustinEdwards/site-api#v0.14.0
+npm install github:DrDustinEdwards/site-api#v0.15.0
 ```
 
 npm builds `dist/` on install through the `prepare` script.
@@ -46,6 +46,23 @@ export default {
     ctx.waitUntil(api.runSchedules({ now: new Date(controller.scheduledTime) }));
   },
 };
+```
+
+From v0.15.0 a site with D1 also passes the package a store, for safe retries, preview links, hook retries and the webmentions it sends (Changes in v0.15.0):
+
+```ts
+import { webmentionHook } from "@dustinedwards/site-api";
+import { d1SiteApiStore } from "@dustinedwards/site-api/store";
+
+const store = d1SiteApiStore(env.DB);              // migration: SITE_API_STORE_SQL
+const api = createSiteApi({
+  // ...as above
+  store,
+  hooks: [indexNowHook({ /* ... */ }), webmentionHook({ store })],
+});
+
+// in fetch, before the handler:
+if (api.matchesPreviewLink(request)) return api.servePreviewLink(request);
 ```
 
 **`onPageChange` is deprecated** in favor of `hooks: [indexNowHook(...)]`. A v0.9.0 site's `onPageChange: (paths, request) => submitIndexNow(...)` still works, and from v0.10.0 it also hears the pages a schedule changes, but it will be removed in a later breaking release; move to the hook.
@@ -133,6 +150,8 @@ Every write carries an `expectedVersion` and a Carrel `changeId`.
 - **First publish.** A first publish from Carrel's key is allowed (Carrel design decision 2). Carrel decides who may trigger it.
 - **Deletes.** Unpublish returns an item to draft. A delete is the separate `DELETE /content/:id` of v0.3.0, below.
 
+**Revisions.** A site keeps every revision of every item and never prunes them, least of all the live one: `revisions` lists them all and `revisionSource` opens each, so any publish can be undone and every diff can be made. A rename moves the history with the item; only a delete, or the trash emptying itself, removes it.
+
 ## Errors
 
 Every error answer is `application/problem+json` (RFC 9457, v0.15.0): `{ error, message, type, title, status, detail }`. `error` and `message` are what every earlier reader reads; `type` is this table's anchor for the code, `title` the code's fixed title, `status` the HTTP status and `detail` the message again. A version conflict adds `currentVersion`, and a refused media delete `usedBy`.
@@ -191,7 +210,7 @@ Additive: every v0.4.0 route and body is unchanged, and the schema hash and pack
 
 ## Changes in v0.15.0
 
-Additive: every v0.14.0 route and body still works as it did, and the schema hash moves on purpose. Every new route, capability and option is optional per site: a site whose adapter or config lacks it answers its route or option `501 not-implemented`, and `meta.capabilities` says which it has.
+Additive: every v0.14.0 route and body still works as it did, and the schema hash moves on purpose. Every new route, capability and option is optional per site: a site whose adapter or config lacks it answers its route or option `501 not-implemented`, and `meta.capabilities` says which it has, so a v0.14.0 adapter compiles and runs unchanged. `test/v0.15.0.ts` names every addition, which each `test/contract-v*.test.ts` checks against its fixture: optional properties, the `in-progress` code at the end of `ErrorCode`, ten schemas and six routes. Two types gain a member a site only reads: `ScheduleRun` (`emptied`, `retried`) and `PublishAction`.
 
 - **Errors** are problem details (`application/problem+json`, RFC 9457), keeping `error` and `message`; see Errors above. One new code, `in-progress`.
 - **Safe retries by change id** (`capabilities.replay`). A site that passes `createSiteApi` a `store` makes every write under content, media and mentions safe to send again. Before a write runs, the package claims its `changeId` with the route and a hash of the query and body (an upload's bytes included). The same request again answers exactly what the first answered, with `Idempotent-Replayed: true`, and the adapter does not run; while the first is still running it answers `409 in-progress`; the same change id on a different request is `422 refused`. Successes, `409` and `422` answers are kept for 7 days (`runSchedules` prunes older ones); any other failure frees the change id, so a retry runs again. A claim still running after two minutes was left by a request that died, and a retry of the same request takes it over. On D1:
@@ -415,7 +434,16 @@ interface SiteAdapter {
     revisionSource(id: string, version: string): Promise<string | null>;
     delete?(id: string, input: { expectedVersion: string; changeId: string }): Promise<void>; // v0.3.0; omit and the route answers 501
     setTags?(id: string, input: { tags: string[]; expectedVersion: string; changeId: string }): Promise<WriteResult>; // v0.6.0; omit and the route answers 501
+    // v0.15.0, each optional (the route or option answers 501 when absent).
+    publishedAtSettable?: boolean;                 // publish takes publishedAt
+    searchFields?: SearchField[];                  // the search fields the site renders
+    postFields?: PostField[];                      // the post fields the site renders
+    filters?: ("kind" | "tag" | "author" | "published")[]; // the list filters list applies
+    rename?(id: string, input: RenameInput): Promise<RenameResult>;          // the old path redirects (301)
+    trash?(id: string, input: { expectedVersion: string; changeId: string }): Promise<WriteResult>;   // with restore and delete, or neither
+    restore?(id: string, input: { expectedVersion: string; changeId: string }): Promise<WriteResult>; // always a draft
   };
+  renderVersion?: string;                          // v0.15.0: Prelum's RENDER_VERSION
   preview: { render(input: PreviewInput): Promise<string> };
   schedules?: {                                    // v0.10.0; omit for a site with no scheduled updates to live posts
     get(id: string): Promise<ScheduledUpdate | null>;
