@@ -46,8 +46,12 @@
       "default": "./dist/testing.js"
     }
   },
+  "bin": {
+    "site-api-live": "bin/site-api-live.mjs"
+  },
   "files": [
-    "dist"
+    "dist",
+    "bin"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
