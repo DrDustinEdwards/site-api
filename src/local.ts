@@ -4,6 +4,7 @@
 // Carrel's requests meet. So every route rule, version check, upload check and zod parse is the one
 // Carrel gets, and the content kit (./admin) runs the same against either client.
 
+import { toHex } from "@dustinedwards/site-runtime/encoding";
 import type { SiteAdapter } from "./adapter.js";
 import { createSiteClient, type SiteClient } from "./client.js";
 import { createSiteApi } from "./server.js";
@@ -15,8 +16,7 @@ export interface LocalClientOptions {
 
 /** A key that lives only in this closure: the handler insists on one, and nothing outside can learn it. */
 function inProcessKey(): string {
-  const bytes = crypto.getRandomValues(new Uint8Array(32));
-  return [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("");
+  return toHex(crypto.getRandomValues(new Uint8Array(32)));
 }
 
 export function localClient(adapter: SiteAdapter, options: LocalClientOptions = {}): SiteClient {
