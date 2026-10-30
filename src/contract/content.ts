@@ -118,6 +118,21 @@ export const WriteResult = z.object({
   scheduledUpdate: ScheduledUpdateSummary.nullable().optional(),
 });
 
+/**
+ * Moving an item to a new id (v0.15.0, optional per site). Its old public path, where it was ever published, keeps a
+ * permanent redirect to the new one.
+ */
+export const RenameInput = z.object({
+  newId: ContentId,
+  expectedVersion: Version,
+  changeId: ChangeId,
+});
+
+/** The write under the new id, and the path that now redirects to it (null for an item never published). */
+export const RenameResult = WriteResult.extend({
+  previousPath: z.string().startsWith("/").nullable(),
+});
+
 /** The update waiting on a live item, with its source (v0.10.0): `GET /content/:id/schedule`. */
 export const ScheduledUpdate = ScheduledUpdateSummary.extend({
   id: ContentId,
@@ -200,6 +215,8 @@ export type PublishInput = z.infer<typeof PublishInput>;
 export type ScheduleInput = z.infer<typeof ScheduleInput>;
 export type UnpublishInput = z.infer<typeof UnpublishInput>;
 export type WriteResult = z.infer<typeof WriteResult>;
+export type RenameInput = z.infer<typeof RenameInput>;
+export type RenameResult = z.infer<typeof RenameResult>;
 export type ScheduledUpdateSummary = z.infer<typeof ScheduledUpdateSummary>;
 export type ScheduledUpdate = z.infer<typeof ScheduledUpdate>;
 export type ScheduleCancelQuery = z.infer<typeof ScheduleCancelQuery>;

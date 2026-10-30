@@ -89,6 +89,7 @@ All paths sit under `/api/carrel/v1`. Bodies are JSON, checked on the way in and
 | content | `GET /content/:id/revisions/:version` | | `RevisionSource`: the source as it was at that version (v0.3.0) |
 | content | `DELETE /content/:id?expectedVersion&changeId` | | `ContentDeleteResult` (v0.3.0, optional per site: `501` where the adapter has no `delete`) |
 | content | `PUT /content/:id/tags` | `ContentTagsInput` | `WriteResult` (v0.6.0, optional per site: `501` where the adapter has no `setTags`) |
+| content | `POST /content/:id/rename` | `RenameInput` | `RenameResult` (v0.15.0, optional per site) |
 | preview | `POST /preview` | `PreviewInput` | the full page HTML from the site's own pipeline |
 | media | `GET /media?q&tag&trashed&lens&sort&dir&orientation&kind&cursor&limit` | | `MediaList` (`tag` and `trashed=only` are v0.4.0; `lens`, `sort`, `dir`, `total` and `sorted` v0.6.0; `orientation`, `kind` and `changeCursor` v0.13.0) |
 | media | `GET /media?changedSince&limit` | | `MediaList` of the files changed since, with `removed` and `moreChanges` (v0.13.0, optional) |
@@ -199,6 +200,7 @@ Additive: every v0.14.0 route and body still works as it did, and the schema has
 
 - **Post fields** (`capabilities.postFields`), beside the search fields and kept the same way, in the frontmatter as JSON literals: `excerpt`, `authors` (display names in credit order, the first the primary author, written as a JSON array so a name may hold a comma), `series` and `seriesPart` (a positive whole number). `@dustinedwards/site-api/frontmatter` exports `POST_FIELDS`, `postFieldsOf(front)` and `setPostFields(front, values)`; a blank value removes the key. A site names the ones it renders in `ContentAdapter.postFields`, and the search fields it renders in `ContentAdapter.searchFields`. List rows may carry `authors` and `excerpt`, filled from the frontmatter, and a revision may carry `authors`, everyone credited for that version (`author` stays).
 - **The render version** (`capabilities.render`): `SiteAdapter.renderVersion` is the Prelum `RENDER_VERSION` the site's stored HTML was rendered with, so Carrel sees a site that is behind. A site passes `RENDER_VERSION` from `@drdustinedwards/site-helpers/render/nomath`.
+- **Rename with a redirect** (`capabilities.contentRename`). `POST /content/:id/rename` `{ newId, expectedVersion, changeId }` moves the item, its history with it, and answers `RenameResult`: the write under the new id with `previousPath`, the old public path, which now answers a permanent (301) redirect to the new one, or `null` for an item never published. A taken `newId` is `422 refused`. The adapter's `rename` makes the move and the redirect one unit; the publish hooks hear `rename` with the old path and address (below).
 - **A settable publish date** (`capabilities.contentPublishedAt`). `POST /content/:id/publish` takes an optional `publishedAt`: a first publish backdated, or a live post re-dated. A date in the future is `400 invalid`, since that is a schedule. A site whose adapter does not set `publishedAtSettable: true` answers a publish carrying it `501`; one without it publishes as before.
 ## Changes in v0.14.0
 

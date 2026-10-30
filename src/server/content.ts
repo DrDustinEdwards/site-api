@@ -16,6 +16,8 @@ import {
   PACKAGE_VERSION,
   PreviewInput,
   PublishInput,
+  RenameInput,
+  RenameResult,
   RevisionList,
   RevisionSource,
   SaveDraftInput,
@@ -169,6 +171,17 @@ export function contentRoutes(adapter: SiteAdapter, options: { store: boolean })
         const seen = new Set<string>();
         const tags = input.tags.filter((t) => !seen.has(t.toLowerCase()) && seen.add(t.toLowerCase()));
         return json(200, checked(WriteResult, await adapter.content.setTags(contentId, { ...input, tags }), "content tags"));
+      },
+    },
+    {
+      method: "POST",
+      pattern: new RegExp(`^/content/${ID}/rename$`),
+      run: async (m, _u, request) => {
+        const contentId = id(m);
+        if (!adapter.content.rename) return fail("not-implemented", "This site does not rename content through the API.");
+        const input = await readBody(request, RenameInput);
+        if (input.newId === contentId) throw new BadRequest("invalid", "newId is the item's own id.");
+        return json(200, checked(RenameResult, await adapter.content.rename(contentId, input), "content rename"));
       },
     },
     {

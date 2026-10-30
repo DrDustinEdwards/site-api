@@ -23,6 +23,8 @@ import type {
   PostField,
   PreviewInput,
   PublishInput,
+  RenameInput,
+  RenameResult,
   Revision,
   SaveDraftInput,
   ScheduleInput,
@@ -75,6 +77,13 @@ export interface ContentAdapter {
    * RefusedError like the writes. A site without it answers `PUT /content/:id/tags` with 501.
    */
   setTags?(id: string, input: { tags: string[]; expectedVersion: string; changeId: string }): Promise<WriteResult>;
+  /**
+   * Optional (v0.15.0): moves the item to `newId`, its history with it, and, when it was ever published, keeps a permanent
+   * (301) redirect from its old path to the new one; answers that old path as `previousPath` (null when never published).
+   * Throws NotFoundError (checked first), VersionConflictError, or RefusedError for a `newId` already taken. The move and
+   * the redirect are one unit. A site without it answers `POST /content/:id/rename` with 501.
+   */
+  rename?(id: string, input: RenameInput): Promise<RenameResult>;
 }
 
 export interface PreviewAdapter {
@@ -362,6 +371,7 @@ export function capabilitiesOf(adapter: SiteAdapter, options: { store?: boolean 
     ...(adapter.content.delete ? { contentDelete: true } : {}),
     ...(adapter.content.setTags ? { contentTags: true } : {}),
     ...(adapter.content.publishedAtSettable ? { contentPublishedAt: true } : {}),
+    ...(adapter.content.rename ? { contentRename: true } : {}),
     ...(adapter.content.searchFields?.length ? { searchFields: [...adapter.content.searchFields] } : {}),
     ...(adapter.content.postFields?.length ? { postFields: [...adapter.content.postFields] } : {}),
     ...(adapter.media?.setAlt ? { mediaAlt: true } : {}),

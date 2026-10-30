@@ -30,3 +30,23 @@ describe("a settable publish date (v0.15.0)", () => {
     expect((await other.meta()).capabilities.contentPublishedAt).toBeUndefined();
   });
 });
+
+describe("rename (v0.15.0)", () => {
+  it("moves a published post with its history and a redirect, refuses a taken id, and answers 501 where the site cannot", async () => {
+    const { c, adapter } = client();
+    const a = await c.saveDraft("a", { source: "# A\n", expectedVersion: null, changeId: "c1" });
+    const live = await c.publish("a", { expectedVersion: a.version, changeId: "c2" });
+    const b = await c.saveDraft("b", { source: "# B\n", expectedVersion: null, changeId: "c3" });
+    await expect(c.rename("a", { newId: "b", expectedVersion: live.version, changeId: "c4" })).rejects.toMatchObject({ status: 422 });
+
+    const moved = await c.rename("a", { newId: "a-new", expectedVersion: live.version, changeId: "c5" });
+    expect(moved).toMatchObject({ id: "a-new", status: "published", previousPath: "/blog/a" });
+    expect(adapter.redirects.get("/blog/a")).toBe("/blog/a-new");
+    expect((await c.revisions("a-new")).items).toHaveLength(3);
+    await expect(c.get("a")).rejects.toMatchObject({ status: 404 });
+    expect((await c.rename("b", { newId: "b2", expectedVersion: b.version, changeId: "c6" })).previousPath).toBeNull();
+
+    const other = client(memoryAdapter({ contentExtras: false })).c;
+    await expect(other.rename("a", { newId: "b", expectedVersion: "v1", changeId: "c1" })).rejects.toMatchObject({ status: 501 });
+  });
+});

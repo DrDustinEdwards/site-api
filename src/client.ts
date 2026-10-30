@@ -27,6 +27,7 @@ import {
   MentionWriteResult,
   Meta,
   PREFIX,
+  RenameResult,
   RevisionList,
   RevisionSource,
   ScheduledUpdate,
@@ -49,6 +50,7 @@ import {
   type MentionListQuery,
   type PreviewInput,
   type PublishInput,
+  type RenameInput,
   type SaveDraftInput,
   type ScheduleInput,
   type UnpublishInput,
@@ -136,6 +138,8 @@ export function createSiteClient(config: SiteClientConfig) {
       get(ContentDeleteResult, "DELETE", `/content/${enc(id)}${query(input)}`),
     /** Optional per site (v0.6.0): sets a post's whole tag set. A site without it answers SiteApiError with status 501. */
     setTags: (id: string, input: ContentTagsInput) => get(WriteResult, "PUT", `/content/${enc(id)}/tags`, input),
+    /** Optional per site (v0.15.0, `contentRename`): moves an item to `newId`; its old path redirects to the new one. */
+    rename: (id: string, input: RenameInput) => get(RenameResult, "POST", `/content/${enc(id)}/rename`, input),
     diff: (id: string, from: string, to?: string) => get(Diff, "GET", `/content/${enc(id)}/diff${query({ from, to })}`),
     preview: async (input: PreviewInput) => (await call("POST", "/preview", input)).text(),
     /** The media group (v0.2.0). A refused delete throws SiteApiError whose body carries `usedBy`. */

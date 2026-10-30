@@ -157,12 +157,15 @@ export function memoryAdapter(
   purged: string[];
   /** Adds a mention as the site's endpoint would, and returns its id. */
   receiveMention(fields: ReceivedMention): string;
+  /** The permanent redirects a rename left (v0.15.0), old path to new. */
+  redirects: Map<string, string>;
 } {
   const site = options.site ?? { id: "memory", name: "Memory site", origin: "https://memory.example" };
   const now = options.now ?? (() => new Date());
   const store = new Map<string, Stored>();
   const schedules = options.schedules !== false;
   const contentExtras = options.contentExtras !== false;
+  const redirects = new Map<string, string>();
   let counter = 0;
 
   function expect(id: string, expectedVersion: string | null): Stored | undefined {
@@ -692,6 +695,7 @@ export function memoryAdapter(
     receiveMention,
     ...(mentionsAdapter ? { mentions: mentionsAdapter } : {}),
     store,
+    redirects,
     mediaStore,
     deleted,
     deletedContent,
@@ -762,6 +766,21 @@ export function memoryAdapter(
               return commit(id, previous, { source, status: previous.doc.status, publishAt: previous.doc.publishAt }, input.changeId, "Tags");
             },
           }),
+      ...(contentExtras
+        ? {
+            async rename(id: string, input: { newId: string; expectedVersion: string; changeId: string }) {
+              if (!store.has(id)) throw new NotFoundError();
+              const previous = existing(id, input.expectedVersion);
+              if (store.has(input.newId)) throw new RefusedError(`${input.newId} is already taken.`);
+              const previousPath = previous.doc.publishedAt ? previous.doc.path : null;
+              store.delete(id);
+              const moved = { ...previous, doc: { ...previous.doc, id: input.newId } };
+              const written = commit(input.newId, moved, { status: previous.doc.status, publishAt: previous.doc.publishAt }, input.changeId, `Rename from ${id}`);
+              if (previousPath) redirects.set(previousPath, store.get(input.newId)!.doc.path!);
+              return { ...written, previousPath };
+            },
+          }
+        : {}),
       ...(options.contentDelete === false
         ? {}
         : {
