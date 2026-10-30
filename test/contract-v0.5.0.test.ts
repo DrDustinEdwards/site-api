@@ -25,7 +25,7 @@ const ADDED: Record<string, string[]> = {
   Capabilities: [
     "contentTags", "mediaCaption", "mediaChanges", "mediaCredit", "mediaDuplicates", "mediaEmbedded", "mediaFilters", "mediaFocus",
     "mediaHistory", "mediaImport", "mediaLenses", "mediaReplace", "mediaReplaceKeepsSize", "mediaResize", "mediaResizePass",
-    "mediaSuggestions", "mediaTransform", "mediaUsage", "mentionReset", "scheduledUpdates",
+    "mediaSuggestions", "mediaTransform", "mediaUsage", "mentionReset", "scheduledUpdates", "searchFields",
   ],
   MediaItem: ["caption", "focus", ...V0130_ITEM].sort(),
   MediaDetail: ["caption", "focus", "twins", ...V0130_ITEM].sort(),

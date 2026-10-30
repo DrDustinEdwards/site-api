@@ -4,6 +4,9 @@
 // route table, so any change to either is a new contract, and Carrel's health check sees it.
 
 import { z } from "zod";
+import { SEARCH_FIELDS } from "./frontmatter.js";
+
+export { SEARCH_FIELDS, type SearchField } from "./frontmatter.js";
 
 export { ChangeId, ContentId, SiteInfo, SortDir, Version } from "./contract/base.js";
 export * from "./contract/content.js";
@@ -79,7 +82,7 @@ import {
   MentionWriteResult,
 } from "./contract/mentions.js";
 
-export const PACKAGE_VERSION = "0.14.0";
+export const PACKAGE_VERSION = "0.15.0";
 export const PREFIX = "/api/carrel/v1";
 
 export const Capabilities = z.object({
@@ -113,6 +116,8 @@ export const Capabilities = z.object({
    * and a schedule on a live item is refused rather than hiding it.
    */
   scheduledUpdates: z.boolean().optional(),
+  /** The search fields the site renders from a post's frontmatter (v0.15.0), each under its shared name. Absent: none. */
+  searchFields: z.array(z.enum(SEARCH_FIELDS)).optional(),
   /** True when the site keeps a focal point on files (v0.10.0), `PUT /media/:id/focus`. Absent or false: that route answers 501. */
   mediaFocus: z.boolean().optional(),
   /** True when the site keeps a caption on files (v0.10.0), `PUT /media/:id/caption`. Absent or false: that route answers 501. */

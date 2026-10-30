@@ -24,7 +24,7 @@ const ITEM = ["color", "credit", "downloadUrl", "license", "licenseExpires", "pl
 const ADDED: Record<string, string[]> = {
   Capabilities: [
     "mediaChanges", "mediaCredit", "mediaDuplicates", "mediaEmbedded", "mediaFilters", "mediaHistory", "mediaImport",
-    "mediaResize", "mediaResizePass", "mediaSuggestions", "mediaTransform", "mediaUsage",
+    "mediaResize", "mediaResizePass", "mediaSuggestions", "mediaTransform", "mediaUsage", "searchFields",
   ],
   Meta: [],
   MediaItem: ITEM,

@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { JsonSourceError, joinSource, jsonSource, readKey, readList, setBlock, setRawKey, setTags, splitSource, tagsOf } from "../src/frontmatter.js";
+import { JsonSourceError, joinSource, jsonSource, readKey, readList, searchFieldsOf, setBlock, setRawKey, setSearchFields, setTags, splitSource, tagsOf } from "../src/frontmatter.js";
 
 const SOURCE = [
   "---",
@@ -128,3 +128,17 @@ describe("jsonSource", () => {
     expect(() => post.read("Just a body")).toThrow(JsonSourceError);
   });
 });
+
+describe("search fields", () => {
+  it("round-trips through the frontmatter and a jsonSource site, and a blank removes the key", () => {
+    const front = setSearchFields(parts.front!, { searchTitle: 'Say "hi": a guide', description: "One line.", noindex: true, image: " " });
+    expect(searchFieldsOf(front)).toEqual({ searchTitle: 'Say "hi": a guide', description: "One line.", image: "", imageAlt: "", canonical: "", noindex: true });
+    expect(jsonSource({ searchTitle: "text", noindex: "flag" }).read(`---\n${readLines(front, ["searchTitle", "noindex"])}\n---\n`).values).toEqual({ searchTitle: 'Say "hi": a guide', noindex: true });
+    const cleared = setSearchFields(front, { searchTitle: "", description: "One table.", noindex: false });
+    expect(cleared).toBe(parts.front);
+  });
+});
+
+function readLines(front: string, keys: string[]): string {
+  return front.split("\n").filter((line) => keys.some((key) => line.startsWith(`${key}:`))).join("\n");
+}
