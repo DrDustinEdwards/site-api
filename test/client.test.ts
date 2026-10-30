@@ -26,6 +26,7 @@ describe("client round trip", () => {
       mediaUpload: MEMORY_MEDIA_LIMITS,
       contentDelete: true,
       contentTags: true,
+      contentPublishedAt: true,
       mediaAlt: true,
       mediaLenses: ["unattached", "no-alt", "large", "license-expired", "oversized"],
       mediaTags: true,
@@ -50,7 +51,7 @@ describe("client round trip", () => {
   });
 
   it("reads a site with no media manager and no content delete as the v0.1.0 capabilities, with no limits", async () => {
-    const { client: c } = client(memoryAdapter({ media: false, contentDelete: false, contentTags: false, mentions: false, schedules: false }));
+    const { client: c } = client(memoryAdapter({ media: false, contentDelete: false, contentTags: false, contentExtras: false, mentions: false, schedules: false }));
     expect((await c.meta()).capabilities).toEqual({
       content: true,
       preview: true,

@@ -32,6 +32,11 @@ import type {
 } from "./contract.js";
 
 export interface ContentAdapter {
+  /**
+   * Optional (v0.15.0): true when `publish` takes `publishedAt` and publishes under that date, a first publish backdated
+   * or a live item re-dated (capabilities.contentPublishedAt). Absent: a publish carrying it answers 501.
+   */
+  publishedAtSettable?: boolean;
   list(query: ListQuery): Promise<ContentList>;
   /** null when the id does not exist. */
   get(id: string): Promise<ContentDoc | null>;
@@ -346,6 +351,7 @@ export function capabilitiesOf(adapter: SiteAdapter, options: { store?: boolean 
     ...(adapter.media ? { mediaUpload: adapter.media.limits } : {}),
     ...(adapter.content.delete ? { contentDelete: true } : {}),
     ...(adapter.content.setTags ? { contentTags: true } : {}),
+    ...(adapter.content.publishedAtSettable ? { contentPublishedAt: true } : {}),
     ...(adapter.media?.setAlt ? { mediaAlt: true } : {}),
     ...(adapter.media?.lenses?.length ? { mediaLenses: [...adapter.media.lenses] } : {}),
     ...(adapter.media?.setTags ? { mediaTags: true } : {}),

@@ -21,7 +21,7 @@ const V0120 = JSON.parse(readFileSync(new URL("./fixtures/contract-v0.12.0.json"
 const ITEM = ["color", "credit", "downloadUrl", "license", "licenseExpires", "placeholder", "sourceUrl", "takenAt", "usedCount"];
 
 /** What v0.15.0 adds to the capabilities. */
-const V0150_CAPABILITIES = ["replay", "searchFields"];
+const V0150_CAPABILITIES = ["contentPublishedAt", "replay", "searchFields"];
 
 /** Every v0.12.0 schema v0.13.0 extends, and exactly the optional properties each adds. */
 const ADDED: Record<string, string[]> = {
@@ -37,6 +37,7 @@ const ADDED: Record<string, string[]> = {
   MediaListQuery: ["changedSince", "kind", "orientation"],
   MediaUploadQuery: ["resize"],
   ErrorBody: ["detail", "status", "title", "type"],
+  PublishInput: ["publishedAt"],
 };
 
 const NEW_LENSES = ["duplicates", "license-expired", "oversized"];

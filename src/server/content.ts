@@ -27,7 +27,7 @@ import {
   WriteResult,
   schemaHash,
 } from "../contract.js";
-import { BASE_HEADERS, ContractBreach, ID, checked, fail, json, pathParam, readBody, readQuery, type Route } from "./http.js";
+import { BadRequest, BASE_HEADERS, ContractBreach, ID, checked, fail, json, pathParam, readBody, readQuery, type Route } from "./http.js";
 
 export function contentRoutes(adapter: SiteAdapter, options: { store: boolean }): Route[] {
   const id = (m: RegExpMatchArray) => pathParam(m[1], ContentId, "content id");
@@ -73,7 +73,16 @@ export function contentRoutes(adapter: SiteAdapter, options: { store: boolean })
     {
       method: "POST",
       pattern: new RegExp(`^/content/${ID}/publish$`),
-      run: (m, _u, r) => write(m, r, async (i, req) => adapter.content.publish(i, await readBody(req, PublishInput))),
+      run: (m, _u, r) =>
+        write(m, r, async (i, req) => {
+          const input = await readBody(req, PublishInput);
+          if (input.publishedAt !== undefined) {
+            if (!adapter.content.publishedAtSettable) throw new BadRequest("not-implemented", "This site does not set the date a post is published under.");
+            // A minute's grace for the caller's clock; a later date is a schedule, which says when the post goes live.
+            if (Date.parse(input.publishedAt) > Date.now() + 60_000) throw new BadRequest("invalid", "publishedAt is in the future. To publish later, schedule it.");
+          }
+          return adapter.content.publish(i, input);
+        }),
     },
     {
       method: "POST",

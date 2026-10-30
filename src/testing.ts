@@ -25,6 +25,8 @@ export interface MemoryAdapterOptions {
   contentDelete?: boolean;
   /** false for a site that keeps no post tags through the API (a v0.5.0 site): the tags route then answers 501. On by default. */
   contentTags?: boolean;
+  /** false for a v0.14.0 content group (v0.15.0): no settable publish date, rename, trash, list filters or post fields. On by default. */
+  contentExtras?: boolean;
   /** false for a media manager with no alt, tag, trash, focal point, caption or replace writes (a v0.2.0 site): those routes then answer 501. On by default. */
   mediaWrites?: boolean;
   /** false for a media manager with no lenses and no sort (a v0.5.0 site): a lens then answers 501. On by default. */
@@ -158,6 +160,7 @@ export function memoryAdapter(
   const now = options.now ?? (() => new Date());
   const store = new Map<string, Stored>();
   const schedules = options.schedules !== false;
+  const contentExtras = options.contentExtras !== false;
   let counter = 0;
 
   function expect(id: string, expectedVersion: string | null): Stored | undefined {
@@ -170,7 +173,7 @@ export function memoryAdapter(
   function commit(
     id: string,
     previous: Stored | undefined,
-    changes: { source?: string; status: ContentStatus; publishAt?: string | null; pending?: ScheduledUpdate | null; publishedAt?: string },
+    changes: { source?: string; status: ContentStatus; publishAt?: string | null; pending?: ScheduledUpdate | null; publishedAt?: string; redate?: string },
     changeId: string,
     message: string,
   ): WriteResult {
@@ -185,7 +188,7 @@ export function memoryAdapter(
       status: changes.status,
       path: changes.status === "published" || wasPublished ? `/blog/${id}` : null,
       publishAt: changes.publishAt ?? null,
-      publishedAt: changes.status === "published" ? (wasPublished ?? changes.publishedAt ?? at) : wasPublished,
+      publishedAt: changes.status === "published" ? (changes.redate ?? wasPublished ?? changes.publishedAt ?? at) : wasPublished,
       updatedAt: at,
       format: "markdown",
       source,
@@ -692,6 +695,7 @@ export function memoryAdapter(
     deletedContent,
     ...(mediaAdapter ? { media: mediaAdapter } : {}),
     content: {
+      ...(contentExtras ? { publishedAtSettable: true } : {}),
       async list(query) {
         const needle = query.q?.toLowerCase();
         const all = [...store.values()]
@@ -727,7 +731,8 @@ export function memoryAdapter(
       async publish(id, input) {
         const previous = existing(id, input.expectedVersion);
         // A publish now drops any update that was waiting: what goes live is this.
-        return commit(id, previous, { source: input.source, status: "published", pending: null }, input.changeId, "Publish");
+        const redate = input.publishedAt ? { redate: new Date(input.publishedAt).toISOString() } : {};
+        return commit(id, previous, { source: input.source, status: "published", pending: null, ...redate }, input.changeId, "Publish");
       },
       async schedule(id, input) {
         const previous = existing(id, input.expectedVersion);

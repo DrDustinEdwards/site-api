@@ -80,14 +80,21 @@ export const SaveDraftInput = z.object({
   changeId: ChangeId,
 });
 
-/** source, when sent, is saved and published in one write. */
-export const PublishInput = z.object({
+const PublishFields = z.object({
   expectedVersion: Version,
   changeId: ChangeId,
   source: Source.optional(),
 });
 
-export const ScheduleInput = PublishInput.extend({
+/**
+ * source, when sent, is saved and published in one write. publishedAt (v0.15.0, where `contentPublishedAt`) is the
+ * date the item is published under: a backdate, or a new date for a live item. Never in the future: that is a schedule.
+ */
+export const PublishInput = PublishFields.extend({
+  publishedAt: Timestamp.optional(),
+});
+
+export const ScheduleInput = PublishFields.extend({
   publishAt: Timestamp,
 });
 

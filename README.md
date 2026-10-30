@@ -197,6 +197,7 @@ Additive: every v0.14.0 route and body still works as it did, and the schema has
 
   `SITE_API_STORE_SQL` from the same module is the migration, the site's next `migrations/` file. Another store implements `SiteApiStore`. Without a store, a write is handled exactly as in v0.14.0.
 
+- **A settable publish date** (`capabilities.contentPublishedAt`). `POST /content/:id/publish` takes an optional `publishedAt`: a first publish backdated, or a live post re-dated. A date in the future is `400 invalid`, since that is a schedule. A site whose adapter does not set `publishedAtSettable: true` answers a publish carrying it `501`; one without it publishes as before.
 ## Changes in v0.14.0
 
 Additive: no route, body or schema changes. The pieces every site's media adapter and preview wrote for itself, exported from the package root, and site-runtime moves to v0.29.0 (its `editImage`).

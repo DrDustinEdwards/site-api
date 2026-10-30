@@ -161,6 +161,8 @@ export const Capabilities = z.object({
    * with `Idempotent-Replayed: true`, and never runs twice. Absent: a retry runs again, as before.
    */
   replay: z.boolean().optional(),
+  /** True when a publish takes `publishedAt`, the date it is published under. */
+  contentPublishedAt: z.boolean().optional(),
 });
 
 export const Meta = z.object({

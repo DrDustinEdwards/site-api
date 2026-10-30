@@ -21,7 +21,7 @@ const V050 = JSON.parse(readFileSync(new URL("./fixtures/contract-v0.5.0.json", 
 const V0130_ITEM = ["color", "credit", "downloadUrl", "license", "licenseExpires", "placeholder", "sourceUrl", "takenAt", "usedCount"];
 
 /** What v0.15.0 adds to the capabilities. */
-const V0150_CAPABILITIES = ["replay", "searchFields"];
+const V0150_CAPABILITIES = ["contentPublishedAt", "replay", "searchFields"];
 
 /** Every v0.5.0 schema later versions extend, and exactly the optional properties each adds (v0.10.0: scheduled updates, and a file's focal point and caption). */
 const ADDED: Record<string, string[]> = {
@@ -44,6 +44,7 @@ const ADDED: Record<string, string[]> = {
   MentionListQuery: ["q", "targetId"],
   MentionList: ["filtered"],
   ErrorBody: ["detail", "status", "title", "type"],
+  PublishInput: ["publishedAt"],
 };
 
 /** v0.15.0 adds the in-progress error, at the end. */
