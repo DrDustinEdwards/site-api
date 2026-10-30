@@ -1,5 +1,5 @@
 // What the package keeps for itself on a site that gives it a store (v0.15.0): the answers to writes, so a retry under
-// the same change id is answered rather than run twice. A D1 site passes `d1SiteApiStore(env.DB)` as `store` and adds
+// the same change id is answered rather than run twice, and the publish hooks that failed, so the cron tries them again. A D1 site passes `d1SiteApiStore(env.DB)` as `store` and adds
 // `SITE_API_STORE_SQL` as its next migration. Exported as `@dustinedwards/site-api/store`.
 
 import type { D1Like } from "./schedules.js";
@@ -26,6 +26,21 @@ export interface SiteApiStore {
   releaseWrite(changeId: string): Promise<void>;
   /** Drops every write claimed before `before`. */
   pruneWrites(before: string): Promise<void>;
+  /** Keeps a failed hook's event for a retry at `nextAt`, replacing the row with the same id. */
+  putHookRetry(retry: HookRetry): Promise<void>;
+  /** The retries due at `now`, the oldest due first, at most `limit`. */
+  dueHookRetries(now: string, limit: number): Promise<HookRetry[]>;
+  dropHookRetry(id: string): Promise<void>;
+}
+
+/** One failed hook run, kept for another try. `event` is the PublishEvent as JSON, without its request. */
+export interface HookRetry {
+  id: string;
+  hook: string;
+  event: string;
+  attempts: number;
+  nextAt: string;
+  lastError: string;
 }
 
 /** The migration: a D1 site adds it as its next file under `migrations/`. Every time is UTC ISO text. */
@@ -39,6 +54,15 @@ export const SITE_API_STORE_SQL = `CREATE TABLE IF NOT EXISTS site_api_writes (
   at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS site_api_writes_at ON site_api_writes (at);
+CREATE TABLE IF NOT EXISTS hook_retries (
+  id TEXT PRIMARY KEY,
+  hook TEXT NOT NULL,
+  event TEXT NOT NULL,
+  attempts INTEGER NOT NULL,
+  next_at TEXT NOT NULL,
+  last_error TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS hook_retries_due ON hook_retries (next_at);
 `;
 
 interface WriteRow {
@@ -80,6 +104,25 @@ export function d1SiteApiStore(db: D1Like): SiteApiStore {
     },
     async pruneWrites(before) {
       await db.prepare("DELETE FROM site_api_writes WHERE at < ?").bind(before).run();
+    },
+    async putHookRetry(r) {
+      await db
+        .prepare(
+          `INSERT INTO hook_retries (id, hook, event, attempts, next_at, last_error) VALUES (?, ?, ?, ?, ?, ?)
+           ON CONFLICT (id) DO UPDATE SET attempts = excluded.attempts, next_at = excluded.next_at, last_error = excluded.last_error`,
+        )
+        .bind(r.id, r.hook, r.event, r.attempts, r.nextAt, r.lastError)
+        .run();
+    },
+    async dueHookRetries(now, limit) {
+      const { results } = await db
+        .prepare("SELECT id, hook, event, attempts, next_at, last_error FROM hook_retries WHERE next_at <= ? ORDER BY next_at, id LIMIT ?")
+        .bind(now, limit)
+        .all<{ id: string; hook: string; event: string; attempts: number; next_at: string; last_error: string }>();
+      return results.map((r) => ({ id: r.id, hook: r.hook, event: r.event, attempts: r.attempts, nextAt: r.next_at, lastError: r.last_error }));
+    },
+    async dropHookRetry(id) {
+      await db.prepare("DELETE FROM hook_retries WHERE id = ?").bind(id).run();
     },
   };
 }

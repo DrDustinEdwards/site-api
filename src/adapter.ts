@@ -350,6 +350,10 @@ export interface SchedulesAdapter {
    * update. Only when what the site holds still matches (the same kind, time and change id, and the time has come);
    * otherwise it changes nothing and returns null, since a cancel, a reschedule or an unpublish got there first. A
    * scheduled item's first publication records `publishAt` as its `publishedAt`, not the time the cron ran.
+   *
+   * v0.15.0: a site whose scheduled item goes live by time alone, with no write (its pages compare `publishAt` with the
+   * clock), still lists it in `due` as kind "publish", and `apply` answers its WriteResult without writing anything, so
+   * the publish hooks hear it go live. Once applied it must leave `due`, or the hooks would hear it on every pass.
    */
   apply(id: string, input: DueSchedule & { now: Date }): Promise<WriteResult | null>;
 }
