@@ -5,7 +5,7 @@
 
 import { safeEqual } from "@dustinedwards/site-runtime/compare";
 
-import type { DueSchedule, SiteAdapter } from "./adapter.js";
+import { hasContentTrash, type DueSchedule, type SiteAdapter } from "./adapter.js";
 import { PREFIX } from "./contract.js";
 import { runHooks, type PublishAction, type PublishHook } from "./hooks.js";
 import { contentRoutes } from "./server/content.js";
@@ -66,7 +66,12 @@ export interface ScheduleRun {
   failed: number;
   /** The pass hit its limit, so more may be due now. */
   more: boolean;
+  /** v0.15.0: items deleted for good from the content trash, TRASH_DAYS after they went there. */
+  emptied: number;
 }
+
+/** How long an item stays in the content trash (v0.15.0) before `runSchedules` deletes it for good. */
+export const TRASH_DAYS = 30;
 
 /** How many schedules one pass applies at most, so a backlog drains over several passes within a Worker's limits. */
 export const SCHEDULE_BATCH_LIMIT = 50;
@@ -147,15 +152,46 @@ export function createSiteApi(config: SiteApiConfig): SiteApi {
     await runHooks(hooks, { action, id, path: page.path, url: new URL(page.path, adapter.site.origin).href, trigger: "request", changeId: changeId ?? null, request }, log);
   }
 
+  // The content trash's own end (v0.15.0): items trashed more than TRASH_DAYS ago go for good, through the adapter's
+  // delete with the version listed, so one changed since is refused and left. Each on its own, like a schedule.
+  async function emptyTrash(now: Date, limit: number): Promise<number> {
+    const { content } = adapter;
+    if (!hasContentTrash(adapter)) return 0;
+    const before = now.getTime() - TRASH_DAYS * DAY;
+    let emptied = 0;
+    let cursor: string | undefined;
+    try {
+      do {
+        const page = await content.list({ trashed: true, limit: 200, ...(cursor ? { cursor } : {}) });
+        for (const item of page.items) {
+          if (emptied >= limit) return emptied;
+          if (!item.trashedAt || !item.version || Date.parse(item.trashedAt) > before) continue;
+          const changeId = `trash-expired-${item.id}`.replace(/[^A-Za-z0-9_-]/g, "-").slice(0, 128);
+          try {
+            await content.delete!(item.id, { expectedVersion: item.version, changeId });
+            emptied++;
+          } catch (error) {
+            log({ siteApi: "trash-empty-failed", id: item.id, error: error instanceof Error ? error.message : String(error) });
+          }
+        }
+        cursor = page.nextCursor ?? undefined;
+      } while (cursor);
+    } catch (error) {
+      log({ siteApi: "trash-empty-failed", error: String(error) });
+    }
+    return emptied;
+  }
+
   async function runSchedules(options: { now?: Date; limit?: number } = {}): Promise<ScheduleRun> {
-    const run: ScheduleRun = { applied: [], skipped: 0, failed: 0, more: false };
+    const run: ScheduleRun = { applied: [], skipped: 0, failed: 0, more: false, emptied: 0 };
     const now = options.now ?? new Date();
     if (store) {
       await store.pruneWrites(new Date(now.getTime() - REPLAY_DAYS * DAY).toISOString()).catch((error) => log({ siteApi: "replay-store-failed", error: String(error) }));
     }
+    const limit = options.limit ?? SCHEDULE_BATCH_LIMIT;
+    run.emptied = await emptyTrash(now, limit);
     const { schedules } = adapter;
     if (!schedules) return run;
-    const limit = options.limit ?? SCHEDULE_BATCH_LIMIT;
     let due: DueSchedule[];
     try {
       due = await schedules.due({ now, limit });

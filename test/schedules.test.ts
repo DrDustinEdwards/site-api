@@ -48,7 +48,7 @@ describe("scheduled updates (v0.10.0)", () => {
     const moved = await client.schedule("a", { expectedVersion: scheduled.version, changeId: "c4", source: NEXT, publishAt: "2030-02-01T15:00:00Z" });
     expect(moved.scheduledUpdate).toEqual({ publishAt: "2030-02-01T15:00:00Z", changeId: "c4" });
 
-    expect(await api.runSchedules({ now: new Date("2030-02-01T14:59:59Z") })).toEqual({ applied: [], skipped: 0, failed: 0, more: false });
+    expect(await api.runSchedules({ now: new Date("2030-02-01T14:59:59Z") })).toEqual({ applied: [], skipped: 0, failed: 0, more: false, emptied: 0 });
     expect((await client.get("a")).source).toBe(LIVE);
 
     const run = await api.runSchedules({ now: new Date("2030-02-01T15:00:00Z") });

@@ -84,6 +84,14 @@ export interface ContentAdapter {
    * the redirect are one unit. A site without it answers `POST /content/:id/rename` with 501.
    */
   rename?(id: string, input: RenameInput): Promise<RenameResult>;
+  /**
+   * Optional (v0.15.0), both or neither, and only beside `delete` (capabilities.contentTrash): `trash` sets `trashedAt`
+   * and takes a live item off the site first, as one unit; `restore` clears it and always answers a draft, never a live
+   * item. Each throws like the writes. `list` then never lists a trashed item unless `trashed` is true, and then only
+   * those. The package's `runSchedules` deletes items trashed more than TRASH_DAYS ago, through `delete`.
+   */
+  trash?(id: string, input: { expectedVersion: string; changeId: string }): Promise<WriteResult>;
+  restore?(id: string, input: { expectedVersion: string; changeId: string }): Promise<WriteResult>;
 }
 
 export interface PreviewAdapter {
@@ -372,6 +380,7 @@ export function capabilitiesOf(adapter: SiteAdapter, options: { store?: boolean 
     ...(adapter.content.setTags ? { contentTags: true } : {}),
     ...(adapter.content.publishedAtSettable ? { contentPublishedAt: true } : {}),
     ...(adapter.content.rename ? { contentRename: true } : {}),
+    ...(hasContentTrash(adapter) ? { contentTrash: true } : {}),
     ...(adapter.content.searchFields?.length ? { searchFields: [...adapter.content.searchFields] } : {}),
     ...(adapter.content.postFields?.length ? { postFields: [...adapter.content.postFields] } : {}),
     ...(adapter.media?.setAlt ? { mediaAlt: true } : {}),
@@ -400,6 +409,12 @@ export function capabilitiesOf(adapter: SiteAdapter, options: { store?: boolean 
     ...(options.store ? { replay: true } : {}),
     ...(adapter.renderVersion ? { render: { version: adapter.renderVersion } } : {}),
   };
+}
+
+/** Trash and restore, and the delete that empties the trash (v0.15.0). */
+export function hasContentTrash(adapter: SiteAdapter): boolean {
+  const { content } = adapter;
+  return content.trash !== undefined && content.restore !== undefined && content.delete !== undefined;
 }
 
 /** @deprecated Since v0.2.0 capabilities depend on the adapter: use capabilitiesOf(adapter). */

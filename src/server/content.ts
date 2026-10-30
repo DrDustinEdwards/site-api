@@ -1,7 +1,7 @@
 // The meta route, the content routes and the preview: what every site serves.
 
 import { createTwoFilesPatch } from "diff";
-import { capabilitiesOf, NotFoundError, RefusedError, VersionConflictError, type SiteAdapter } from "../adapter.js";
+import { capabilitiesOf, hasContentTrash, NotFoundError, RefusedError, VersionConflictError, type SiteAdapter } from "../adapter.js";
 import {
   ContentDeleteQuery,
   ContentDeleteResult,
@@ -9,6 +9,7 @@ import {
   ContentId,
   ContentList,
   ContentTagsInput,
+  ContentTrashInput,
   Diff,
   DiffQuery,
   ListQuery,
@@ -56,7 +57,11 @@ export function contentRoutes(adapter: SiteAdapter, options: { store: boolean })
     {
       method: "GET",
       pattern: /^\/content$/,
-      run: async (_m, url) => json(200, checked(ContentList, await adapter.content.list(readQuery(url, ListQuery)), "content list")),
+      run: async (_m, url) => {
+        const query = readQuery(url, ListQuery);
+        if (query.trashed && !hasContentTrash(adapter)) return fail("not-implemented", "This site has no content trash.");
+        return json(200, checked(ContentList, await adapter.content.list(query), "content list"));
+      },
     },
     {
       method: "GET",
@@ -184,6 +189,16 @@ export function contentRoutes(adapter: SiteAdapter, options: { store: boolean })
         return json(200, checked(RenameResult, await adapter.content.rename(contentId, input), "content rename"));
       },
     },
+    ...(["trash", "restore"] as const).map((op) => ({
+      method: "POST",
+      pattern: new RegExp(`^/content/${ID}/${op}$`),
+      run: async (m: RegExpMatchArray, _u: URL, request: Request) => {
+        const contentId = id(m);
+        if (!hasContentTrash(adapter)) return fail("not-implemented", "This site has no content trash.");
+        const input = await readBody(request, ContentTrashInput);
+        return json(200, checked(WriteResult, await adapter.content[op]!(contentId, input), `content ${op}`));
+      },
+    })),
     {
       method: "GET",
       pattern: new RegExp(`^/content/${ID}/diff$`),

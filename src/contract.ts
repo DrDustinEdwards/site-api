@@ -20,6 +20,7 @@ import {
   ContentList,
   ContentSummary,
   ContentTagsInput,
+  ContentTrashInput,
   Diff,
   DiffQuery,
   ListQuery,
@@ -165,6 +166,11 @@ export const Capabilities = z.object({
   replay: z.boolean().optional(),
   /** True when an item moves to a new id, `POST /content/:id/rename`, its old path redirecting to the new one. */
   contentRename: z.boolean().optional(),
+  /**
+   * True when items go to a trash and come back, `POST /content/:id/trash` and `/restore`, and `trashed=true` lists the
+   * trash. A trashed item is deleted for good after TRASH_DAYS by the site's cron.
+   */
+  contentTrash: z.boolean().optional(),
   /** True when a publish takes `publishedAt`, the date it is published under. */
   contentPublishedAt: z.boolean().optional(),
   /** The post fields the site renders from a post's frontmatter, each under its shared name. Absent: none. */
@@ -276,6 +282,8 @@ export const ROUTES = [
   { group: "mentions", method: "DELETE", path: "/mentions/:id", query: "MentionDeleteQuery", response: "MentionDeleteResult" },
   // v0.15.0, each 501 where the adapter lacks it.
   { group: "content", method: "POST", path: "/content/:id/rename", request: "RenameInput", response: "RenameResult" },
+  { group: "content", method: "POST", path: "/content/:id/trash", request: "ContentTrashInput", response: "WriteResult" },
+  { group: "content", method: "POST", path: "/content/:id/restore", request: "ContentTrashInput", response: "WriteResult" },
   { group: "inbox", method: "*", path: "/inbox/*", response: "not-implemented" },
   { group: "insight", method: "*", path: "/insight/*", response: "not-implemented" },
   { group: "publications", method: "*", path: "/publications/*", response: "not-implemented" },
@@ -295,7 +303,7 @@ const HASHED = {
   MediaFocusInput, MediaCaptionInput, MediaReplaceQuery, MediaReplaceResult,
   MediaUploadResult, MediaImportInput, MediaCreditInput, MediaTransformInput, MediaTransformResult, MediaHistory,
   MediaRevertInput, MediaResizePassInput, MediaResizePassResult, MediaSuggestions,
-  RenameInput, RenameResult,
+  RenameInput, RenameResult, ContentTrashInput,
 };
 
 /** JSON with sorted keys, so the hash depends on the contract and not on property order. */

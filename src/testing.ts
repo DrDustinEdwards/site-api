@@ -178,7 +178,7 @@ export function memoryAdapter(
   function commit(
     id: string,
     previous: Stored | undefined,
-    changes: { source?: string; status: ContentStatus; publishAt?: string | null; pending?: ScheduledUpdate | null; publishedAt?: string; redate?: string },
+    changes: { source?: string; status: ContentStatus; publishAt?: string | null; pending?: ScheduledUpdate | null; publishedAt?: string; redate?: string; trashedAt?: string | null },
     changeId: string,
     message: string,
   ): WriteResult {
@@ -198,6 +198,7 @@ export function memoryAdapter(
       format: "markdown",
       source,
       version,
+      ...(contentExtras ? { trashedAt: changes.trashedAt !== undefined ? changes.trashedAt : (previous?.doc.trashedAt ?? null) } : {}),
     };
     // Only a live item carries an update, and a write that does not name one keeps what was waiting.
     const pending = changes.status !== "published" ? undefined : changes.pending === undefined ? previous?.pending : (changes.pending ?? undefined);
@@ -707,6 +708,7 @@ export function memoryAdapter(
         const all = [...store.values()]
           .map((s) => s.doc)
           .filter((d) => !query.status || d.status === query.status)
+          .filter((d) => Boolean(d.trashedAt) === Boolean(query.trashed))
           .filter((d) => !needle || d.title.toLowerCase().includes(needle) || d.source.toLowerCase().includes(needle))
           .sort((a, b) => a.id.localeCompare(b.id));
         // v0.6.0: sorted as asked, newest first for the dates and A to Z for titles unless dir says otherwise.
@@ -778,6 +780,19 @@ export function memoryAdapter(
               const written = commit(input.newId, moved, { status: previous.doc.status, publishAt: previous.doc.publishAt }, input.changeId, `Rename from ${id}`);
               if (previousPath) redirects.set(previousPath, store.get(input.newId)!.doc.path!);
               return { ...written, previousPath };
+            },
+            // A live item leaves the site as it goes to the trash, and comes back a draft.
+            async trash(id: string, input: { expectedVersion: string; changeId: string }) {
+              if (!store.has(id)) throw new NotFoundError();
+              const previous = existing(id, input.expectedVersion);
+              if (previous.doc.trashedAt) throw new RefusedError("This post is already in the trash.");
+              return commit(id, previous, { status: "draft", pending: null, trashedAt: now().toISOString() }, input.changeId, "Trash");
+            },
+            async restore(id: string, input: { expectedVersion: string; changeId: string }) {
+              if (!store.has(id)) throw new NotFoundError();
+              const previous = existing(id, input.expectedVersion);
+              if (!previous.doc.trashedAt) throw new RefusedError("This post is not in the trash.");
+              return commit(id, previous, { status: "draft", trashedAt: null }, input.changeId, "Restore");
             },
           }
         : {}),

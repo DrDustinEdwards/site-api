@@ -45,6 +45,8 @@ export const ContentSummary = z.object({
   /** v0.15.0, from the post fields where the site keeps them, for a list: everyone credited, the primary first, and the excerpt. */
   authors: z.array(AuthorName).max(50).optional(),
   excerpt: z.string().max(5000).optional(),
+  /** When the item went to the trash (v0.15.0), null when it is not there. Absent: the site has no content trash. */
+  trashedAt: Timestamp.nullable().optional(),
 });
 
 export const ContentDoc = ContentSummary.extend({
@@ -59,6 +61,8 @@ export const ListQuery = z.object({
   /** v0.6.0. A site that sorts says so in the answer's `sorted`; one that does not leaves its own order. */
   sort: z.enum(CONTENT_SORTS).optional(),
   dir: SortDir.optional(),
+  /** v0.15.0, where `contentTrash`: true lists only the trash. Absent or false: trashed items are never listed. */
+  trashed: z.stringbool().optional(),
   cursor: z.string().max(500).optional(),
   limit: z.coerce.number().int().min(1).max(200).default(50),
 });
@@ -116,6 +120,12 @@ export const WriteResult = z.object({
   changeId: ChangeId,
   /** The update still waiting on the item after the write (v0.10.0), null when none, on a site with scheduled updates. */
   scheduledUpdate: ScheduledUpdateSummary.nullable().optional(),
+});
+
+/** Trashing or restoring an item (v0.15.0, optional per site). */
+export const ContentTrashInput = z.object({
+  expectedVersion: Version,
+  changeId: ChangeId,
 });
 
 /**
@@ -216,6 +226,7 @@ export type ScheduleInput = z.infer<typeof ScheduleInput>;
 export type UnpublishInput = z.infer<typeof UnpublishInput>;
 export type WriteResult = z.infer<typeof WriteResult>;
 export type RenameInput = z.infer<typeof RenameInput>;
+export type ContentTrashInput = z.infer<typeof ContentTrashInput>;
 export type RenameResult = z.infer<typeof RenameResult>;
 export type ScheduledUpdateSummary = z.infer<typeof ScheduledUpdateSummary>;
 export type ScheduledUpdate = z.infer<typeof ScheduledUpdate>;

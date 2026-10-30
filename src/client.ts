@@ -33,6 +33,7 @@ import {
   ScheduledUpdate,
   WriteResult,
   type ContentTagsInput,
+  type ContentTrashInput,
   type ListQuery,
   type MediaAltInput,
   type MediaBulkInput,
@@ -106,7 +107,7 @@ export function createSiteClient(config: SiteClientConfig) {
     return schema.parse(await (await call(method, path, body)).json()) as z.infer<T>;
   }
 
-  function query(params: Record<string, string | number | undefined>): string {
+  function query(params: Record<string, string | number | boolean | undefined>): string {
     const search = new URLSearchParams();
     for (const [k, v] of Object.entries(params)) if (v !== undefined) search.set(k, String(v));
     const text = search.toString();
@@ -140,6 +141,9 @@ export function createSiteClient(config: SiteClientConfig) {
     setTags: (id: string, input: ContentTagsInput) => get(WriteResult, "PUT", `/content/${enc(id)}/tags`, input),
     /** Optional per site (v0.15.0, `contentRename`): moves an item to `newId`; its old path redirects to the new one. */
     rename: (id: string, input: RenameInput) => get(RenameResult, "POST", `/content/${enc(id)}/rename`, input),
+    /** Optional per site (v0.15.0, `contentTrash`): to the trash (a live item leaves the site first) and back, as a draft. */
+    trash: (id: string, input: ContentTrashInput) => get(WriteResult, "POST", `/content/${enc(id)}/trash`, input),
+    restore: (id: string, input: ContentTrashInput) => get(WriteResult, "POST", `/content/${enc(id)}/restore`, input),
     diff: (id: string, from: string, to?: string) => get(Diff, "GET", `/content/${enc(id)}/diff${query({ from, to })}`),
     preview: async (input: PreviewInput) => (await call("POST", "/preview", input)).text(),
     /** The media group (v0.2.0). A refused delete throws SiteApiError whose body carries `usedBy`. */

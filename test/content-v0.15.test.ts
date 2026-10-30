@@ -3,7 +3,8 @@
 import { describe, expect, it } from "vitest";
 import { createSiteClient } from "../src/client.js";
 import { memoryAdapter } from "../src/testing.js";
-import { KEY, ORIGIN, site } from "./helpers.js";
+import { createSiteApi } from "../src/index.js";
+import { KEY, ORIGIN, allow, site } from "./helpers.js";
 
 function client(adapter = memoryAdapter()) {
   const s = site(adapter);
@@ -48,5 +49,35 @@ describe("rename (v0.15.0)", () => {
 
     const other = client(memoryAdapter({ contentExtras: false })).c;
     await expect(other.rename("a", { newId: "b", expectedVersion: "v1", changeId: "c1" })).rejects.toMatchObject({ status: 501 });
+  });
+});
+
+describe("the content trash (v0.15.0)", () => {
+  it("takes a live post off the site, hides it from the list, restores a draft, and empties it after TRASH_DAYS", async () => {
+    let time = new Date("2030-01-01T00:00:00Z");
+    const adapter = memoryAdapter({ now: () => time });
+    const { c } = client(adapter);
+    const a = await c.saveDraft("a", { source: "# A\n", expectedVersion: null, changeId: "c1" });
+    const live = await c.publish("a", { expectedVersion: a.version, changeId: "c2" });
+    const trashed = await c.trash("a", { expectedVersion: live.version, changeId: "c3" });
+    expect(trashed.status).toBe("draft");
+    expect((await c.list()).items).toEqual([]);
+    expect((await c.list({ trashed: true })).items.map((i) => i.id)).toEqual(["a"]);
+
+    const back = await c.restore("a", { expectedVersion: trashed.version, changeId: "c4" });
+    expect(back.status).toBe("draft");
+    expect((await c.get("a")).trashedAt).toBeNull();
+    await c.trash("a", { expectedVersion: back.version, changeId: "c5" });
+
+    const api = createSiteApi({ adapter, key: KEY, limiter: allow, log: () => {} });
+    time = new Date("2030-01-20T00:00:00Z");
+    expect((await api.runSchedules({ now: time })).emptied).toBe(0);
+    time = new Date("2030-02-01T00:00:01Z");
+    expect((await api.runSchedules({ now: time })).emptied).toBe(1);
+    expect(adapter.deletedContent).toEqual(["a"]);
+
+    const other = client(memoryAdapter({ contentExtras: false })).c;
+    await expect(other.list({ trashed: true })).rejects.toMatchObject({ status: 501 });
+    await expect(other.trash("a", { expectedVersion: "v1", changeId: "c1" })).rejects.toMatchObject({ status: 501 });
   });
 });
