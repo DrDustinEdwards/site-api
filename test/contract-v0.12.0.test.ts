@@ -9,6 +9,7 @@ import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import * as contract from "../src/contract.js";
 import { additiveOnly, added, now, widened, type JsonSchema } from "./additive.js";
+import { V0150_CODES, V0150_ROUTES, V0150_SCHEMAS, V0150_WIDEN, withV0150 } from "./v0.15.0.js";
 
 const V0120 = JSON.parse(readFileSync(new URL("./fixtures/contract-v0.12.0.json", import.meta.url), "utf8")) as {
   version: string;
@@ -20,15 +21,12 @@ const V0120 = JSON.parse(readFileSync(new URL("./fixtures/contract-v0.12.0.json"
 /** What every file may carry from v0.13.0. */
 const ITEM = ["color", "credit", "downloadUrl", "license", "licenseExpires", "placeholder", "sourceUrl", "takenAt", "usedCount"];
 
-/** What v0.15.0 adds to the capabilities. */
-const V0150_CAPABILITIES = ["contentPublishedAt", "replay", "searchFields"];
-
-/** Every v0.12.0 schema v0.13.0 extends, and exactly the optional properties each adds. */
-const ADDED: Record<string, string[]> = {
+/** Every v0.12.0 schema v0.13.0 and v0.15.0 extend, and exactly the optional properties each adds. */
+const ADDED: Record<string, string[]> = withV0150({
   Capabilities: [
     "mediaChanges", "mediaCredit", "mediaDuplicates", "mediaEmbedded", "mediaFilters", "mediaHistory", "mediaImport",
-    "mediaResize", "mediaResizePass", "mediaSuggestions", "mediaTransform", "mediaUsage", ...V0150_CAPABILITIES,
-  ].sort(),
+    "mediaResize", "mediaResizePass", "mediaSuggestions", "mediaTransform", "mediaUsage",
+  ],
   Meta: [],
   MediaItem: ITEM,
   MediaDetail: [...ITEM, "twins"].sort(),
@@ -36,9 +34,7 @@ const ADDED: Record<string, string[]> = {
   MediaList: ["changeCursor", "moreChanges", "removed"],
   MediaListQuery: ["changedSince", "kind", "orientation"],
   MediaUploadQuery: ["resize"],
-  ErrorBody: ["detail", "status", "title", "type"],
-  PublishInput: ["publishedAt"],
-};
+});
 
 const NEW_LENSES = ["duplicates", "license-expired", "oversized"];
 
@@ -49,7 +45,7 @@ const WIDEN: Record<string, readonly string[]> = {
   "MediaListQuery.lens": NEW_LENSES,
   "MediaListQuery.sort": ["used"],
   "MediaList.sorted.sort": ["used"],
-  "ErrorBody.error": ["in-progress"],
+  ...V0150_WIDEN,
 };
 
 const NEW_SCHEMAS = [
@@ -84,6 +80,7 @@ describe("the v0.12.0 contract", () => {
       "POST /media/:id/revert",
       "GET /media/:id/suggestions",
       "POST /media/resize-pass",
+      ...V0150_ROUTES,
     ]);
   });
 
@@ -110,11 +107,11 @@ describe("the v0.12.0 contract", () => {
   });
 
   it("widens the error codes by in-progress (v0.15.0), and nothing else", () => {
-    widened(V0120.schemas.ErrorCode!, now("ErrorCode"), ["in-progress"], "ErrorCode");
+    widened(V0120.schemas.ErrorCode!, now("ErrorCode"), V0150_CODES, "ErrorCode");
   });
 
   it("adds only the new schemas v0.13.0 names", () => {
-    expect(exported.filter((n) => !(n in V0120.schemas)).sort()).toEqual([...NEW_SCHEMAS].sort());
+    expect(exported.filter((n) => !(n in V0120.schemas)).sort()).toEqual([...NEW_SCHEMAS, ...V0150_SCHEMAS].sort());
   });
 
   it("parses v0.12.0 bodies with the v0.13.0 schemas", () => {

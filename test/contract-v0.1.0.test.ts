@@ -9,6 +9,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import * as contract from "../src/contract.js";
 import { additiveOnly, now, widened, type JsonSchema } from "./additive.js";
+import { V0150_ADDED, V0150_CODES, V0150_WIDEN } from "./v0.15.0.js";
 const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as { version: string };
 
 const V010 = JSON.parse(readFileSync(new URL("./fixtures/contract-v0.1.0.json", import.meta.url), "utf8")) as {
@@ -18,11 +19,8 @@ const V010 = JSON.parse(readFileSync(new URL("./fixtures/contract-v0.1.0.json", 
   schemas: Record<string, JsonSchema>;
 };
 
-/** The schemas later versions extend, by optional properties only: v0.2.0 the first three, v0.6.0 the content list, v0.10.0 the write result, v0.15.0 the publish. Every other one must be identical. */
-const EXTENDED = new Set(["Meta", "Capabilities", "ErrorBody", "ContentSummary", "ContentDoc", "ListQuery", "ContentList", "WriteResult", "PublishInput"]);
-
-/** The error code v0.15.0 adds, at the end, the one enum a later version widens. */
-const NEW_CODES = ["in-progress"];
+/** The schemas later versions extend, by optional properties only: v0.2.0 the first three, v0.6.0 the content list, v0.10.0 the write result, v0.15.0 those test/v0.15.0.ts names. Every other one must be identical. */
+const EXTENDED = new Set(["Meta", "Capabilities", "ErrorBody", "ContentSummary", "ContentDoc", "ListQuery", "ContentList", "WriteResult", ...Object.keys(V0150_ADDED)]);
 
 
 describe("the v0.1.0 contract", () => {
@@ -71,12 +69,12 @@ describe("the v0.1.0 contract", () => {
 
   for (const name of EXTENDED) {
     it(`extends ${name} by optional properties only`, () => {
-      additiveOnly(V010.schemas[name]!, now(name), name, { "ErrorBody.error": NEW_CODES });
+      additiveOnly(V010.schemas[name]!, now(name), name, V0150_WIDEN);
     });
   }
 
   it("widens the error codes by in-progress, and nothing else", () => {
-    widened(V010.schemas.ErrorCode!, now("ErrorCode"), NEW_CODES, "ErrorCode");
+    widened(V010.schemas.ErrorCode!, now("ErrorCode"), V0150_CODES, "ErrorCode");
   });
 
   it("names what v0.2.0 added to the extended schemas", () => {

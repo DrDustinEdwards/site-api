@@ -8,6 +8,9 @@ export const ContentStatus = z.enum(["draft", "scheduled", "published"]);
 /** A post tag (v0.6.0): one short piece of text, trimmed, with nothing that would break a frontmatter list. */
 export const ContentTag = z.string().min(1).max(40).regex(/^[^\s,[\]"'#:\\](?:[^\r\n,[\]"'#:\\]*[^\s,[\]"'#:\\])?$/);
 
+/** A display name credited on a post (v0.15.0), as its `authors` post field holds it. */
+export const AuthorName = z.string().min(1).max(200);
+
 /** A post's whole tag set (v0.6.0). */
 export const ContentTags = z.array(ContentTag).max(50);
 
@@ -39,6 +42,9 @@ export const ContentSummary = z.object({
   tags: ContentTags.optional(),
   /** On a live item, the update scheduled to replace it (v0.10.0); null when none. Absent: the site has no scheduled updates. */
   scheduledUpdate: ScheduledUpdateSummary.nullable().optional(),
+  /** v0.15.0, from the post fields where the site keeps them, for a list: everyone credited, the primary first, and the excerpt. */
+  authors: z.array(AuthorName).max(50).optional(),
+  excerpt: z.string().max(5000).optional(),
 });
 
 export const ContentDoc = ContentSummary.extend({
@@ -134,6 +140,8 @@ export const Revision = z.object({
   at: Timestamp,
   author: z.string().max(200),
   message: z.string().max(2000),
+  /** Everyone credited for this version (v0.15.0), where the site keeps more than the one `author`. */
+  authors: z.array(AuthorName).max(50).optional(),
 });
 
 export const RevisionList = z.object({ items: z.array(Revision) });

@@ -4,9 +4,9 @@
 // route table, so any change to either is a new contract, and Carrel's health check sees it.
 
 import { z } from "zod";
-import { SEARCH_FIELDS } from "./frontmatter.js";
+import { POST_FIELDS, SEARCH_FIELDS } from "./frontmatter.js";
 
-export { SEARCH_FIELDS, type SearchField } from "./frontmatter.js";
+export { POST_FIELDS, SEARCH_FIELDS, type PostField, type SearchField } from "./frontmatter.js";
 
 export { ChangeId, ContentId, SiteInfo, SortDir, Version } from "./contract/base.js";
 export * from "./contract/content.js";
@@ -163,6 +163,8 @@ export const Capabilities = z.object({
   replay: z.boolean().optional(),
   /** True when a publish takes `publishedAt`, the date it is published under. */
   contentPublishedAt: z.boolean().optional(),
+  /** The post fields the site renders from a post's frontmatter, each under its shared name. Absent: none. */
+  postFields: z.array(z.enum(POST_FIELDS)).optional(),
 });
 
 export const Meta = z.object({

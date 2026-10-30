@@ -20,12 +20,14 @@ import type {
   MentionList,
   MentionListQuery,
   MentionStatus,
+  PostField,
   PreviewInput,
   PublishInput,
   Revision,
   SaveDraftInput,
   ScheduleInput,
   ScheduledUpdate,
+  SearchField,
   SiteInfo,
   UnpublishInput,
   WriteResult,
@@ -37,6 +39,12 @@ export interface ContentAdapter {
    * or a live item re-dated (capabilities.contentPublishedAt). Absent: a publish carrying it answers 501.
    */
   publishedAtSettable?: boolean;
+  /**
+   * Optional (v0.15.0): the search and post fields the site renders from a post's frontmatter (capabilities.searchFields,
+   * capabilities.postFields), each under its shared name in `@dustinedwards/site-api/frontmatter`. Absent: none.
+   */
+  searchFields?: readonly SearchField[];
+  postFields?: readonly PostField[];
   list(query: ListQuery): Promise<ContentList>;
   /** null when the id does not exist. */
   get(id: string): Promise<ContentDoc | null>;
@@ -352,6 +360,8 @@ export function capabilitiesOf(adapter: SiteAdapter, options: { store?: boolean 
     ...(adapter.content.delete ? { contentDelete: true } : {}),
     ...(adapter.content.setTags ? { contentTags: true } : {}),
     ...(adapter.content.publishedAtSettable ? { contentPublishedAt: true } : {}),
+    ...(adapter.content.searchFields?.length ? { searchFields: [...adapter.content.searchFields] } : {}),
+    ...(adapter.content.postFields?.length ? { postFields: [...adapter.content.postFields] } : {}),
     ...(adapter.media?.setAlt ? { mediaAlt: true } : {}),
     ...(adapter.media?.lenses?.length ? { mediaLenses: [...adapter.media.lenses] } : {}),
     ...(adapter.media?.setTags ? { mediaTags: true } : {}),

@@ -27,6 +27,7 @@ describe("client round trip", () => {
       contentDelete: true,
       contentTags: true,
       contentPublishedAt: true,
+      postFields: ["excerpt", "authors", "series", "seriesPart"],
       mediaAlt: true,
       mediaLenses: ["unattached", "no-alt", "large", "license-expired", "oversized"],
       mediaTags: true,

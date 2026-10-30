@@ -9,6 +9,7 @@ import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import * as contract from "../src/contract.js";
 import { additiveOnly, added, now, widened, type JsonSchema } from "./additive.js";
+import { V0150_CODES, V0150_ROUTES, V0150_SCHEMAS, V0150_WIDEN, withV0150 } from "./v0.15.0.js";
 
 const V050 = JSON.parse(readFileSync(new URL("./fixtures/contract-v0.5.0.json", import.meta.url), "utf8")) as {
   version: string;
@@ -20,16 +21,13 @@ const V050 = JSON.parse(readFileSync(new URL("./fixtures/contract-v0.5.0.json", 
 /** What every file may carry from v0.13.0 (contract-v0.12.0.test.ts holds the rest of v0.13.0). */
 const V0130_ITEM = ["color", "credit", "downloadUrl", "license", "licenseExpires", "placeholder", "sourceUrl", "takenAt", "usedCount"];
 
-/** What v0.15.0 adds to the capabilities. */
-const V0150_CAPABILITIES = ["contentPublishedAt", "replay", "searchFields"];
-
 /** Every v0.5.0 schema later versions extend, and exactly the optional properties each adds (v0.10.0: scheduled updates, and a file's focal point and caption). */
-const ADDED: Record<string, string[]> = {
+const ADDED: Record<string, string[]> = withV0150({
   Capabilities: [
     "contentTags", "mediaCaption", "mediaChanges", "mediaCredit", "mediaDuplicates", "mediaEmbedded", "mediaFilters", "mediaFocus",
     "mediaHistory", "mediaImport", "mediaLenses", "mediaReplace", "mediaReplaceKeepsSize", "mediaResize", "mediaResizePass",
-    "mediaSuggestions", "mediaTransform", "mediaUsage", "mentionReset", "scheduledUpdates", ...V0150_CAPABILITIES,
-  ].sort(),
+    "mediaSuggestions", "mediaTransform", "mediaUsage", "mentionReset", "scheduledUpdates",
+  ],
   MediaItem: ["caption", "focus", ...V0130_ITEM].sort(),
   MediaDetail: ["caption", "focus", "twins", ...V0130_ITEM].sort(),
   MediaUploadQuery: ["resize"],
@@ -43,12 +41,7 @@ const ADDED: Record<string, string[]> = {
   MediaList: ["changeCursor", "moreChanges", "removed", "sorted", "total"],
   MentionListQuery: ["q", "targetId"],
   MentionList: ["filtered"],
-  ErrorBody: ["detail", "status", "title", "type"],
-  PublishInput: ["publishedAt"],
-};
-
-/** v0.15.0 adds the in-progress error, at the end. */
-const NEW_CODES = ["in-progress"];
+});
 
 /** The one v0.5.0 schema v0.6.0 widens rather than extends: a decision may also be reset. */
 const WIDENED = "MentionDecideInput";
@@ -84,6 +77,7 @@ describe("the v0.5.0 contract", () => {
       "POST /media/:id/revert",
       "GET /media/:id/suggestions",
       "POST /media/resize-pass",
+      ...V0150_ROUTES,
     ]);
   });
 
@@ -95,13 +89,13 @@ describe("the v0.5.0 contract", () => {
 
   for (const [name, props] of Object.entries(ADDED)) {
     it(`extends ${name} by optional properties only: ${props.join(", ") || "none of its own"}`, () => {
-      additiveOnly(V050.schemas[name]!, now(name), name, { "ErrorBody.error": NEW_CODES });
+      additiveOnly(V050.schemas[name]!, now(name), name, V0150_WIDEN);
       expect(added(V050.schemas[name]!, now(name)).sort()).toEqual(props);
     });
   }
 
   it("widens the error codes by in-progress, and nothing else", () => {
-    widened(V050.schemas.ErrorCode!, now("ErrorCode"), NEW_CODES, "ErrorCode");
+    widened(V050.schemas.ErrorCode!, now("ErrorCode"), V0150_CODES, "ErrorCode");
   });
 
   it("widens the mention decision by reset, and nothing else", () => {
@@ -113,7 +107,7 @@ describe("the v0.5.0 contract", () => {
     expect(strip(after)).toEqual(strip(before));
   });
 
-  it("adds only the new schemas v0.6.0, v0.10.0 and v0.13.0 name", () => {
+  it("adds only the new schemas v0.6.0, v0.10.0, v0.13.0 and v0.15.0 name", () => {
     const v060 = ["ContentTag", "ContentTagsInput", "ContentTags", "MediaLens", "SortDir"];
     const v0100 = [
       "ScheduleCancelQuery", "ScheduledUpdate", "ScheduledUpdateSummary",
@@ -125,7 +119,7 @@ describe("the v0.5.0 contract", () => {
       "MediaResizePassResult", "MediaRevertInput", "MediaRevision", "MediaSourceUrl", "MediaSuggestions",
       "MediaTransformInput", "MediaTransformOp", "MediaTransformResult", "MediaTwin", "MediaUploadResult",
     ];
-    expect(exported.filter((n) => !(n in V050.schemas)).sort()).toEqual([...v060, ...v0100, ...v0130].sort());
+    expect(exported.filter((n) => !(n in V050.schemas)).sort()).toEqual([...v060, ...v0100, ...v0130, ...V0150_SCHEMAS].sort());
   });
 
   it("parses v0.5.0 bodies with the v0.6.0 schemas", () => {

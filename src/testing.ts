@@ -2,7 +2,7 @@
 // sitting. Carrel's tests run against it, and the conformance suite is proven on it.
 
 import { MediaInUseError, NotFoundError, RefusedError, VersionConflictError, type DueSchedule, type MediaAdapter, type MediaReplace, type MentionsAdapter, type SchedulesAdapter, type SiteAdapter } from "./adapter.js";
-import { joinSource, setTags as writeTags, splitSource, tagsOf } from "./frontmatter.js";
+import { joinSource, POST_FIELDS, postFieldsOf, setTags as writeTags, splitSource, tagsOf } from "./frontmatter.js";
 import { LARGE_MEDIA_BYTES, MEDIA_LENSES } from "./contract.js";
 import type { ContentDoc, ContentStatus, ContentSummary, MediaEmbeddedField, MediaLens, MediaItem, MediaResize, MediaRevision, MediaTransformOp, MediaUploadLimits, MediaUse, MentionItem, MentionStatus, Revision, ScheduledUpdate, SiteInfo, WriteResult } from "./contract.js";
 import { kindOf, orientationOf, transformFocus, turnsSize } from "./media.js";
@@ -124,10 +124,12 @@ function pngText(bytes: Uint8Array): Record<string, string> {
   return found;
 }
 
-/** The item with its tags (v0.6.0), where its frontmatter can hold them. */
+/** The item with its tags (v0.6.0), where its frontmatter can hold them, and its authors and excerpt where it has them (v0.15.0). */
 function withTags(doc: ContentDoc): ContentDoc {
   const front = splitSource(doc.source).front;
-  return front !== null ? { ...doc, tags: tagsOf(front) } : doc;
+  if (front === null) return doc;
+  const { authors, excerpt } = postFieldsOf(front);
+  return { ...doc, tags: tagsOf(front), ...(authors.length ? { authors } : {}), ...(excerpt ? { excerpt } : {}) };
 }
 
 /** A list row: the item without its source, with its version and tags. */
@@ -695,7 +697,7 @@ export function memoryAdapter(
     deletedContent,
     ...(mediaAdapter ? { media: mediaAdapter } : {}),
     content: {
-      ...(contentExtras ? { publishedAtSettable: true } : {}),
+      ...(contentExtras ? { publishedAtSettable: true, postFields: POST_FIELDS } : {}),
       async list(query) {
         const needle = query.q?.toLowerCase();
         const all = [...store.values()]

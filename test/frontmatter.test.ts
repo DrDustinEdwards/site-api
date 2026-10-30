@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { JsonSourceError, joinSource, jsonSource, readKey, readList, searchFieldsOf, setBlock, setRawKey, setSearchFields, setTags, splitSource, tagsOf } from "../src/frontmatter.js";
+import { JsonSourceError, joinSource, jsonSource, postFieldsOf, readKey, readList, searchFieldsOf, setBlock, setPostFields, setRawKey, setSearchFields, setTags, splitSource, tagsOf } from "../src/frontmatter.js";
 
 const SOURCE = [
   "---",
@@ -136,6 +136,17 @@ describe("search fields", () => {
     expect(jsonSource({ searchTitle: "text", noindex: "flag" }).read(`---\n${readLines(front, ["searchTitle", "noindex"])}\n---\n`).values).toEqual({ searchTitle: 'Say "hi": a guide', noindex: true });
     const cleared = setSearchFields(front, { searchTitle: "", description: "One table.", noindex: false });
     expect(cleared).toBe(parts.front);
+  });
+});
+
+describe("post fields (v0.15.0)", () => {
+  it("keeps authors in order with a comma in a name, reads a hand-written list, and a blank or a bad part removes the key", () => {
+    const front = setPostFields(parts.front!, { authors: ["Smith, Jr.", " Ada "], excerpt: "Short.", series: "Notes", seriesPart: 2 });
+    expect(postFieldsOf(front)).toEqual({ authors: ["Smith, Jr.", "Ada"], excerpt: "Short.", series: "Notes", seriesPart: 2 });
+    expect(jsonSource({ authors: "list" }).read(`---\n${readLines(front, ["authors"])}\n---\n`).values).toEqual({ authors: ["Smith, Jr.", "Ada"] });
+    expect(postFieldsOf("authors:\n  - Ada\n  - Grace\nseriesPart: 0").authors).toEqual(["Ada", "Grace"]);
+    expect(postFieldsOf("seriesPart: 0").seriesPart).toBeNull();
+    expect(setPostFields(front, { authors: [], excerpt: " ", series: "", seriesPart: null })).toBe(parts.front);
   });
 });
 
