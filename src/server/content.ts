@@ -29,7 +29,7 @@ import {
 } from "../contract.js";
 import { BASE_HEADERS, ContractBreach, ID, checked, fail, json, pathParam, readBody, readQuery, type Route } from "./http.js";
 
-export function contentRoutes(adapter: SiteAdapter): Route[] {
+export function contentRoutes(adapter: SiteAdapter, options: { store: boolean }): Route[] {
   const id = (m: RegExpMatchArray) => pathParam(m[1], ContentId, "content id");
 
   const write = async (
@@ -48,7 +48,7 @@ export function contentRoutes(adapter: SiteAdapter): Route[] {
           packageVersion: PACKAGE_VERSION,
           schemaHash: await schemaHash(),
           site: adapter.site,
-          capabilities: capabilitiesOf(adapter),
+          capabilities: capabilitiesOf(adapter, options),
         }, "meta")),
     },
     {

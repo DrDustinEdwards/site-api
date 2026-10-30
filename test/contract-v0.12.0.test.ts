@@ -20,12 +20,15 @@ const V0120 = JSON.parse(readFileSync(new URL("./fixtures/contract-v0.12.0.json"
 /** What every file may carry from v0.13.0. */
 const ITEM = ["color", "credit", "downloadUrl", "license", "licenseExpires", "placeholder", "sourceUrl", "takenAt", "usedCount"];
 
+/** What v0.15.0 adds to the capabilities. */
+const V0150_CAPABILITIES = ["replay", "searchFields"];
+
 /** Every v0.12.0 schema v0.13.0 extends, and exactly the optional properties each adds. */
 const ADDED: Record<string, string[]> = {
   Capabilities: [
     "mediaChanges", "mediaCredit", "mediaDuplicates", "mediaEmbedded", "mediaFilters", "mediaHistory", "mediaImport",
-    "mediaResize", "mediaResizePass", "mediaSuggestions", "mediaTransform", "mediaUsage", "searchFields",
-  ],
+    "mediaResize", "mediaResizePass", "mediaSuggestions", "mediaTransform", "mediaUsage", ...V0150_CAPABILITIES,
+  ].sort(),
   Meta: [],
   MediaItem: ITEM,
   MediaDetail: [...ITEM, "twins"].sort(),

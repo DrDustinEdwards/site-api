@@ -155,6 +155,12 @@ export const Capabilities = z.object({
   mediaEmbedded: z.boolean().optional(),
   /** True when the site's model suggests tags and alt text for a file, `GET /media/:id/suggestions`. */
   mediaSuggestions: z.boolean().optional(),
+  // ---------- v0.15.0, each optional per site
+  /**
+   * True when every write is safe to retry under its change id: the same request again answers what the first one did,
+   * with `Idempotent-Replayed: true`, and never runs twice. Absent: a retry runs again, as before.
+   */
+  replay: z.boolean().optional(),
 });
 
 export const Meta = z.object({

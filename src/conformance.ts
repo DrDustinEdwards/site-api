@@ -49,6 +49,11 @@ export async function runConformance(config: ConformanceConfig): Promise<Conform
   const origin = config.baseUrl.replace(/\/+$/, "");
   const auth = { authorization: `Bearer ${config.key}` };
   const checks: ConformanceCheck[] = [];
+  // v0.15.0: a fresh change id for every probe write, since a site with `replay` keeps a refused write's answer under its
+  // change id and would refuse the same id on another probe as a different request.
+  const run = crypto.randomUUID().slice(0, 8);
+  let probes = 0;
+  const probe = () => `conformance-probe-${run}-${++probes}`;
 
   async function check(name: string, run: () => Promise<string>) {
     try {
@@ -130,7 +135,7 @@ export async function runConformance(config: ConformanceConfig): Promise<Conform
         body: JSON.stringify({
           source: "# Conformance probe\n\nA conforming site refuses this write.\n",
           expectedVersion: STALE_VERSION,
-          changeId: "conformance-probe",
+          changeId: probe(),
         }),
       });
       expectStatus(response, 409, "stale write");
@@ -166,7 +171,7 @@ export async function runConformance(config: ConformanceConfig): Promise<Conform
 
   if (config.probeWrites !== false) {
     // Only ever the probe id: a site that wrongly accepts one of these deletes nothing real.
-    const deleteUrl = `${origin}${PREFIX}/content/${PROBE_ID}?expectedVersion=${STALE_VERSION}&changeId=conformance-probe`;
+    const deleteUrl = `${origin}${PREFIX}/content/${PROBE_ID}?expectedVersion=${STALE_VERSION}&changeId=${probe()}`;
     await check("content delete without a key: refused", async () => {
       expectStatus(await doFetch(deleteUrl, { method: "DELETE" }), 401, "delete without a key");
       expectStatus(await doFetch(deleteUrl, { method: "DELETE", headers: { authorization: `Bearer ${config.key}x` } }), 401, "delete with a wrong key");
@@ -185,7 +190,7 @@ export async function runConformance(config: ConformanceConfig): Promise<Conform
       const response = await doFetch(`${origin}${PREFIX}/content/${PROBE_ID}/tags`, {
         method: "PUT",
         headers: { ...auth, "content-type": "application/json" },
-        body: JSON.stringify({ tags: ["conformance-probe"], expectedVersion: STALE_VERSION, changeId: "conformance-probe" }),
+        body: JSON.stringify({ tags: ["conformance-probe"], expectedVersion: STALE_VERSION, changeId: probe() }),
       });
       const offered = (meta as MetaType | null)?.capabilities.contentTags === true;
       expectStatus(response, offered ? 404 : 501, offered ? "unknown content tags" : "content tags on a site without them");
@@ -200,7 +205,7 @@ export async function runConformance(config: ConformanceConfig): Promise<Conform
       const expected = offered ? "not-found" : "not-implemented";
       for (const response of [
         await doFetch(path, { headers: auth }),
-        await doFetch(`${path}?expectedVersion=${STALE_VERSION}&changeId=conformance-probe`, { method: "DELETE", headers: auth }),
+        await doFetch(`${path}?expectedVersion=${STALE_VERSION}&changeId=${probe()}`, { method: "DELETE", headers: auth }),
       ]) {
         expectStatus(response, offered ? 404 : 501, offered ? "unknown schedule" : "schedule on a site without scheduled updates");
         const code = await errorCode(response);
@@ -244,7 +249,7 @@ export async function runConformance(config: ConformanceConfig): Promise<Conform
 
     if (config.probeWrites !== false) {
       await check("media delete of an unknown id: refused", async () => {
-        const response = await doFetch(`${origin}${PREFIX}/media/${encodeURIComponent(MEDIA_PROBE_ID)}?changeId=conformance-probe`, { method: "DELETE", headers: auth });
+        const response = await doFetch(`${origin}${PREFIX}/media/${encodeURIComponent(MEDIA_PROBE_ID)}?changeId=${probe()}`, { method: "DELETE", headers: auth });
         expectStatus(response, 404, "unknown media delete");
         const code = await errorCode(response);
         if (code !== "not-found") throw new Error(`error code ${code ?? "missing"}, expected not-found`);
@@ -252,7 +257,7 @@ export async function runConformance(config: ConformanceConfig): Promise<Conform
       });
 
       await check("media upload of a type the site does not accept: refused", async () => {
-        const response = await doFetch(`${origin}${PREFIX}/media?filename=carrel-conformance-probe.bin&changeId=conformance-probe`, {
+        const response = await doFetch(`${origin}${PREFIX}/media?filename=carrel-conformance-probe.bin&changeId=${probe()}`, {
           method: "POST",
           headers: { ...auth, "content-type": PROBE_TYPE },
           body: "A conforming site refuses this upload.",
@@ -268,7 +273,7 @@ export async function runConformance(config: ConformanceConfig): Promise<Conform
       const probeId = encodeURIComponent(MEDIA_PROBE_ID);
       const send = (method: string, path: string, body: unknown) =>
         doFetch(`${origin}${PREFIX}${path}`, { method, headers: { ...auth, "content-type": "application/json" }, body: JSON.stringify(body) });
-      const stale = { expectedVersion: STALE_VERSION, changeId: "conformance-probe" };
+      const stale = { expectedVersion: STALE_VERSION, changeId: probe() };
 
       async function refusedOrAbsent(offered: boolean, response: Response, status: number, code: string, what: string) {
         if (!offered) {
@@ -312,7 +317,7 @@ export async function runConformance(config: ConformanceConfig): Promise<Conform
 
       // An import of an http address is refused before anything is fetched.
       await check("media import of an http address: refused, or not implemented where the site lacks it", async () =>
-        refusedOrAbsent(Boolean(capabilities.mediaImport), await send("POST", "/media/import", { url: "http://example.com/a.png", changeId: "conformance-probe" }), 400, "invalid", "media import over http"));
+        refusedOrAbsent(Boolean(capabilities.mediaImport), await send("POST", "/media/import", { url: "http://example.com/a.png", changeId: probe() }), 400, "invalid", "media import over http"));
 
       await check("media alt with a body outside the contract: refused, or not implemented where the site lacks it", async () =>
         refusedOrAbsent(Boolean(capabilities.mediaAlt), await send("PUT", `/media/${probeId}/alt`, { alt: 7 }), 400, "invalid", "malformed alt"));
@@ -323,7 +328,7 @@ export async function runConformance(config: ConformanceConfig): Promise<Conform
       // v0.10.0: a replace of the probe id, in a type the site accepts, is a 404 before any byte is read.
       await check("media replace of an unknown id: refused, or not implemented where the site lacks it", async () => {
         const type = capabilities.mediaUpload?.types[0] ?? "image/png";
-        const response = await doFetch(`${origin}${PREFIX}/media/${probeId}/file?filename=probe&expectedVersion=${STALE_VERSION}&changeId=conformance-probe`, {
+        const response = await doFetch(`${origin}${PREFIX}/media/${probeId}/file?filename=probe&expectedVersion=${STALE_VERSION}&changeId=${probe()}`, {
           method: "PUT",
           headers: { ...auth, "content-type": type },
           body: new Uint8Array([0]),
@@ -359,7 +364,7 @@ export async function runConformance(config: ConformanceConfig): Promise<Conform
 
     if (config.probeMediaUpload && capabilities.mediaUpload?.types.includes("image/png")) {
       await check("media round trip: upload, read, delete its own file", async () => {
-        const up = await doFetch(`${origin}${PREFIX}/media?filename=carrel-conformance-probe.png&alt=Conformance%20probe&changeId=conformance-probe`, {
+        const up = await doFetch(`${origin}${PREFIX}/media?filename=carrel-conformance-probe.png&alt=Conformance%20probe&changeId=${probe()}`, {
           method: "POST",
           headers: { ...auth, "content-type": "image/png" },
           body: new Blob([PROBE_PNG]),
@@ -372,7 +377,7 @@ export async function runConformance(config: ConformanceConfig): Promise<Conform
         const detail = MediaDetail.parse(await read.json());
         if (detail.usedBy.length > 0) throw new Error(`its own new file is reported in use: ${JSON.stringify(detail.usedBy)}`);
         // Only the id the site just gave this upload: never any other file.
-        const del = await doFetch(`${path}?changeId=conformance-probe`, { method: "DELETE", headers: auth });
+        const del = await doFetch(`${path}?changeId=${probe()}`, { method: "DELETE", headers: auth });
         expectStatus(del, 200, "delete");
         MediaDeleteResult.parse(await del.json());
         expectStatus(await doFetch(path, { headers: auth }), 404, "after delete");
@@ -405,17 +410,17 @@ export async function runConformance(config: ConformanceConfig): Promise<Conform
     // The writes below are all refused before any change: no key, an unknown id, a stale version, a body with no change id.
     await check("mentions writes without a key or with a wrong key: refused", async () => {
       const wrong = { authorization: `Bearer ${config.key}x` };
-      const body = { decision: "approve", expectedVersion: STALE_VERSION, changeId: "conformance-probe" };
+      const body = { decision: "approve", expectedVersion: STALE_VERSION, changeId: probe() };
       for (const headers of [{}, wrong]) {
         expectStatus(await post(`${mentionPath}/${MENTION_PROBE_ID}/decide`, body, headers), 401, "decide without the key");
-        expectStatus(await doFetch(`${mentionPath}/${MENTION_PROBE_ID}?expectedVersion=${STALE_VERSION}&changeId=conformance-probe`, { method: "DELETE", headers }), 401, "delete without the key");
-        expectStatus(await post(`${mentionPath}/sweep`, { changeId: "conformance-probe" }, headers), 401, "sweep without the key");
+        expectStatus(await doFetch(`${mentionPath}/${MENTION_PROBE_ID}?expectedVersion=${STALE_VERSION}&changeId=${probe()}`, { method: "DELETE", headers }), 401, "delete without the key");
+        expectStatus(await post(`${mentionPath}/sweep`, { changeId: probe() }, headers), 401, "sweep without the key");
       }
       return "401";
     });
 
     await check("mention decide of an unknown id: refused, or not implemented where the site has no mentions", async () => {
-      const response = await post(`${mentionPath}/${MENTION_PROBE_ID}/decide`, { decision: "approve", expectedVersion: STALE_VERSION, changeId: "conformance-probe" });
+      const response = await post(`${mentionPath}/${MENTION_PROBE_ID}/decide`, { decision: "approve", expectedVersion: STALE_VERSION, changeId: probe() });
       expectStatus(response, hasMentions ? 404 : 501, hasMentions ? "unknown mention decide" : "mention decide on a site without mentions");
       const expected = hasMentions ? "not-found" : "not-implemented";
       const code = await errorCode(response);
@@ -424,7 +429,7 @@ export async function runConformance(config: ConformanceConfig): Promise<Conform
     });
 
     await check("mention delete of an unknown id: refused, or not implemented where the site has no mentions", async () => {
-      const response = await doFetch(`${mentionPath}/${MENTION_PROBE_ID}?expectedVersion=${STALE_VERSION}&changeId=conformance-probe`, { method: "DELETE", headers: auth });
+      const response = await doFetch(`${mentionPath}/${MENTION_PROBE_ID}?expectedVersion=${STALE_VERSION}&changeId=${probe()}`, { method: "DELETE", headers: auth });
       expectStatus(response, hasMentions ? 404 : 501, hasMentions ? "unknown mention delete" : "mention delete on a site without mentions");
       const expected = hasMentions ? "not-found" : "not-implemented";
       const code = await errorCode(response);
@@ -434,7 +439,7 @@ export async function runConformance(config: ConformanceConfig): Promise<Conform
 
     await check("mention reset of an unknown id: refused, or not implemented where the site has no reset", async () => {
       const offered = hasMentions && capabilities?.mentionReset === true;
-      const response = await post(`${mentionPath}/${MENTION_PROBE_ID}/decide`, { decision: "reset", expectedVersion: STALE_VERSION, changeId: "conformance-probe" });
+      const response = await post(`${mentionPath}/${MENTION_PROBE_ID}/decide`, { decision: "reset", expectedVersion: STALE_VERSION, changeId: probe() });
       expectStatus(response, offered ? 404 : 501, offered ? "unknown mention reset" : "mention reset on a site without it");
       const expected = offered ? "not-found" : "not-implemented";
       const code = await errorCode(response);
@@ -447,7 +452,7 @@ export async function runConformance(config: ConformanceConfig): Promise<Conform
         const list = MentionList.parse(await (await doFetch(`${mentionPath}?limit=1`, { headers: auth })).json());
         const first = list.items[0];
         if (!first) return "no mentions to write against";
-        const response = await post(`${mentionPath}/${encodeURIComponent(first.id)}/decide`, { decision: "reject", expectedVersion: STALE_VERSION, changeId: "conformance-probe" });
+        const response = await post(`${mentionPath}/${encodeURIComponent(first.id)}/decide`, { decision: "reject", expectedVersion: STALE_VERSION, changeId: probe() });
         expectStatus(response, 409, "stale mention decision");
         const code = await errorCode(response);
         if (code !== "version-conflict") throw new Error(`error code ${code ?? "missing"}, expected version-conflict`);

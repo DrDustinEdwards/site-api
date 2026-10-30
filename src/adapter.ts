@@ -333,9 +333,9 @@ export interface SiteAdapter {
 
 /**
  * Stage 2 implemented content and preview; v0.2.0 adds media for a site whose adapter has it. The
- * other groups answer 501 until their stage.
+ * other groups answer 501 until their stage. `store` (v0.15.0): the site gave createSiteApi a store.
  */
-export function capabilitiesOf(adapter: SiteAdapter): Capabilities {
+export function capabilitiesOf(adapter: SiteAdapter, options: { store?: boolean } = {}): Capabilities {
   return {
     content: true,
     preview: true,
@@ -369,6 +369,7 @@ export function capabilitiesOf(adapter: SiteAdapter): Capabilities {
     ...(adapter.mentions ? { mentions: true } : {}),
     ...(adapter.mentions?.reset ? { mentionReset: true } : {}),
     ...(adapter.schedules ? { scheduledUpdates: true } : {}),
+    ...(options.store ? { replay: true } : {}),
   };
 }
 

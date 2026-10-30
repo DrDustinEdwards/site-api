@@ -183,6 +183,20 @@ Additive: every v0.4.0 route and body is unchanged, and the schema hash and pack
 - **Versions.** A mention's `version` is opaque, like a content version, and must move whenever its status, its verification or its decision does, and not when another mention changes. A write with a version the site no longer holds is `409 version-conflict` with `currentVersion`; a missing mention is `404`. dustinedwards.info's table has no `updated_at` and no version column, so its adapter derives one: a hash of `status`, `received_at`, `verified_at` and `decided_at` (a re-send resets all three timestamps and the status, an approve or reject sets the status and `decided_at`). It checks the version and then writes with the same values in the `WHERE`, so a change between the check and the write matches no row and is reported as a conflict.
 - **Conformance** adds, for every site: the list in shape (or `501` where the site has no group), writes without the key or with a wrong one refused, a decide and a delete of an id no site holds refused (`404`, or `501` without the group), and, where the site has the group, a decide with a stale version refused on the first real mention, a sweep with no change id refused (`400`, before anything is removed), and an unknown status refused. It never decides, deletes or sweeps anything real.
 
+## Changes in v0.15.0
+
+Additive: every v0.14.0 route and body still works as it did, and the schema hash moves on purpose. Every new route, capability and option is optional per site: a site whose adapter or config lacks it answers its route or option `501 not-implemented`, and `meta.capabilities` says which it has.
+
+- **Errors** are problem details (`application/problem+json`, RFC 9457), keeping `error` and `message`; see Errors above. One new code, `in-progress`.
+- **Safe retries by change id** (`capabilities.replay`). A site that passes `createSiteApi` a `store` makes every write under content, media and mentions safe to send again. Before a write runs, the package claims its `changeId` with the route and a hash of the query and body (an upload's bytes included). The same request again answers exactly what the first answered, with `Idempotent-Replayed: true`, and the adapter does not run; while the first is still running it answers `409 in-progress`; the same change id on a different request is `422 refused`. Successes, `409` and `422` answers are kept for 7 days (`runSchedules` prunes older ones); any other failure frees the change id, so a retry runs again. A claim still running after two minutes was left by a request that died, and a retry of the same request takes it over. On D1:
+
+  ```ts
+  import { d1SiteApiStore } from "@dustinedwards/site-api/store";
+  const api = createSiteApi({ /* ...as above */ store: d1SiteApiStore(env.DB) });
+  ```
+
+  `SITE_API_STORE_SQL` from the same module is the migration, the site's next `migrations/` file. Another store implements `SiteApiStore`. Without a store, a write is handled exactly as in v0.14.0.
+
 ## Changes in v0.14.0
 
 Additive: no route, body or schema changes. The pieces every site's media adapter and preview wrote for itself, exported from the package root, and site-runtime moves to v0.29.0 (its `editImage`).

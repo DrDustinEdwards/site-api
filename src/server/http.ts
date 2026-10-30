@@ -7,7 +7,7 @@ import type { ErrorBody, ErrorCode, MediaUse } from "../contract.js";
 import { readCapped } from "@dustinedwards/site-runtime/body";
 
 /** Four million bytes: two million characters of source can take that much as UTF-8 JSON. */
-const MAX_BODY_BYTES = 4_000_000;
+export const MAX_BODY_BYTES = 4_000_000;
 
 const STATUS: Record<ErrorCode, number> = {
   unauthorized: 401,

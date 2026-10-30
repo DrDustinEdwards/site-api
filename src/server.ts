@@ -9,9 +9,13 @@ import type { DueSchedule, SiteAdapter } from "./adapter.js";
 import { PREFIX } from "./contract.js";
 import { runHooks, type PublishAction, type PublishHook } from "./hooks.js";
 import { contentRoutes } from "./server/content.js";
-import { describeFailure, fail, type Route } from "./server/http.js";
+import { describeFailure, fail, MAX_BODY_BYTES, type Route } from "./server/http.js";
 import { mediaRoutes } from "./server/media.js";
 import { mentionsRoutes } from "./server/mentions.js";
+import { claim, REPLAY_DAYS, REPLAYED } from "./server/replay.js";
+import type { SiteApiStore } from "./store.js";
+
+export type { SiteApiStore, StoredWrite } from "./store.js";
 
 /** The shape of Cloudflare's `ratelimit` binding, so a site passes its binding straight in. */
 export interface RateLimiter {
@@ -45,6 +49,12 @@ export interface SiteApiConfig {
    * request, a GET of the page on the site's origin stands in for it. New sites pass `hooks: [indexNowHook(...)]`.
    */
   onPageChange?: (paths: string[], request: Request) => Promise<unknown> | void;
+  /**
+   * Where the package keeps what it needs between requests (v0.15.0): on D1, `d1SiteApiStore(env.DB)` from
+   * `@dustinedwards/site-api/store`, with `SITE_API_STORE_SQL` as a migration. With it, every write is safe to retry
+   * under its change id (capabilities.replay). Absent: everything works as in v0.14.0.
+   */
+  store?: SiteApiStore;
 }
 
 /** What one `runSchedules` pass did. */
@@ -80,6 +90,8 @@ export interface SiteApi {
 
 export const MIN_KEY_LENGTH = 32;
 
+const DAY = 24 * 60 * 60 * 1000;
+
 export function insidePrefix(pathname: string): boolean {
   return pathname === PREFIX || pathname.startsWith(`${PREFIX}/`);
 }
@@ -97,9 +109,10 @@ export function createSiteApi(config: SiteApiConfig): SiteApi {
   const { adapter, limiter } = config;
   const log = config.log ?? ((entry) => console.warn(JSON.stringify(entry)));
   const { media, mentions } = adapter;
+  const { store } = config;
 
   const routes: Route[] = [
-    ...contentRoutes(adapter),
+    ...contentRoutes(adapter, { store: Boolean(store) }),
     ...(media ? mediaRoutes(media, log) : []),
     ...(mentions ? mentionsRoutes(mentions) : []),
   ];
@@ -136,9 +149,12 @@ export function createSiteApi(config: SiteApiConfig): SiteApi {
 
   async function runSchedules(options: { now?: Date; limit?: number } = {}): Promise<ScheduleRun> {
     const run: ScheduleRun = { applied: [], skipped: 0, failed: 0, more: false };
+    const now = options.now ?? new Date();
+    if (store) {
+      await store.pruneWrites(new Date(now.getTime() - REPLAY_DAYS * DAY).toISOString()).catch((error) => log({ siteApi: "replay-store-failed", error: String(error) }));
+    }
     const { schedules } = adapter;
     if (!schedules) return run;
-    const now = options.now ?? new Date();
     const limit = options.limit ?? SCHEDULE_BATCH_LIMIT;
     let due: DueSchedule[];
     try {
@@ -207,24 +223,34 @@ export function createSiteApi(config: SiteApiConfig): SiteApi {
     const hit = candidates.find((c) => c.route.method === request.method);
     if (!hit) return fail("method-not-allowed", "Method not allowed.");
 
+    const write = hooks.length > 0 && request.method !== "GET" ? PAGE_WRITE.exec(path) : null;
+    const id = write ? decodeURIComponent(write[1]!) : "";
+    let finish: ((response: Response) => Promise<void>) | undefined;
+    let response: Response;
     try {
-      const write = hooks.length > 0 && request.method !== "GET" ? PAGE_WRITE.exec(path) : null;
-      const id = write ? decodeURIComponent(write[1]!) : "";
+      let run = request;
+      if (store && request.method !== "GET" && REPLAYED.test(path)) {
+        const claimed = await claim(store, request, path, Math.max(MAX_BODY_BYTES, media?.limits.maxBytes ?? 0), log);
+        // A replayed answer has run its hooks already, the first time.
+        if ("answer" in claimed) return claimed.answer;
+        ({ request: run, finish } = claimed);
+      }
       const before = write && request.method === "DELETE" ? await pageOf(id) : null;
-      const response = await hit.route.run(hit.match, url, request);
+      response = await hit.route.run(hit.match, url, run);
       if (write && response.ok) {
         const told = tellPageChange(id, write[2] ?? "", before, request, response.clone()).catch((error) => log({ siteApi: "page-change-failed", error: String(error) }));
         if (ctx) ctx.waitUntil(told);
         else await told;
       }
-      return response;
     } catch (error) {
       const failure = describeFailure(error, log);
-      return fail(failure.code, failure.message, {
+      response = fail(failure.code, failure.message, {
         ...(failure.currentVersion !== undefined ? { currentVersion: failure.currentVersion } : {}),
         ...(failure.usedBy ? { usedBy: failure.usedBy } : {}),
       });
     }
+    await finish?.(response);
+    return response;
   }
 
   return {
