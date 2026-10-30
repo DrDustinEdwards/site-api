@@ -419,7 +419,7 @@ export function capabilitiesOf(adapter: SiteAdapter, options: { store?: boolean 
     ...(adapter.mentions ? { mentions: true } : {}),
     ...(adapter.mentions?.reset ? { mentionReset: true } : {}),
     ...(adapter.schedules ? { scheduledUpdates: true } : {}),
-    ...(options.store ? { replay: true } : {}),
+    ...(options.store ? { replay: true, previewLinks: true } : {}),
     ...(adapter.renderVersion ? { render: { version: adapter.renderVersion } } : {}),
   };
 }

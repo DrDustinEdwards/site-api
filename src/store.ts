@@ -1,5 +1,6 @@
 // What the package keeps for itself on a site that gives it a store (v0.15.0): the answers to writes, so a retry under
-// the same change id is answered rather than run twice, and the publish hooks that failed, so the cron tries them again. A D1 site passes `d1SiteApiStore(env.DB)` as `store` and adds
+// the same change id is answered rather than run twice, the publish hooks that failed, so the cron tries them again, and
+// the shareable preview links. A D1 site passes `d1SiteApiStore(env.DB)` as `store` and adds
 // `SITE_API_STORE_SQL` as its next migration. Exported as `@dustinedwards/site-api/store`.
 
 import type { D1Like } from "./schedules.js";
@@ -31,6 +32,24 @@ export interface SiteApiStore {
   /** The retries due at `now`, the oldest due first, at most `limit`. */
   dueHookRetries(now: string, limit: number): Promise<HookRetry[]>;
   dropHookRetry(id: string): Promise<void>;
+  /** Keeps a new preview link: only the SHA-256 of its token, never the token. */
+  putPreviewLink(link: PreviewLinkRow): Promise<void>;
+  /** The link whose token has this hash, revoked or expired included; null when none. */
+  previewLink(tokenHash: string): Promise<PreviewLinkRow | null>;
+  /** One item's links not revoked and not expired at `now`, the newest first. */
+  activePreviewLinks(contentId: string, now: string): Promise<PreviewLinkRow[]>;
+  /** Revokes the unrevoked link whose hash starts with `prefix` (its id); false when none. */
+  revokePreviewLink(prefix: string, at: string): Promise<boolean>;
+}
+
+/** One shareable preview link (v0.15.0). Times are UTC ISO text; `revokedAt` null while it works. */
+export interface PreviewLinkRow {
+  tokenHash: string;
+  contentId: string;
+  createdAt: string;
+  expiresAt: string;
+  revokedAt: string | null;
+  changeId: string;
 }
 
 /** One failed hook run, kept for another try. `event` is the PublishEvent as JSON, without its request. */
@@ -63,6 +82,15 @@ CREATE TABLE IF NOT EXISTS hook_retries (
   last_error TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS hook_retries_due ON hook_retries (next_at);
+CREATE TABLE IF NOT EXISTS preview_links (
+  token_hash TEXT PRIMARY KEY,
+  content_id TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  revoked_at TEXT,
+  change_id TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS preview_links_content ON preview_links (content_id, expires_at);
 `;
 
 interface WriteRow {
@@ -72,6 +100,24 @@ interface WriteRow {
   status: number | null;
   response: string | null;
 }
+
+interface LinkRow {
+  token_hash: string;
+  content_id: string;
+  created_at: string;
+  expires_at: string;
+  revoked_at: string | null;
+  change_id: string;
+}
+
+const toLink = (r: LinkRow): PreviewLinkRow => ({
+  tokenHash: r.token_hash,
+  contentId: r.content_id,
+  createdAt: r.created_at,
+  expiresAt: r.expires_at,
+  revokedAt: r.revoked_at,
+  changeId: r.change_id,
+});
 
 export function d1SiteApiStore(db: D1Like): SiteApiStore {
   const claimWrite: SiteApiStore["claimWrite"] = async (changeId, claim) => {
@@ -123,6 +169,31 @@ export function d1SiteApiStore(db: D1Like): SiteApiStore {
     },
     async dropHookRetry(id) {
       await db.prepare("DELETE FROM hook_retries WHERE id = ?").bind(id).run();
+    },
+    async putPreviewLink(l) {
+      await db
+        .prepare("INSERT INTO preview_links (token_hash, content_id, created_at, expires_at, revoked_at, change_id) VALUES (?, ?, ?, ?, ?, ?)")
+        .bind(l.tokenHash, l.contentId, l.createdAt, l.expiresAt, l.revokedAt, l.changeId)
+        .run();
+    },
+    async previewLink(tokenHash) {
+      const row = await db.prepare("SELECT * FROM preview_links WHERE token_hash = ?").bind(tokenHash).first<LinkRow>();
+      return row ? toLink(row) : null;
+    },
+    async activePreviewLinks(contentId, now) {
+      const { results } = await db
+        .prepare("SELECT * FROM preview_links WHERE content_id = ? AND revoked_at IS NULL AND expires_at > ? ORDER BY created_at DESC")
+        .bind(contentId, now)
+        .all<LinkRow>();
+      return results.map(toLink);
+    },
+    async revokePreviewLink(prefix, at) {
+      // The prefix is hex the package checked, so it is safe inside LIKE.
+      const row = await db
+        .prepare("UPDATE preview_links SET revoked_at = ? WHERE token_hash LIKE ? AND revoked_at IS NULL RETURNING token_hash")
+        .bind(at, `${prefix}%`)
+        .first();
+      return row !== null;
     },
   };
 }

@@ -93,6 +93,9 @@ All paths sit under `/api/carrel/v1`. Bodies are JSON, checked on the way in and
 | content | `POST /content/:id/trash` | `ContentTrashInput` | `WriteResult` (v0.15.0, optional per site) |
 | content | `POST /content/:id/restore` | `ContentTrashInput` | `WriteResult`, always a draft (v0.15.0, optional per site) |
 | preview | `POST /preview` | `PreviewInput` | the full page HTML from the site's own pipeline |
+| preview | `POST /preview-links` | `PreviewLinkInput` | `201 PreviewLink` (v0.15.0, with a store) |
+| preview | `GET /preview-links?id` | | `PreviewLinkList` (v0.15.0, with a store) |
+| preview | `DELETE /preview-links/:linkId?changeId` | | `PreviewLinkRevokeResult` (v0.15.0, with a store) |
 | media | `GET /media?q&tag&trashed&lens&sort&dir&orientation&kind&cursor&limit` | | `MediaList` (`tag` and `trashed=only` are v0.4.0; `lens`, `sort`, `dir`, `total` and `sorted` v0.6.0; `orientation`, `kind` and `changeCursor` v0.13.0) |
 | media | `GET /media?changedSince&limit` | | `MediaList` of the files changed since, with `removed` and `moreChanges` (v0.13.0, optional) |
 | media | `POST /media?filename&alt&resize&changeId` | the file's own bytes, typed by `Content-Type` | `201 MediaUploadResult`, or `200` with `duplicateOf` (`resize` and the answer's extras are v0.13.0) |
@@ -207,6 +210,13 @@ Additive: every v0.14.0 route and body still works as it did, and the schema has
 - **List filters on the site** (`capabilities.contentFilters`, any of `kind`, `tag`, `author`, `published` and `trashed`). `GET /content` takes `kind`, `tag`, `author` (one of the item's authors), `publishedAfter` and `publishedBefore` (either or both, the `published` filter) and `trashed`, and answers `ContentList` as before. The adapter names what it applies in `ContentAdapter.filters`; the package answers any other `501` before the adapter runs (`trashed` comes with the trash). `q` matches the title and the body, and without `sort` answers the newest updated first; every site's list does the same.
 - **Events and hooks.** The publish hooks' `action` gains `trash`, `restore`, `rename`, `schedule` and `unschedule`, and the event carries `previousStatus` and `status` and, on a rename, `previousPath` and `previousUrl`. A hook may name the actions it hears, `on: ["trash", "restore"]`; one with no `on` hears what it heard before, the actions that change a public page (`PAGE_ACTIONS`: a publish, an update of a live post, an unpublish, and a delete, trash or rename of a live post). A plain `{ name, run }` hook works unchanged. `indexNowHook` sends both addresses of a rename. With a `store`, a hook that fails is kept (`hook_retries`) and `runSchedules` runs it again after 1, 5, 30, 120 and 720 minutes (`HOOK_BACKOFF_MINUTES`), then logs `hook-gave-up` and drops it; the pass counts them in `retried`. A retried event has no `request`.
 - **A first publish by time.** A site whose scheduled post goes live by the clock alone, with no write (dustinedwards.info), must still list it in `SchedulesAdapter.due` as kind `publish`, with `apply` answering its `WriteResult` without writing, so the hooks hear it go live. Once applied it leaves `due`.
+- **Shareable preview links** (`capabilities.previewLinks`, with a store). `POST /preview-links` `{ id, hours?, changeId }` (1 to 168 hours, 48 by default) answers `201 { token, url, expiresAt }`: the token is 32 random bytes, base64url, answered this once, and the site keeps only its SHA-256 (`preview_links`). `GET /preview-links?id=` lists an item's working links as `{ id, createdAt, expiresAt }`, `id` being the first 12 hex characters of the hash, which revokes the link and cannot open it: `DELETE /preview-links/:linkId?changeId=`. Anyone with the `url`, `GET {origin}/preview/<token>` outside the prefix and with no key, sees the item's current source through the site's own `preview.render`, with `x-robots-tag: noindex, nofollow`, `cache-control: private, no-store` and `referrer-policy: no-referrer`; an expired or revoked link answers a small `410` page, any other `404`. It is rate limited like the API. The site mounts it beside the handler:
+
+  ```ts
+  if (api.matchesPreviewLink(request)) return api.servePreviewLink(request);
+  if (api.matches(request)) return api.handle(request, ctx);
+  ```
+
 - **A settable publish date** (`capabilities.contentPublishedAt`). `POST /content/:id/publish` takes an optional `publishedAt`: a first publish backdated, or a live post re-dated. A date in the future is `400 invalid`, since that is a schedule. A site whose adapter does not set `publishedAtSettable: true` answers a publish carrying it `501`; one without it publishes as before.
 ## Changes in v0.14.0
 

@@ -13,10 +13,12 @@ import { contentRoutes } from "./server/content.js";
 import { describeFailure, fail, MAX_BODY_BYTES, type Route } from "./server/http.js";
 import { mediaRoutes } from "./server/media.js";
 import { mentionsRoutes } from "./server/mentions.js";
+import { page, PREVIEW_LINK_PATH, previewLinkRoutes, servePreviewLink } from "./server/preview-links.js";
 import { claim, REPLAY_DAYS, REPLAYED } from "./server/replay.js";
 import type { SiteApiStore } from "./store.js";
 
-export type { SiteApiStore, StoredWrite } from "./store.js";
+export type { HookRetry, PreviewLinkRow, SiteApiStore, StoredWrite } from "./store.js";
+export { PREVIEW_LINK_PATH } from "./server/preview-links.js";
 
 /** The shape of Cloudflare's `ratelimit` binding, so a site passes its binding straight in. */
 export interface RateLimiter {
@@ -95,6 +97,14 @@ export interface SiteApi {
    * pass finds nothing. A site whose adapter has no `schedules` applies nothing.
    */
   runSchedules(options?: { now?: Date; limit?: number }): Promise<ScheduleRun>;
+  /** v0.15.0: true for a GET under PREVIEW_LINK_PATH, outside the prefix. Mount `servePreviewLink` where this holds. */
+  matchesPreviewLink(request: Request): boolean;
+  /**
+   * Serves a shareable preview link with no key (v0.15.0): the item's current source through the site's preview, never
+   * indexed, cached or sent on as a referrer. An expired or revoked link answers 410, any other 404, and a site with no
+   * store answers every link 404. Rate limited like the API.
+   */
+  servePreviewLink(request: Request): Promise<Response>;
 }
 
 export const MIN_KEY_LENGTH = 32;
@@ -141,11 +151,13 @@ export function createSiteApi(config: SiteApiConfig): SiteApi {
     ...contentRoutes(adapter, { store: Boolean(store) }),
     ...(media ? mediaRoutes(media, log) : []),
     ...(mentions ? mentionsRoutes(mentions) : []),
+    ...(store ? previewLinkRoutes(adapter, store) : []),
   ];
 
-  // Groups a site has not implemented. Media and mentions leave this list when the adapter has them.
+  // Groups a site has not implemented. Media and mentions leave this list when the adapter has them, preview links when
+  // the site has a store.
   const LATER = new RegExp(
-    `^/(${[...(media ? [] : ["media"]), ...(mentions ? [] : ["mentions"]), "inbox", "insight", "publications"].join("|")})(/|$)`,
+    `^/(${[...(media ? [] : ["media"]), ...(mentions ? [] : ["mentions"]), ...(store ? [] : ["preview-links"]), "inbox", "insight", "publications"].join("|")})(/|$)`,
   );
 
   const { onPageChange } = config;
@@ -365,9 +377,22 @@ export function createSiteApi(config: SiteApiConfig): SiteApi {
     return response;
   }
 
+  async function servePreview(request: Request): Promise<Response> {
+    try {
+      const ip = request.headers.get("cf-connecting-ip") ?? "unknown";
+      if (!(await limiter.limit({ key: ip })).success) return page(429, "Too many requests.");
+      return await servePreviewLink(adapter, store, new URL(request.url).pathname);
+    } catch (error) {
+      log({ siteApi: "preview-link-failed", error: error instanceof Error ? error.message : String(error) });
+      return page(503, "This preview is unavailable.");
+    }
+  }
+
   return {
     matches: (request) => insidePrefix(new URL(request.url).pathname),
     handle,
     runSchedules,
+    matchesPreviewLink: (request) => request.method === "GET" && new URL(request.url).pathname.startsWith(PREVIEW_LINK_PATH),
+    servePreviewLink: servePreview,
   };
 }

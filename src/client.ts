@@ -27,6 +27,9 @@ import {
   MentionWriteResult,
   Meta,
   PREFIX,
+  PreviewLink,
+  PreviewLinkList,
+  PreviewLinkRevokeResult,
   RenameResult,
   RevisionList,
   RevisionSource,
@@ -50,6 +53,7 @@ import {
   type MediaTrashInput,
   type MentionListQuery,
   type PreviewInput,
+  type PreviewLinkInput,
   type PublishInput,
   type RenameInput,
   type SaveDraftInput,
@@ -146,6 +150,12 @@ export function createSiteClient(config: SiteClientConfig) {
     restore: (id: string, input: ContentTrashInput) => get(WriteResult, "POST", `/content/${enc(id)}/restore`, input),
     diff: (id: string, from: string, to?: string) => get(Diff, "GET", `/content/${enc(id)}/diff${query({ from, to })}`),
     preview: async (input: PreviewInput) => (await call("POST", "/preview", input)).text(),
+    /** Optional per site (v0.15.0, `previewLinks`): a link anyone can open to see an item's current source, without the key. */
+    previewLinks: {
+      create: (input: PreviewLinkInput) => get(PreviewLink, "POST", "/preview-links", input),
+      list: (id: string) => get(PreviewLinkList, "GET", `/preview-links${query({ id })}`),
+      revoke: (linkId: string, input: { changeId: string }) => get(PreviewLinkRevokeResult, "DELETE", `/preview-links/${enc(linkId)}${query(input)}`),
+    },
     /** The media group (v0.2.0). A refused delete throws SiteApiError whose body carries `usedBy`. */
     media: {
       list: (q: Partial<MediaListQuery> = {}) => get(MediaList, "GET", `/media${query(q)}`),

@@ -223,6 +223,38 @@ export const PreviewInput = z.object({
   source: Source,
 });
 
+/** A shareable preview link for one item (v0.15.0, where `previewLinks`): it lives `hours`, 48 by default, at most a week. */
+export const PreviewLinkInput = z.object({
+  id: ContentId,
+  hours: z.number().int().min(1).max(168).default(48),
+  changeId: ChangeId,
+});
+
+/** The link's whole token, answered once: the site keeps only its hash. `url` is the page anyone with it can open. */
+export const PreviewLink = z.object({
+  token: z.string().regex(/^[A-Za-z0-9_-]{43}$/),
+  url: z.url(),
+  expiresAt: Timestamp,
+});
+
+export const PreviewLinkListQuery = z.object({ id: ContentId });
+
+/** An item's working links, the newest first. `id` is the first 12 hex characters of the token's hash: it revokes the link, and cannot open it. */
+export const PreviewLinkList = z.object({
+  items: z.array(z.object({ id: z.string().regex(/^[0-9a-f]{12}$/), createdAt: Timestamp, expiresAt: Timestamp })),
+});
+
+export const PreviewLinkRevokeQuery = z.object({ changeId: ChangeId });
+
+export const PreviewLinkRevokeResult = z.object({
+  id: z.string().regex(/^[0-9a-f]{12}$/),
+  revoked: z.literal(true),
+  changeId: ChangeId,
+});
+
+export type PreviewLinkInput = z.input<typeof PreviewLinkInput>;
+export type PreviewLink = z.infer<typeof PreviewLink>;
+export type PreviewLinkList = z.infer<typeof PreviewLinkList>;
 export type ContentStatus = z.infer<typeof ContentStatus>;
 export type ContentSummary = z.infer<typeof ContentSummary>;
 export type ContentDoc = z.infer<typeof ContentDoc>;

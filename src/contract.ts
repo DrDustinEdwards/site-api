@@ -26,6 +26,12 @@ import {
   DiffQuery,
   ListQuery,
   PreviewInput,
+  PreviewLink,
+  PreviewLinkInput,
+  PreviewLinkList,
+  PreviewLinkListQuery,
+  PreviewLinkRevokeQuery,
+  PreviewLinkRevokeResult,
   PublishInput,
   RenameInput,
   RenameResult,
@@ -174,6 +180,8 @@ export const Capabilities = z.object({
   contentTrash: z.boolean().optional(),
   /** The list filters the site applies; any other answers 501. `trashed` comes with `contentTrash`. Absent: none. */
   contentFilters: z.array(z.enum(CONTENT_FILTERS)).optional(),
+  /** True when the site makes shareable preview links, `/preview-links`, served keyless under `/preview/`. */
+  previewLinks: z.boolean().optional(),
   /** True when a publish takes `publishedAt`, the date it is published under. */
   contentPublishedAt: z.boolean().optional(),
   /** The post fields the site renders from a post's frontmatter, each under its shared name. Absent: none. */
@@ -287,6 +295,9 @@ export const ROUTES = [
   { group: "content", method: "POST", path: "/content/:id/rename", request: "RenameInput", response: "RenameResult" },
   { group: "content", method: "POST", path: "/content/:id/trash", request: "ContentTrashInput", response: "WriteResult" },
   { group: "content", method: "POST", path: "/content/:id/restore", request: "ContentTrashInput", response: "WriteResult" },
+  { group: "preview", method: "POST", path: "/preview-links", request: "PreviewLinkInput", response: "PreviewLink" },
+  { group: "preview", method: "GET", path: "/preview-links", query: "PreviewLinkListQuery", response: "PreviewLinkList" },
+  { group: "preview", method: "DELETE", path: "/preview-links/:linkId", query: "PreviewLinkRevokeQuery", response: "PreviewLinkRevokeResult" },
   { group: "inbox", method: "*", path: "/inbox/*", response: "not-implemented" },
   { group: "insight", method: "*", path: "/insight/*", response: "not-implemented" },
   { group: "publications", method: "*", path: "/publications/*", response: "not-implemented" },
@@ -307,6 +318,7 @@ const HASHED = {
   MediaUploadResult, MediaImportInput, MediaCreditInput, MediaTransformInput, MediaTransformResult, MediaHistory,
   MediaRevertInput, MediaResizePassInput, MediaResizePassResult, MediaSuggestions,
   RenameInput, RenameResult, ContentTrashInput,
+  PreviewLinkInput, PreviewLink, PreviewLinkListQuery, PreviewLinkList, PreviewLinkRevokeQuery, PreviewLinkRevokeResult,
 };
 
 /** JSON with sorted keys, so the hash depends on the contract and not on property order. */
