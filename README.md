@@ -9,7 +9,7 @@ Each site mounts one handler at `/api/carrel/v1` and implements an adapter over 
 Installed by git tag, never from a registry:
 
 ```sh
-npm install github:DrDustinEdwards/site-api#v0.15.0
+npm install github:DrDustinEdwards/site-api#v0.17.0
 ```
 
 npm builds `dist/` on install through the `prepare` script.
@@ -48,6 +48,23 @@ export default {
 };
 ```
 
+From v0.17.0 a site with D1 also passes the package a store, for safe retries, preview links, hook retries and the webmentions it sends (Changes in v0.17.0):
+
+```ts
+import { webmentionHook } from "@dustinedwards/site-api";
+import { d1SiteApiStore } from "@dustinedwards/site-api/store";
+
+const store = d1SiteApiStore(env.DB);              // migration: SITE_API_STORE_SQL
+const api = createSiteApi({
+  // ...as above
+  store,
+  hooks: [indexNowHook({ /* ... */ }), webmentionHook({ store })],
+});
+
+// in fetch, before the handler:
+if (api.matchesPreviewLink(request)) return api.servePreviewLink(request);
+```
+
 **`onPageChange` is deprecated** in favor of `hooks: [indexNowHook(...)]`. A v0.9.0 site's `onPageChange: (paths, request) => submitIndexNow(...)` still works, and from v0.10.0 it also hears the pages a schedule changes, but it will be removed in a later breaking release; move to the hook.
 
 The guard runs in this order: prefix, rate limit, key, route.
@@ -76,7 +93,7 @@ All paths sit under `/api/carrel/v1`. Bodies are JSON, checked on the way in and
 | Group | Route | Body in | Answer |
 |---|---|---|---|
 | meta | `GET /meta` | | `Meta`: package version, schema hash, site, capabilities |
-| content | `GET /content?status&q&sort&dir&cursor&limit` | | `ContentList`, with `total` and `sorted` where the site gives them (`sort` and `dir` are v0.6.0) |
+| content | `GET /content?status&q&sort&dir&kind&tag&author&publishedAfter&publishedBefore&trashed&cursor&limit` | | `ContentList`, with `total` and `sorted` where the site gives them (`sort` and `dir` are v0.6.0; the filters and `trashed` v0.17.0) |
 | content | `GET /content/:id` | | `ContentDoc`: summary, markdown source, version |
 | content | `PUT /content/:id/draft` | `SaveDraftInput` | `WriteResult` |
 | content | `POST /content/:id/publish` | `PublishInput` | `WriteResult` |
@@ -89,7 +106,13 @@ All paths sit under `/api/carrel/v1`. Bodies are JSON, checked on the way in and
 | content | `GET /content/:id/revisions/:version` | | `RevisionSource`: the source as it was at that version (v0.3.0) |
 | content | `DELETE /content/:id?expectedVersion&changeId` | | `ContentDeleteResult` (v0.3.0, optional per site: `501` where the adapter has no `delete`) |
 | content | `PUT /content/:id/tags` | `ContentTagsInput` | `WriteResult` (v0.6.0, optional per site: `501` where the adapter has no `setTags`) |
+| content | `POST /content/:id/rename` | `RenameInput` | `RenameResult` (v0.17.0, optional per site) |
+| content | `POST /content/:id/trash` | `ContentTrashInput` | `WriteResult` (v0.17.0, optional per site) |
+| content | `POST /content/:id/restore` | `ContentTrashInput` | `WriteResult`, always a draft (v0.17.0, optional per site) |
 | preview | `POST /preview` | `PreviewInput` | the full page HTML from the site's own pipeline |
+| preview | `POST /preview-links` | `PreviewLinkInput` | `201 PreviewLink` (v0.17.0, with a store) |
+| preview | `GET /preview-links?id` | | `PreviewLinkList` (v0.17.0, with a store) |
+| preview | `DELETE /preview-links/:linkId?changeId` | | `PreviewLinkRevokeResult` (v0.17.0, with a store) |
 | media | `GET /media?q&tag&trashed&lens&sort&dir&orientation&kind&cursor&limit` | | `MediaList` (`tag` and `trashed=only` are v0.4.0; `lens`, `sort`, `dir`, `total` and `sorted` v0.6.0; `orientation`, `kind` and `changeCursor` v0.13.0) |
 | media | `GET /media?changedSince&limit` | | `MediaList` of the files changed since, with `removed` and `moreChanges` (v0.13.0, optional) |
 | media | `POST /media?filename&alt&resize&changeId` | the file's own bytes, typed by `Content-Type` | `201 MediaUploadResult`, or `200` with `duplicateOf` (`resize` and the answer's extras are v0.13.0) |
@@ -128,6 +151,28 @@ Every write carries an `expectedVersion` and a Carrel `changeId`.
 - **First publish.** A first publish from Carrel's key is allowed (Carrel design decision 2). Carrel decides who may trigger it.
 - **Deletes.** Unpublish returns an item to draft. A delete is the separate `DELETE /content/:id` of v0.3.0, below.
 
+**Revisions.** A site keeps every revision of every item and never prunes them, least of all the live one: `revisions` lists them all and `revisionSource` opens each, so any publish can be undone and every diff can be made. A rename moves the history with the item; only a delete, or the trash emptying itself, removes it.
+
+## Errors
+
+Every error answer is `application/problem+json` (RFC 9457, v0.17.0): `{ error, message, type, title, status, detail }`. `error` and `message` are what every earlier reader reads; `type` is this table's anchor for the code, `title` the code's fixed title, `status` the HTTP status and `detail` the message again. A version conflict adds `currentVersion`, and a refused media delete `usedBy`.
+
+| Code | Status | Title | When |
+|---|---|---|---|
+| <a id="error-unauthorized"></a>`unauthorized` | 401 | Unauthorized | No key, or not the site's key. Every route, known or not, answers this to a caller without the key. |
+| <a id="error-rate-limited"></a>`rate-limited` | 429 | Too many requests | The caller's address spent the site's limit. |
+| <a id="error-not-configured"></a>`not-configured` | 503 | Not configured | The site's key is unset or shorter than 32 characters. |
+| <a id="error-unavailable"></a>`unavailable` | 503 | Unavailable | The rate limiter failed, so the request was refused. |
+| <a id="error-not-found"></a>`not-found` | 404 | Not found | No such route, id or version. |
+| <a id="error-method-not-allowed"></a>`method-not-allowed` | 405 | Method not allowed | The route exists, but not with this method. |
+| <a id="error-invalid"></a>`invalid` | 400 | Invalid request | The body or query is outside the contract. |
+| <a id="error-too-large"></a>`too-large` | 413 | Too large | The body or file is over the limit. |
+| <a id="error-version-conflict"></a>`version-conflict` | 409 | Version conflict | `expectedVersion` is not what the site holds; `currentVersion` says what it does (null: no such id). |
+| <a id="error-in-progress"></a>`in-progress` | 409 | In progress | A write under this change id is still running (v0.17.0, on a site with `replay`). Send it again once it has answered. |
+| <a id="error-refused"></a>`refused` | 422 | Refused | The site's own rules said no; the message says why. |
+| <a id="error-not-implemented"></a>`not-implemented` | 501 | Not implemented | The site does not offer this route, query or option; `meta.capabilities` says so beforehand. |
+| <a id="error-internal"></a>`internal` | 500 | Internal error | The site failed, or answered outside the contract. Logged on the site; nothing of it is passed on. |
+
 ## Changes in v0.3.0
 
 Additive: every v0.2.0 route and body is unchanged, and the schema hash and package version move on purpose.
@@ -163,6 +208,40 @@ Additive: every v0.4.0 route and body is unchanged, and the schema hash and pack
 - **Sweep.** `POST /mentions/sweep` with `{ changeId }` removes the failed and rejected mentions past the site's own retention windows (dustinedwards.info: 30 days for failed, 90 for rejected; pending and approved ones never expire) and answers `{ changeId, removed: { failed, rejected } }`. It names no version because it is not about one mention, and the windows are the site's, not the package's.
 - **Versions.** A mention's `version` is opaque, like a content version, and must move whenever its status, its verification or its decision does, and not when another mention changes. A write with a version the site no longer holds is `409 version-conflict` with `currentVersion`; a missing mention is `404`. dustinedwards.info's table has no `updated_at` and no version column, so its adapter derives one: a hash of `status`, `received_at`, `verified_at` and `decided_at` (a re-send resets all three timestamps and the status, an approve or reject sets the status and `decided_at`). It checks the version and then writes with the same values in the `WHERE`, so a change between the check and the write matches no row and is reported as a conflict.
 - **Conformance** adds, for every site: the list in shape (or `501` where the site has no group), writes without the key or with a wrong one refused, a decide and a delete of an id no site holds refused (`404`, or `501` without the group), and, where the site has the group, a decide with a stale version refused on the first real mention, a sweep with no change id refused (`400`, before anything is removed), and an unknown status refused. It never decides, deletes or sweeps anything real.
+
+## Changes in v0.17.0
+
+Additive: every v0.16.0 route and body still works as it did, and the schema hash moves on purpose. Every new route, capability and option is optional per site: a site whose adapter or config lacks it answers its route or option `501 not-implemented`, and `meta.capabilities` says which it has, so a v0.16.0 adapter compiles and runs unchanged. `test/v0.17.0.ts` names every addition, which each `test/contract-v*.test.ts` checks against its fixture: optional properties, the `in-progress` code at the end of `ErrorCode`, ten schemas and six routes. Two types gain a member a site only reads: `ScheduleRun` (`emptied`, `retried`) and `PublishAction`.
+
+- **Errors** are problem details (`application/problem+json`, RFC 9457), keeping `error` and `message`; see Errors above. One new code, `in-progress`.
+- **Safe retries by change id** (`capabilities.replay`). A site that passes `createSiteApi` a `store` makes every write under content, media and mentions safe to send again. Before a write runs, the package claims its `changeId` with the route and a hash of the query and body (an upload's bytes included). The same request again answers exactly what the first answered, with `Idempotent-Replayed: true`, and the adapter does not run; while the first is still running it answers `409 in-progress`; the same change id on a different request is `422 refused`. Successes, `409` and `422` answers are kept for 7 days (`runSchedules` prunes older ones); any other failure frees the change id, so a retry runs again. A claim still running after two minutes was left by a request that died, and a retry of the same request takes it over. On D1:
+
+  ```ts
+  import { d1SiteApiStore } from "@dustinedwards/site-api/store";
+  const api = createSiteApi({ /* ...as above */ store: d1SiteApiStore(env.DB) });
+  ```
+
+  `SITE_API_STORE_SQL` from the same module is the migration, the site's next `migrations/` file. Another store implements `SiteApiStore`. Without a store, a write is handled exactly as in v0.16.0.
+
+- **Post fields** (`capabilities.postFields`), beside the search fields and kept the same way, in the frontmatter as JSON literals: `excerpt`, `authors` (display names in credit order, the first the primary author, written as a JSON array so a name may hold a comma), `series` and `seriesPart` (a positive whole number). `@dustinedwards/site-api/frontmatter` exports `POST_FIELDS`, `postFieldsOf(front)` and `setPostFields(front, values)`; a blank value removes the key. A site names the ones it renders in `ContentAdapter.postFields`, and the search fields it renders in `ContentAdapter.searchFields`. List rows may carry `authors` and `excerpt`, filled from the frontmatter, and a revision may carry `authors`, everyone credited for that version (`author` stays).
+- **The render version** (`capabilities.render`): `SiteAdapter.renderVersion` is the Prelum `RENDER_VERSION` the site's stored HTML was rendered with, so Carrel sees a site that is behind. A site passes `RENDER_VERSION` from `@drdustinedwards/site-helpers/render/nomath`.
+- **Rename with a redirect** (`capabilities.contentRename`). `POST /content/:id/rename` `{ newId, expectedVersion, changeId }` moves the item, its history with it, and answers `RenameResult`: the write under the new id with `previousPath`, the old public path, which now answers a permanent (301) redirect to the new one, or `null` for an item never published. A taken `newId` is `422 refused`. The adapter's `rename` makes the move and the redirect one unit; the publish hooks hear `rename` with the old path and address (below).
+- **A content trash** (`capabilities.contentTrash`, only where the adapter has `trash`, `restore` and `delete`). `POST /content/:id/trash` and `POST /content/:id/restore` `{ expectedVersion, changeId }` answer `WriteResult`. Trashing a live post takes it off the site first, in the same unit; a restore always answers a draft and never republishes. Rows carry `trashedAt` (null when not trashed). The list never shows trashed items unless asked, `GET /content?trashed=true`, which lists only them (`501` without the trash). `runSchedules` deletes, through the adapter's `delete` with the listed version and the change id `trash-expired-<id>`, items trashed more than `TRASH_DAYS` (30) days ago, at most its limit per pass, and counts them in `emptied`.
+- **List filters on the site** (`capabilities.contentFilters`, any of `kind`, `tag`, `author`, `published` and `trashed`). `GET /content` takes `kind`, `tag`, `author` (one of the item's authors), `publishedAfter` and `publishedBefore` (either or both, the `published` filter) and `trashed`, and answers `ContentList` with the filters it applied in `filtered`. An older site drops a filter it does not know and lists everything, so the client refuses an answer without one it asked for as `501` (a trash view never shows live posts). The adapter names what it applies in `ContentAdapter.filters`; the package answers any other `501` before the adapter runs (`trashed` comes with the trash). `q` matches the title and the body, and without `sort` answers the newest updated first; every site's list does the same.
+- **Events and hooks.** The publish hooks' `action` gains `trash`, `restore`, `rename`, `schedule` and `unschedule`, and the event carries `previousStatus` and `status` and, on a rename, `previousPath` and `previousUrl`. A hook may name the actions it hears, `on: ["trash", "restore"]`; one with no `on` hears what it heard before, the actions that change a public page (`PAGE_ACTIONS`: a publish, an update of a live post, an unpublish, and a delete, trash or rename of a live post). A plain `{ name, run }` hook works unchanged. `indexNowHook` sends both addresses of a rename. With a `store`, a hook that fails is kept (`hook_retries`) and `runSchedules` runs it again after 1, 5, 30, 120 and 720 minutes (`HOOK_BACKOFF_MINUTES`), then logs `hook-gave-up` and drops it; the pass counts them in `retried`. A retried event has no `request`.
+- **A first publish by time.** A site whose scheduled post goes live by the clock alone, with no write (dustinedwards.info), must still list it in `SchedulesAdapter.due` as kind `publish`, with `apply` answering its `WriteResult` without writing, so the hooks hear it go live. Once applied it leaves `due`.
+- **Shareable preview links** (`capabilities.previewLinks`, with a store). `POST /preview-links` `{ id, hours?, changeId }` (1 to 168 hours, 48 by default) answers `201 { token, url, expiresAt }`: the token is 32 random bytes, base64url, answered this once, and the site keeps only its SHA-256 (`preview_links`). `GET /preview-links?id=` lists an item's working links as `{ id, createdAt, expiresAt }`, `id` being the first 12 hex characters of the hash, which revokes the link and cannot open it: `DELETE /preview-links/:linkId?changeId=`. Anyone with the `url`, `GET {origin}/preview/<token>` outside the prefix and with no key, sees the item's current source through the site's own `preview.render`, with `x-robots-tag: noindex, nofollow`, `cache-control: private, no-store` and `referrer-policy: no-referrer`; an expired or revoked link, or one whose item is in the trash, answers a small `410` page, any other `404`. Preview-link writes are not replayed, since their answer holds the token and the store never keeps one: a retried create makes a second link. It is rate limited like the API. The site mounts it beside the handler:
+
+  ```ts
+  if (api.matchesPreviewLink(request)) return api.servePreviewLink(request);
+  if (api.matches(request)) return api.handle(request, ctx);
+  ```
+
+- **Sending webmentions.** `webmentionHook({ store, fetch?, userAgent?, log? })` is a publish hook (`hooks: [webmentionHook({ store })]`, the same `store` the site passes `createSiteApi`) that hears a publish, an update, an unpublish, a delete, a trash and a rename. While the page is live it reads it and takes the outbound http(s) links inside its first `.h-entry .e-content`, or else its `<article>`, or else its `<main>` (links on the site's own origin left out); it sends a webmention, `source` and `target` form-encoded, to each of them and to each it sent last time (`webmention_targets`), so a removed link is heard too, and keeps the new set. Once the page is not live, it sends to the last set, and a rename sends for the old address as gone. Each target's endpoint is found from its HTTP `Link` header, then the first `<link>` or `<a>` with `rel="webmention"`, resolved against the page. Every address is checked first and at each of at most 5 redirects: http or https only, never localhost, loopback, private, link-local or `.local` hosts; each fetch has 5 seconds and reads at most 1 MB. One target failing is logged (`webmention`, with its result) and never stops the rest; a page that cannot be read fails the hook, and the store retries it. A deleted post's address should answer `410 Gone`, which the site's own routes do, so a receiver that checks the source drops the mention.
+- **Conformance** adds, for every site: error answers are problem details with `type`, `title` and `status`; a preview of a tiny source answers `text/html` that says `noindex` (the package now sends `x-robots-tag: noindex, nofollow` on every preview); a list filter the site does not offer answers `501`; and with `probeWrites`, a publish of the probe id is refused, a publish with a future `publishedAt` is `400` (`501` without `contentPublishedAt`), a rename, trash and restore of the probe id and a preview link for it are `404` (`501` without the capability), and, where the site has `replay`, a stale write sent twice under one change id answers the same `409` twice, the second replayed. Every probe write now carries its own change id, so a site's replay store never sees one id on two requests.
+- **The live check.** `site-api-live --origin https://example.com [--from <host>]` (the package's `bin`, plain Node with no build) is devkit's keyless probe of a deployed site: `/api/carrel/v1/meta` answers `401` problem details with `cache-control: no-store` (K4, K2), an unknown route under the prefix answers exactly the same (K4, no route leak), and an unknown `/preview/<token>` answers `404` with `noindex` (E2; a `404` without it is a warning, the site has not mounted preview links yet). Each finding is a GitHub annotation, `::error title=<item>::<url> <detail>` or `::warning ...`; it exits 0 when clean, 1 on any error, 2 when it could not run. `--from` names the run in the probes' user agent.
+- **The posts kit** (Capsomer 0.52.0's PostsList). `readPostQuery` reads `author`, `from` and `to` (whole days, both included) and `trashed=1`; `loadPosts` sends each to the site where `contentFilters` names it (kind and tag still filter the page on a site that does not), counts the Trash in `counts.trash`, gives rows `authors`, `excerpt` and `trashedAt`, and offers `trash`, `rename`, `previewLinks`, `filters` and the page's `authors`. A filtered list comes from the site, never a host's `postIndex`. `runPostsIntent` adds `trash` and `restore` (each the other's Undo; a live post needs `publish`), `rename` with `newId` (one post; a live one needs `publish`; Undo renames it back) and `preview-link` (one post; `IntentResult.previewLink` is `{ url, expiresAt }`, shown once). Where the site has a trash, `delete` deletes for good only a post already in it, and a duplicate's Undo trashes the copy.
+- **A settable publish date** (`capabilities.contentPublishedAt`). `POST /content/:id/publish` takes an optional `publishedAt`: a first publish backdated, or a live post re-dated. A date in the future is `400 invalid`, since that is a schedule. A site whose adapter does not set `publishedAtSettable: true` answers a publish carrying it `501`; one without it publishes as before.
 
 ## Changes in v0.16.0
 
@@ -381,7 +460,16 @@ interface SiteAdapter {
     revisionSource(id: string, version: string): Promise<string | null>;
     delete?(id: string, input: { expectedVersion: string; changeId: string }): Promise<void>; // v0.3.0; omit and the route answers 501
     setTags?(id: string, input: { tags: string[]; expectedVersion: string; changeId: string }): Promise<WriteResult>; // v0.6.0; omit and the route answers 501
+    // v0.17.0, each optional (the route or option answers 501 when absent).
+    publishedAtSettable?: boolean;                 // publish takes publishedAt
+    searchFields?: SearchField[];                  // the search fields the site renders
+    postFields?: PostField[];                      // the post fields the site renders
+    filters?: ("kind" | "tag" | "author" | "published")[]; // the list filters list applies
+    rename?(id: string, input: RenameInput): Promise<RenameResult>;          // the old path redirects (301)
+    trash?(id: string, input: { expectedVersion: string; changeId: string }): Promise<WriteResult>;   // with restore and delete, or neither
+    restore?(id: string, input: { expectedVersion: string; changeId: string }): Promise<WriteResult>; // always a draft
   };
+  renderVersion?: string;                          // v0.17.0: Prelum's RENDER_VERSION
   preview: { render(input: PreviewInput): Promise<string> };
   schedules?: {                                    // v0.10.0; omit for a site with no scheduled updates to live posts
     get(id: string): Promise<ScheduledUpdate | null>;
@@ -461,6 +549,7 @@ The package computes diffs, and serves the source at a revision, from `revisionS
   - the mentions checks of v0.5.0, listed above under Changes in v0.5.0;
   - the schedule read and cancel and the media focal point, caption and replace probes of v0.10.0, listed above under Changes in v0.10.0;
   - the media credit, transform, revert, history, suggestions and import probes of v0.13.0, listed above under Changes in v0.13.0.
+  - the v0.17.0 checks, listed above under Changes in v0.17.0.
 
   Every write it sends must be refused, so it never changes a conforming site. `probeMediaUpload: true` adds one real round trip: it uploads a 1x1 PNG of its own, reads it back, and deletes that file and no other. It is off by default.
 

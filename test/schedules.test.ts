@@ -4,6 +4,8 @@
 import { describe, expect, it } from "vitest";
 import { createSiteClient, SiteApiError } from "../src/client.js";
 import { createSiteApi, indexNowHook, type PublishEvent } from "../src/index.js";
+import { d1SiteApiStore, SITE_API_STORE_SQL } from "../src/store.js";
+import { d1 } from "./d1.js";
 import { memoryAdapter } from "../src/testing.js";
 import { KEY, ORIGIN, allow } from "./helpers.js";
 
@@ -48,7 +50,7 @@ describe("scheduled updates (v0.10.0)", () => {
     const moved = await client.schedule("a", { expectedVersion: scheduled.version, changeId: "c4", source: NEXT, publishAt: "2030-02-01T15:00:00Z" });
     expect(moved.scheduledUpdate).toEqual({ publishAt: "2030-02-01T15:00:00Z", changeId: "c4" });
 
-    expect(await api.runSchedules({ now: new Date("2030-02-01T14:59:59Z") })).toEqual({ applied: [], skipped: 0, failed: 0, more: false });
+    expect(await api.runSchedules({ now: new Date("2030-02-01T14:59:59Z") })).toEqual({ applied: [], skipped: 0, failed: 0, more: false, emptied: 0, retried: 0 });
     expect((await client.get("a")).source).toBe(LIVE);
 
     const run = await api.runSchedules({ now: new Date("2030-02-01T15:00:00Z") });
@@ -137,8 +139,48 @@ describe("publish hooks (v0.10.0)", () => {
     expect(sent).toEqual([{ origin: ORIGIN, key: "indexnow-key", urls: [`${ORIGIN}/blog/a`], from: `${ORIGIN}/api/carrel/v1/content/a/publish` }]);
     const page = { id: "a", path: "/blog/a", url: `${ORIGIN}/blog/a`, trigger: "request", error: "boom" };
     expect(logs.filter((l) => l.siteApi === "hook-failed")).toEqual([
-      { siteApi: "hook-failed", hook: "broken", action: "publish", changeId: "c2", ...page },
-      { siteApi: "hook-failed", hook: "broken", action: "update", changeId: "c3", ...page },
+      { siteApi: "hook-failed", hook: "broken", action: "publish", changeId: "c2", previousStatus: "draft", status: "published", ...page },
+      { siteApi: "hook-failed", hook: "broken", action: "update", changeId: "c3", previousStatus: "published", status: "published", ...page },
     ]);
+  });
+});
+
+describe("publish hooks (v0.17.0)", () => {
+  it("hears what a hook names, sends both addresses of a rename, and retries a failed hook from the store until it gives up", async () => {
+    const heard: string[] = [];
+    const sent: string[][] = [];
+    const logs: Array<Record<string, unknown>> = [];
+    let failing = true;
+    const adapter = memoryAdapter({ site: { id: "memory", name: "Memory site", origin: ORIGIN } });
+    const api = createSiteApi({
+      adapter,
+      key: KEY,
+      limiter: allow,
+      log: (entry) => logs.push(entry),
+      store: d1SiteApiStore(d1(SITE_API_STORE_SQL)),
+      hooks: [
+        { name: "all", on: ["schedule", "trash", "restore", "rename"], run: (e) => void heard.push(`${e.action} ${e.previousStatus}>${e.status}`) },
+        indexNowHook({ origin: ORIGIN, key: "k", submit: async (input) => (sent.push(input.urls), !failing) }),
+      ],
+    });
+    const client = createSiteClient({ baseUrl: ORIGIN, key: KEY, fetch: (async (i: RequestInfo | URL, init?: RequestInit) => api.handle(new Request(i, init))) as typeof fetch });
+
+    const draft = await client.saveDraft("a", { source: LIVE, expectedVersion: null, changeId: "c1" });
+    const live = await client.publish("a", { expectedVersion: draft.version, changeId: "c2" });
+    const moved = await client.rename("a", { newId: "b", expectedVersion: live.version, changeId: "c3" });
+    const trashed = await client.trash("b", { expectedVersion: moved.version, changeId: "c4" });
+    await client.restore("b", { expectedVersion: trashed.version, changeId: "c5" });
+    expect(heard).toEqual(["rename published>published", "trash published>draft", "restore draft>draft"]);
+    expect(sent).toEqual([[`${ORIGIN}/blog/a`], [`${ORIGIN}/blog/b`, `${ORIGIN}/blog/a`], [`${ORIGIN}/blog/b`]]);
+
+    // Three failures kept; each retry waits longer, and a retry that works drops it.
+    const minutes = (n: number) => new Date(Date.now() + n * 60 * 1000);
+    expect((await api.runSchedules({ now: minutes(2) })).retried).toBe(3);
+    expect((await api.runSchedules({ now: minutes(3) })).retried).toBe(0);
+    failing = false;
+    expect((await api.runSchedules({ now: minutes(8) })).retried).toBe(3);
+    expect((await api.runSchedules({ now: minutes(2000) })).retried).toBe(0);
+    expect(sent).toHaveLength(9);
+    expect(logs.filter((l) => l.siteApi === "hook-gave-up")).toEqual([]);
   });
 });

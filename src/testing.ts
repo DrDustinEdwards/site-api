@@ -2,7 +2,7 @@
 // sitting. Carrel's tests run against it, and the conformance suite is proven on it.
 
 import { MediaInUseError, NotFoundError, RefusedError, VersionConflictError, type DueSchedule, type MediaAdapter, type MediaReplace, type MentionsAdapter, type SchedulesAdapter, type SiteAdapter } from "./adapter.js";
-import { joinSource, setTags as writeTags, splitSource, tagsOf } from "./frontmatter.js";
+import { joinSource, POST_FIELDS, postFieldsOf, setTags as writeTags, splitSource, tagsOf } from "./frontmatter.js";
 import { LARGE_MEDIA_BYTES, MEDIA_LENSES } from "./contract.js";
 import type { ContentDoc, ContentStatus, ContentSummary, MediaEmbeddedField, MediaLens, MediaItem, MediaResize, MediaRevision, MediaTransformOp, MediaUploadLimits, MediaUse, MentionItem, MentionStatus, NotFoundRow, Revision, ScheduledUpdate, SiteInfo, WriteResult } from "./contract.js";
 import { kindOf, orientationOf, transformFocus, turnsSize } from "./media.js";
@@ -25,6 +25,8 @@ export interface MemoryAdapterOptions {
   contentDelete?: boolean;
   /** false for a site that keeps no post tags through the API (a v0.5.0 site): the tags route then answers 501. On by default. */
   contentTags?: boolean;
+  /** false for a v0.14.0 content group (v0.17.0): no settable publish date, rename, trash, list filters or post fields. On by default. */
+  contentExtras?: boolean;
   /** false for a media manager with no alt, tag, trash, focal point, caption or replace writes (a v0.2.0 site): those routes then answer 501. On by default. */
   mediaWrites?: boolean;
   /** false for a media manager with no lenses and no sort (a v0.5.0 site): a lens then answers 501. On by default. */
@@ -124,10 +126,12 @@ function pngText(bytes: Uint8Array): Record<string, string> {
   return found;
 }
 
-/** The item with its tags (v0.6.0), where its frontmatter can hold them. */
+/** The item with its tags (v0.6.0), where its frontmatter can hold them, and its authors and excerpt where it has them (v0.17.0). */
 function withTags(doc: ContentDoc): ContentDoc {
   const front = splitSource(doc.source).front;
-  return front !== null ? { ...doc, tags: tagsOf(front) } : doc;
+  if (front === null) return doc;
+  const { authors, excerpt } = postFieldsOf(front);
+  return { ...doc, tags: tagsOf(front), ...(authors.length ? { authors } : {}), ...(excerpt ? { excerpt } : {}) };
 }
 
 /** A list row: the item without its source, with its version and tags. */
@@ -155,11 +159,15 @@ export function memoryAdapter(
   purged: string[];
   /** Adds a mention as the site's endpoint would, and returns its id. */
   receiveMention(fields: ReceivedMention): string;
+  /** The permanent redirects a rename left (v0.17.0), old path to new. */
+  redirects: Map<string, string>;
 } {
   const site = options.site ?? { id: "memory", name: "Memory site", origin: "https://memory.example" };
   const now = options.now ?? (() => new Date());
   const store = new Map<string, Stored>();
   const schedules = options.schedules !== false;
+  const contentExtras = options.contentExtras !== false;
+  const redirects = new Map<string, string>();
   let counter = 0;
 
   function expect(id: string, expectedVersion: string | null): Stored | undefined {
@@ -172,7 +180,7 @@ export function memoryAdapter(
   function commit(
     id: string,
     previous: Stored | undefined,
-    changes: { source?: string; status: ContentStatus; publishAt?: string | null; pending?: ScheduledUpdate | null; publishedAt?: string },
+    changes: { source?: string; status: ContentStatus; publishAt?: string | null; pending?: ScheduledUpdate | null; publishedAt?: string; redate?: string; trashedAt?: string | null },
     changeId: string,
     message: string,
   ): WriteResult {
@@ -187,11 +195,12 @@ export function memoryAdapter(
       status: changes.status,
       path: changes.status === "published" || wasPublished ? `/blog/${id}` : null,
       publishAt: changes.publishAt ?? null,
-      publishedAt: changes.status === "published" ? (wasPublished ?? changes.publishedAt ?? at) : wasPublished,
+      publishedAt: changes.status === "published" ? (changes.redate ?? wasPublished ?? changes.publishedAt ?? at) : wasPublished,
       updatedAt: at,
       format: "markdown",
       source,
       version,
+      ...(contentExtras ? { trashedAt: changes.trashedAt !== undefined ? changes.trashedAt : (previous?.doc.trashedAt ?? null) } : {}),
     };
     // Only a live item carries an update, and a write that does not name one keeps what was waiting.
     const pending = changes.status !== "published" ? undefined : changes.pending === undefined ? previous?.pending : (changes.pending ?? undefined);
@@ -692,18 +701,28 @@ export function memoryAdapter(
       ? { insight: { notFound: async (q) => options.notFound!.filter((row) => q.includeProbes || row.kind === "page").slice(0, q.limit) } }
       : {}),
     store,
+    redirects,
     mediaStore,
     deleted,
     deletedContent,
     ...(mediaAdapter ? { media: mediaAdapter } : {}),
     content: {
+      ...(contentExtras ? { publishedAtSettable: true, postFields: POST_FIELDS, filters: ["kind", "tag", "author", "published"] as const } : {}),
       async list(query) {
         const needle = query.q?.toLowerCase();
         const all = [...store.values()]
           .map((s) => s.doc)
           .filter((d) => !query.status || d.status === query.status)
+          .filter((d) => Boolean(d.trashedAt) === Boolean(query.trashed))
+          .filter((d) => !query.kind || d.kind === query.kind)
+          .filter((d) => !query.tag || (withTags(d).tags ?? []).some((t) => t.toLowerCase() === query.tag!.toLowerCase()))
+          .filter((d) => !query.author || (withTags(d).authors ?? []).includes(query.author))
+          .filter((d) => !query.publishedAfter || (d.publishedAt !== null && at(d.publishedAt) >= at(query.publishedAfter)))
+          .filter((d) => !query.publishedBefore || (d.publishedAt !== null && at(d.publishedAt) < at(query.publishedBefore)))
           .filter((d) => !needle || d.title.toLowerCase().includes(needle) || d.source.toLowerCase().includes(needle))
           .sort((a, b) => a.id.localeCompare(b.id));
+        // A search without a sort answers the newest updated first (v0.17.0), as every site's does.
+        if (needle && !query.sort) all.sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? "") || a.id.localeCompare(b.id));
         // v0.6.0: sorted as asked, newest first for the dates and A to Z for titles unless dir says otherwise.
         const sorted = query.sort ? { sort: query.sort, dir: query.dir ?? (query.sort === "title" ? "asc" : "desc") } : undefined;
         if (sorted) {
@@ -732,7 +751,8 @@ export function memoryAdapter(
       async publish(id, input) {
         const previous = existing(id, input.expectedVersion);
         // A publish now drops any update that was waiting: what goes live is this.
-        return commit(id, previous, { source: input.source, status: "published", pending: null }, input.changeId, "Publish");
+        const redate = input.publishedAt ? { redate: new Date(input.publishedAt).toISOString() } : {};
+        return commit(id, previous, { source: input.source, status: "published", pending: null, ...redate }, input.changeId, "Publish");
       },
       async schedule(id, input) {
         const previous = existing(id, input.expectedVersion);
@@ -760,6 +780,34 @@ export function memoryAdapter(
               return commit(id, previous, { source, status: previous.doc.status, publishAt: previous.doc.publishAt }, input.changeId, "Tags");
             },
           }),
+      ...(contentExtras
+        ? {
+            async rename(id: string, input: { newId: string; expectedVersion: string; changeId: string }) {
+              if (!store.has(id)) throw new NotFoundError();
+              const previous = existing(id, input.expectedVersion);
+              if (store.has(input.newId)) throw new RefusedError(`${input.newId} is already taken.`);
+              const previousPath = previous.doc.publishedAt ? previous.doc.path : null;
+              store.delete(id);
+              const moved = { ...previous, doc: { ...previous.doc, id: input.newId } };
+              const written = commit(input.newId, moved, { status: previous.doc.status, publishAt: previous.doc.publishAt }, input.changeId, `Rename from ${id}`);
+              if (previousPath) redirects.set(previousPath, store.get(input.newId)!.doc.path!);
+              return { ...written, previousPath };
+            },
+            // A live item leaves the site as it goes to the trash, and comes back a draft.
+            async trash(id: string, input: { expectedVersion: string; changeId: string }) {
+              if (!store.has(id)) throw new NotFoundError();
+              const previous = existing(id, input.expectedVersion);
+              if (previous.doc.trashedAt) throw new RefusedError("This post is already in the trash.");
+              return commit(id, previous, { status: "draft", pending: null, trashedAt: now().toISOString() }, input.changeId, "Trash");
+            },
+            async restore(id: string, input: { expectedVersion: string; changeId: string }) {
+              if (!store.has(id)) throw new NotFoundError();
+              const previous = existing(id, input.expectedVersion);
+              if (!previous.doc.trashedAt) throw new RefusedError("This post is not in the trash.");
+              return commit(id, previous, { status: "draft", trashedAt: null }, input.changeId, "Restore");
+            },
+          }
+        : {}),
       ...(options.contentDelete === false
         ? {}
         : {

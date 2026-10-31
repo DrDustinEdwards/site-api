@@ -56,7 +56,16 @@ describe("PLANT: the wrong key", () => {
       const { api, logs } = site(adapter);
       const response = await api.handle(req("/api/carrel/v1/content", { key, headers }));
       expect(response.status).toBe(401);
-      expect(await response.json()).toEqual({ error: "unauthorized", message: "Unauthorized." });
+      // v0.17.0: problem details (RFC 9457), keeping the error and message every earlier reader expects.
+      expect(response.headers.get("content-type")).toBe("application/problem+json; charset=utf-8");
+      expect(await response.json()).toEqual({
+        error: "unauthorized",
+        message: "Unauthorized.",
+        type: "https://github.com/DrDustinEdwards/site-api/blob/main/README.md#error-unauthorized",
+        title: "Unauthorized",
+        status: 401,
+        detail: "Unauthorized.",
+      });
       expect(calls).not.toHaveBeenCalled();
       expect(logs).toContainEqual(expect.objectContaining({ siteApi: "refused" }));
     });

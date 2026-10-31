@@ -8,8 +8,10 @@ import {
   ContentTag,
   type Capabilities,
   type ContentDoc,
+  type ContentFilter,
   type ContentStatus,
   type ContentSummary,
+  type ListQuery,
   type ScheduledUpdateSummary,
   type SortDir,
 } from "../contract.js";
@@ -49,6 +51,12 @@ export interface PostQuery {
   status?: ContentStatus;
   kind?: string;
   tag?: string;
+  /** v0.17.0, where the site filters by them: one of the post's authors, and a published range in whole days (YYYY-MM-DD, both included). */
+  author?: string;
+  from?: string;
+  to?: string;
+  /** v0.17.0, where the site has a trash: "1" lists only the trash. */
+  trashed?: "1";
   sort?: PostSort;
   dir?: SortDir;
   cursor?: string;
@@ -73,6 +81,11 @@ export interface PostRow {
   /** Present when the site's list carries it. */
   version?: string;
   tags?: string[];
+  /** v0.17.0, where the site keeps them: everyone credited, the primary first, and the excerpt. */
+  authors?: string[];
+  excerpt?: string;
+  /** v0.17.0, on a trashed post: when it went to the trash. */
+  trashedAt?: string | null;
   notes?: RowNote[];
 }
 
@@ -86,10 +99,25 @@ export interface PostsData {
     /** True when the rows were sorted on this page only, because the site's list does not sort. */
     sortedOnPage?: boolean;
   };
-  counts?: Partial<Record<ContentStatus | "all", number>>;
+  counts?: Partial<Record<ContentStatus | "all" | "trash", number>>;
   kinds: string[];
-  /** `scheduledUpdates` (v0.10.0): the site keeps an update waiting on a live post, so reschedule and cancel work on it. */
-  offers: { delete: boolean; schedule: boolean; tags: boolean; duplicate: boolean; scheduledUpdates: boolean };
+  /**
+   * `scheduledUpdates` (v0.10.0): the site keeps an update waiting on a live post, so reschedule and cancel work on it.
+   * v0.17.0: `trash`, `rename` and `previewLinks` as the site's capabilities say, the list `filters` it applies, and the
+   * `authors` on this page for the Author select.
+   */
+  offers: {
+    delete: boolean;
+    schedule: boolean;
+    tags: boolean;
+    duplicate: boolean;
+    scheduledUpdates: boolean;
+    trash: boolean;
+    rename: boolean;
+    previewLinks: boolean;
+    filters: ContentFilter[];
+    authors: string[];
+  };
   can: Permissions;
 }
 
@@ -102,12 +130,22 @@ export function readPostQuery(search: URLSearchParams): PostQuery {
   const sort = search.get("sort");
   const dir = search.get("dir");
   const cursor = search.get("cursor")?.slice(0, 500);
+  const author = search.get("author")?.trim().slice(0, 200);
+  const day = (name: string) => {
+    const value = search.get(name)?.trim();
+    return value && /^\d{4}-\d{2}-\d{2}$/.test(value) && Timestamp.safeParse(`${value}T00:00:00Z`).success ? value : undefined;
+  };
+  const [from, to] = [day("from"), day("to")];
   return {
     ...(dir === "asc" || dir === "desc" ? { dir } : {}),
     ...(q ? { q } : {}),
     ...(status && (["draft", "scheduled", "published"] as const).includes(status as ContentStatus) ? { status: status as ContentStatus } : {}),
     ...(kind ? { kind } : {}),
     ...(tag ? { tag } : {}),
+    ...(author ? { author } : {}),
+    ...(from ? { from } : {}),
+    ...(to ? { to } : {}),
+    ...(search.get("trashed") === "1" ? { trashed: "1" as const } : {}),
     ...(sort && POST_SORTS.includes(sort as PostSort) ? { sort: sort as PostSort } : {}),
     ...(cursor ? { cursor } : {}),
   };
@@ -130,6 +168,9 @@ function postRow(source: ContentSource, item: ContentSummary & { version?: strin
       : {}),
     ...(item.version ? { version: item.version } : {}),
     ...(item.tags ? { tags: item.tags } : {}),
+    ...(item.authors ? { authors: item.authors } : {}),
+    ...(item.excerpt ? { excerpt: item.excerpt } : {}),
+    ...(item.trashedAt !== undefined ? { trashedAt: item.trashedAt } : {}),
   };
 }
 
@@ -142,32 +183,50 @@ const BY: Record<PostSort, (a: PostRow, b: PostRow) => number> = {
 /** One page of one site's posts, as PostsList renders it. */
 export async function loadPosts(source: ContentSource, query: PostQuery = {}): Promise<PostsData> {
   const meta = await source.client.meta();
-  const lister = source.postIndex ?? source.client;
+  const filters = meta.capabilities.contentFilters ?? [];
+  const trash = hasTrash(meta.capabilities);
+  // The filters the site applies (v0.17.0) go to it; kind and tag on a site without them still work on the page it sent.
+  const onSite: Partial<ListQuery> = {
+    ...(query.kind && filters.includes("kind") ? { kind: query.kind } : {}),
+    ...(query.tag && filters.includes("tag") ? { tag: query.tag } : {}),
+    ...(query.author && filters.includes("author") ? { author: query.author } : {}),
+    ...(query.from && filters.includes("published") ? { publishedAfter: `${query.from}T00:00:00.000Z` } : {}),
+    ...(query.to && filters.includes("published") ? { publishedBefore: `${query.to}T23:59:59.999Z` } : {}),
+    ...(query.trashed && trash ? { trashed: true } : {}),
+  };
+  // A host's own index answers only the plain list; a filtered one comes from the site, which says what it applied.
+  const lister = Object.keys(onSite).length > 0 ? source.client : (source.postIndex ?? source.client);
   const base = { ...(query.q ? { q: query.q } : {}), ...(query.sort ? { sort: query.sort, ...(query.dir ? { dir: query.dir } : {}) } : {}) };
-  const list = await lister.list({ limit: PER_PAGE, ...base, ...(query.status ? { status: query.status } : {}), ...(query.cursor ? { cursor: query.cursor } : {}) });
+  const list = await lister.list({ limit: PER_PAGE, ...base, ...onSite, ...(query.status ? { status: query.status } : {}), ...(query.cursor ? { cursor: query.cursor } : {}) });
   let rows = list.items.map((item) => postRow(source, item));
   const kinds = [...new Set(rows.map((r) => r.kind))].sort();
-  // The contract has no kind or tag filter, so these work on the page the site sent.
-  if (query.kind) rows = rows.filter((r) => r.kind === query.kind);
-  if (query.tag) rows = rows.filter((r) => (r.tags ?? []).some((t) => sameTag(t, query.tag!)));
+  const authors = [...new Set(rows.flatMap((r) => r.authors ?? []))].sort();
+  if (query.kind && !onSite.kind) rows = rows.filter((r) => r.kind === query.kind);
+  if (query.tag && !onSite.tag) rows = rows.filter((r) => (r.tags ?? []).some((t) => sameTag(t, query.tag!)));
   // A site that sorted says so (v0.6.0); otherwise the kit sorts the page it has and says that.
   const sortedOnPage = query.sort !== undefined && list.sorted === undefined;
   if (sortedOnPage) {
     const dir = query.dir ?? (query.sort === "title" ? "asc" : "desc");
     rows = [...rows].sort((a, b) => (dir === (query.sort === "title" ? "asc" : "desc") ? 1 : -1) * BY[query.sort!](a, b));
   }
-  // Where the site counts (v0.6.0), each status tab gets its count for the same search.
+  // Where the site counts (v0.6.0), each status tab gets its count for the same search, and the Trash its own.
   let counts: PostsData["counts"];
   if (list.total !== undefined) {
     const statuses = ["draft", "scheduled", "published"] as const;
-    const totals = await Promise.all(statuses.map((status) => lister.list({ limit: 1, ...(query.q ? { q: query.q } : {}), status })));
-    counts = { all: query.status ? totals.reduce((n, t) => n + (t.total ?? 0), 0) : list.total };
+    const search = query.q ? { q: query.q } : {};
+    const [totals, binned] = await Promise.all([
+      Promise.all(statuses.map((status) => lister.list({ limit: 1, ...search, status }))),
+      trash ? source.client.list({ limit: 1, ...search, trashed: true }) : null,
+    ]);
+    counts = { all: query.status || query.trashed ? totals.reduce((n, t) => n + (t.total ?? 0), 0) : list.total };
     statuses.forEach((status, i) => (counts![status] = totals[i]!.total ?? 0));
+    if (binned?.total !== undefined) counts.trash = binned.total;
   }
   if (source.notes && rows.length > 0) {
     const notes = await source.notes(rows.map((r) => r.id));
     rows = rows.map((r) => (notes[r.id]?.length ? { ...r, notes: notes[r.id] } : r));
   }
+  const capabilities = meta.capabilities;
   return {
     site: { id: source.site.id, name: source.site.name },
     query,
@@ -175,10 +234,24 @@ export async function loadPosts(source: ContentSource, query: PostQuery = {}): P
     page: { nextCursor: list.nextCursor, ...(list.total !== undefined ? { total: list.total } : {}), ...(sortedOnPage ? { sortedOnPage } : {}) },
     ...(counts ? { counts } : {}),
     kinds,
-    offers: { delete: meta.capabilities.contentDelete === true, schedule: true, tags: true, duplicate: true, scheduledUpdates: meta.capabilities.scheduledUpdates === true },
+    offers: {
+      delete: capabilities.contentDelete === true,
+      schedule: true,
+      tags: true,
+      duplicate: true,
+      scheduledUpdates: capabilities.scheduledUpdates === true,
+      trash,
+      rename: capabilities.contentRename === true,
+      previewLinks: capabilities.previewLinks === true,
+      filters,
+      authors,
+    },
     can: source.can,
   };
 }
+
+/** True where the site has the content trash (v0.17.0): trash and restore, and delete for good from it. */
+const hasTrash = (capabilities: Capabilities | null) => capabilities?.contentTrash === true;
 
 /** A time as the kit's messages say it: "2030-01-01 15:00 UTC", the same wherever the host runs. */
 export function scheduleLabel(publishAt: string): string {
@@ -236,7 +309,9 @@ export async function loadScheduledUpdate(source: ContentSource, id: string): Pr
   };
 }
 
-const POST_INTENTS = ["tag-add", "tag-remove", "duplicate", "unpublish", "republish", "delete", "reschedule", "cancel-schedule"] as const;
+const POST_INTENTS = [
+  "tag-add", "tag-remove", "duplicate", "unpublish", "republish", "delete", "reschedule", "cancel-schedule", "trash", "restore", "rename", "preview-link",
+] as const;
 export type PostIntent = (typeof POST_INTENTS)[number];
 
 /** A tag as a post's frontmatter list can hold it: one short piece of text with nothing that would break the list. */
@@ -260,6 +335,12 @@ export async function runPostsIntent(source: ContentSource, input: IntentInput):
   const need: keyof Permissions =
     intent === "delete" ? "deleteContent" : intent === "unpublish" || intent === "republish" || intent === "reschedule" || intent === "cancel-schedule" ? "publish" : "edit";
   if (!source.can[need]) return refused(NOT_YOURS[need]);
+  // Rename and a preview link name one post, and a rename one new id for it.
+  if ((intent === "rename" || intent === "preview-link") && texts(input, "ids").length !== 1) return refused("Choose one post.");
+  const newId = intent === "rename" ? text(input, "newId").trim() : "";
+  if (intent === "rename" && !ContentId.safeParse(newId).success) {
+    return refused("A new id is lowercase letters, digits and hyphens, and may have / between parts.");
+  }
 
   const { targets, invalid } = targetsOf(input, ContentId);
   const tooMany = checkCount(targets.length + invalid.length, "post");
@@ -282,6 +363,9 @@ export async function runPostsIntent(source: ContentSource, input: IntentInput):
   let capabilities: Capabilities | null = null;
   if (intent !== "unpublish" && intent !== "republish") capabilities = (await source.client.meta()).capabilities;
   if (intent === "delete" && capabilities?.contentDelete !== true) return refused("This site does not delete posts through the site API.");
+  if ((intent === "trash" || intent === "restore") && !hasTrash(capabilities)) return refused("This site has no trash for posts.");
+  if (intent === "rename" && capabilities?.contentRename !== true) return refused("This site does not rename posts through the site API.");
+  if (intent === "preview-link" && capabilities?.previewLinks !== true) return refused("This site does not make preview links.");
   if (intent === "delete" && targets.length > 0) {
     const ask = askFirst(input, {
       intent,
@@ -304,6 +388,8 @@ export async function runPostsIntent(source: ContentSource, input: IntentInput):
   const undoIds: string[] = [];
   const undoVersions: string[] = [];
   let notUndoable = 0;
+  const renamed: { from?: string } = {};
+  let previewLink: IntentResult["previewLink"];
 
   const { outcomes, conflict } = await eachItem(source, targets, "post", async ({ id, version }): Promise<Outcome> => {
     const hold = await held(id);
@@ -423,20 +509,74 @@ export async function runPostsIntent(source: ContentSource, input: IntentInput):
       }
       case "delete": {
         const doc = await read(id, version);
+        // Where the site has a trash, only a post already in it is deleted for good.
+        if (hasTrash(capabilities) && !doc.trashedAt) return { id, ok: false, message: "Move this post to the Trash first; it is deleted for good from there." };
         const change = changeId();
         await client.delete(id, { expectedVersion: doc.version, changeId: change });
         const note = await recordDone(source, "post-delete", id, change);
         return { id, ok: true, message: "Deleted from the site." + note };
       }
+      case "trash": {
+        const doc = await read(id, version);
+        if (doc.trashedAt) return { id, ok: true, message: "Already in the Trash. Not changed." };
+        if (doc.status !== "draft" && !source.can.publish) return { id, ok: false, message: LIVE_POST };
+        const change = changeId();
+        const written = await client.trash(id, { expectedVersion: doc.version, changeId: change });
+        undoIds.push(id);
+        undoVersions.push(written.version);
+        const note = await recordDone(source, "post-trash", id, change);
+        return { id, ok: true, message: (doc.status === "draft" ? "Moved to the Trash." : "Taken off the site and moved to the Trash.") + note };
+      }
+      case "restore": {
+        const doc = await read(id, version);
+        if (!doc.trashedAt) return { id, ok: true, message: "Not in the Trash. Not changed." };
+        const change = changeId();
+        const written = await client.restore(id, { expectedVersion: doc.version, changeId: change });
+        undoIds.push(id);
+        undoVersions.push(written.version);
+        const note = await recordDone(source, "post-restore", id, change);
+        return { id, ok: true, message: "Restored as a draft." + note };
+      }
+      case "rename": {
+        const doc = await read(id, version);
+        if (doc.status !== "draft" && !source.can.publish) return { id, ok: false, message: "Renaming a live post changes its public address, which is a publish, so it was left as it was." };
+        if (newId === id) return { id, ok: true, message: "That is its id already. Not changed." };
+        const change = changeId();
+        const written = await client.rename(id, { newId, expectedVersion: doc.version, changeId: change });
+        undoIds.push(newId);
+        undoVersions.push(written.version);
+        renamed.from = id;
+        const note = await recordDone(source, "post-rename", newId, change);
+        const moved = written.previousPath ? ` Its old address ${written.previousPath} now redirects to the new one.` : "";
+        return { id, ok: true, message: `Renamed to "${newId}".` + moved + note };
+      }
+      case "preview-link": {
+        await read(id, version);
+        const link = await client.previewLinks.create({ id, changeId: changeId() });
+        previewLink = { url: link.url, expiresAt: link.expiresAt };
+        return { id, ok: true, message: `Made a preview link that works until ${scheduleLabel(link.expiresAt)}.` };
+      }
     }
   });
 
   const all = [...early, ...outcomes];
-  const extra: Partial<IntentResult> = conflict ? { conflict } : {};
+  const extra: Partial<IntentResult> = { ...(conflict ? { conflict } : {}), ...(previewLink ? { previewLink } : {}) };
   let tail = "";
   if (undoIds.length > 0) {
     const inverse = undoIntent(intent, capabilities, source.can);
-    if (inverse) extra.undo = { intent: inverse, fields: { ids: undoIds, versions: undoVersions, ...(tag ? { tag } : {}), ...(undoTimes.length ? { publishAts: undoTimes } : {}), ...(inverse === "delete" ? { confirm: String(undoIds.length) } : {}) } };
+    if (inverse) {
+      extra.undo = {
+        intent: inverse,
+        fields: {
+          ids: undoIds,
+          versions: undoVersions,
+          ...(tag ? { tag } : {}),
+          ...(undoTimes.length ? { publishAts: undoTimes } : {}),
+          ...(renamed.from ? { newId: renamed.from } : {}),
+          ...(inverse === "delete" ? { confirm: String(undoIds.length) } : {}),
+        },
+      };
+    }
     else if (intent === "duplicate") {
       tail =
         capabilities?.contentDelete === true
@@ -462,6 +602,10 @@ const DONE: Record<PostIntent, string> = {
   delete: "Deleted",
   reschedule: "Rescheduled",
   "cancel-schedule": "Canceled the schedule of",
+  trash: "Moved to the Trash",
+  restore: "Restored",
+  rename: "Renamed",
+  "preview-link": "Made a preview link for",
 };
 
 const LIVE_POST = "Changing a live post is a publish, which is not yours to do here, so this one was left as it was.";
@@ -478,13 +622,22 @@ function undoIntent(intent: PostIntent, capabilities: Capabilities | null, can: 
     case "republish":
       return "unpublish";
     case "duplicate":
-      // Undo deletes the copy, at the version the duplicate made: only where the site deletes and the person may.
+      // Undo trashes the copy where the site has a trash; else deletes it, at the version the duplicate made, where the site deletes and the person may.
+      if (hasTrash(capabilities)) return "trash";
       return capabilities?.contentDelete === true && can.deleteContent ? "delete" : null;
+    case "trash":
+      return "restore";
+    case "restore":
+      return "trash";
+    case "rename":
+      // Back to the old id; the redirect the first rename left stays, which is harmless.
+      return "rename";
     case "reschedule":
       // Back to the times they had, one per post.
       return "reschedule";
     case "delete":
     case "cancel-schedule":
+    case "preview-link":
       return null;
   }
 }

@@ -5,7 +5,6 @@
 // Carrel gets, and the content kit (./admin) runs the same against either client.
 
 import { toHex } from "@dustinedwards/site-runtime/encoding";
-
 import type { SiteAdapter } from "./adapter.js";
 import { createSiteClient, type SiteClient } from "./client.js";
 import { createSiteApi } from "./server.js";

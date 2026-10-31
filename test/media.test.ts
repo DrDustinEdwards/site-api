@@ -227,7 +227,7 @@ describe("PLANT: a site answering outside the media contract", () => {
     const { api, logs } = site(adapter);
     const response = await api.handle(req("/api/carrel/v1/media"));
     expect(response.status).toBe(500);
-    expect(await response.json()).toEqual({ error: "internal", message: "The site answered outside the contract." });
+    expect(await response.json()).toMatchObject({ error: "internal", message: "The site answered outside the contract." });
     expect(logs).toContainEqual(expect.objectContaining({ siteApi: "contract-breach" }));
   });
 });
