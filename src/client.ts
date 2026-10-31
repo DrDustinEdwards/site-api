@@ -26,6 +26,7 @@ import {
   MentionSweepResult,
   MentionWriteResult,
   Meta,
+  NotFoundReport,
   PREFIX,
   RevisionList,
   RevisionSource,
@@ -104,7 +105,7 @@ export function createSiteClient(config: SiteClientConfig) {
     return schema.parse(await (await call(method, path, body)).json()) as z.infer<T>;
   }
 
-  function query(params: Record<string, string | number | undefined>): string {
+  function query(params: Record<string, string | number | boolean | undefined>): string {
     const search = new URLSearchParams();
     for (const [k, v] of Object.entries(params)) if (v !== undefined) search.set(k, String(v));
     const text = search.toString();
@@ -217,6 +218,12 @@ export function createSiteClient(config: SiteClientConfig) {
       /** Takes `{ changeId }` (v0.6.0), like every other write; the change id alone still works. */
       sweep: (input: { changeId: string } | string) =>
         get(MentionSweepResult, "POST", "/mentions/sweep", { changeId: typeof input === "string" ? input : input.changeId }),
+    },
+    /** The insight group (v0.16.0), optional per site (`insightNotFound`): a site without it answers SiteApiError with status 501. */
+    insight: {
+      /** The site's most-hit missing paths, with the hosts that linked to each: `days` 1 to 90 (30), `limit` 1 to 200 (50). */
+      notFound: (q: { days?: number; limit?: number; includeProbes?: boolean } = {}) =>
+        get(NotFoundReport, "GET", `/insight/not-found${query(q)}`),
     },
   };
 }

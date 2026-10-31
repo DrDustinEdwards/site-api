@@ -1,4 +1,4 @@
-// PLANT: the v0.12.0 contract, unchanged but for what v0.13.0 names. v0.13.0 is additive: every v0.12.0 route and body
+// PLANT: the v0.12.0 contract, unchanged but for what v0.13.0 and v0.16.0 name. Each is additive: every v0.12.0 route and body
 // stays as it was, so a site or a Carrel on v0.12.0 keeps working.
 //
 // test/fixtures/contract-v0.12.0.json was written from the v0.12.0 build (tag v0.12.0, 63b2b9c, which carries
@@ -24,8 +24,8 @@ const ITEM = ["color", "credit", "downloadUrl", "license", "licenseExpires", "pl
 const ADDED: Record<string, string[]> = {
   Capabilities: [
     "mediaChanges", "mediaCredit", "mediaDuplicates", "mediaEmbedded", "mediaFilters", "mediaHistory", "mediaImport",
-    "mediaResize", "mediaResizePass", "mediaSuggestions", "mediaTransform", "mediaUsage",
-  ],
+    "mediaResize", "mediaResizePass", "mediaSuggestions", "mediaTransform", "mediaUsage", "insightNotFound",
+  ].sort(),
   Meta: [],
   MediaItem: ITEM,
   MediaDetail: [...ITEM, "twins"].sort(),
@@ -64,7 +64,7 @@ describe("the v0.12.0 contract", () => {
     expect(V0120.routes.length).toBe(35);
   });
 
-  it("keeps every v0.12.0 route exactly, but the upload's answer named MediaUploadResult, and adds only the v0.13.0 media routes", () => {
+  it("keeps every v0.12.0 route exactly, but the upload's answer named MediaUploadResult, and adds only the v0.13.0 media routes and the v0.16.0 404 report", () => {
     for (const route of V0120.routes) {
       const expected = route.method === "POST" && route.path === "/media" ? { ...route, response: "MediaUploadResult" } : route;
       expect(contract.ROUTES, JSON.stringify(route)).toContainEqual(expected);
@@ -78,6 +78,7 @@ describe("the v0.12.0 contract", () => {
       "POST /media/:id/revert",
       "GET /media/:id/suggestions",
       "POST /media/resize-pass",
+      "GET /insight/not-found",
     ]);
   });
 
@@ -103,8 +104,8 @@ describe("the v0.12.0 contract", () => {
     widened(V0120.schemas.MediaLens!, now("MediaLens"), NEW_LENSES, "MediaLens");
   });
 
-  it("adds only the new schemas v0.13.0 names", () => {
-    expect(exported.filter((n) => !(n in V0120.schemas)).sort()).toEqual([...NEW_SCHEMAS].sort());
+  it("adds only the new schemas v0.13.0 and v0.16.0 name", () => {
+    expect(exported.filter((n) => !(n in V0120.schemas)).sort()).toEqual([...NEW_SCHEMAS, "NotFoundQuery", "NotFoundReport", "NotFoundRow"].sort());
   });
 
   it("parses v0.12.0 bodies with the v0.13.0 schemas", () => {

@@ -22,6 +22,7 @@ import type {
   MentionList,
   MentionListQuery,
   MentionStatus,
+  NotFoundRow,
   PreviewInput,
   PublishInput,
   Revision,
@@ -318,6 +319,22 @@ export interface SchedulesAdapter {
   apply(id: string, input: DueSchedule & { now: Date }): Promise<WriteResult | null>;
 }
 
+/** What a 404 report is asked for (v0.16.0): site-runtime's `notFoundReport` options, checked and filled in. */
+export interface NotFoundOptions {
+  days: number;
+  limit: number;
+  includeProbes: boolean;
+}
+
+/** The insight group (v0.16.0), optional per site: what the site counted about its own pages. Read only. */
+export interface InsightAdapter {
+  /**
+   * The most-hit missing paths of the last `days` UTC days, at most `limit`, probes only with `includeProbes`. A site
+   * that counts its 404s with site-runtime's `./not-found` answers `(options) => notFoundReport(env.DB, options)`.
+   */
+  notFound(options: NotFoundOptions): Promise<NotFoundRow[]>;
+}
+
 export interface SiteAdapter {
   site: SiteInfo;
   content: ContentAdapter;
@@ -331,6 +348,8 @@ export interface SiteAdapter {
    * a live item is refused, since the site's own schedule would take it off the site until the time.
    */
   schedules?: SchedulesAdapter;
+  /** Absent on a site that reports nothing about its pages (v0.16.0): the insight routes then answer 501. */
+  insight?: InsightAdapter;
 }
 
 /**
@@ -343,7 +362,7 @@ export function capabilitiesOf(adapter: SiteAdapter): Capabilities {
     preview: true,
     media: Boolean(adapter.media),
     inbox: false,
-    insight: false,
+    insight: Boolean(adapter.insight),
     publications: false,
     ...(adapter.media ? { mediaUpload: adapter.media.limits } : {}),
     ...(adapter.content.delete ? { contentDelete: true } : {}),
@@ -371,6 +390,7 @@ export function capabilitiesOf(adapter: SiteAdapter): Capabilities {
     ...(adapter.mentions ? { mentions: true } : {}),
     ...(adapter.mentions?.reset ? { mentionReset: true } : {}),
     ...(adapter.schedules ? { scheduledUpdates: true } : {}),
+    ...(adapter.insight ? { insightNotFound: true } : {}),
   };
 }
 

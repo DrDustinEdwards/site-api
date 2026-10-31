@@ -25,8 +25,8 @@ const ADDED: Record<string, string[]> = {
   Capabilities: [
     "contentTags", "mediaCaption", "mediaChanges", "mediaCredit", "mediaDuplicates", "mediaEmbedded", "mediaFilters", "mediaFocus",
     "mediaHistory", "mediaImport", "mediaLenses", "mediaReplace", "mediaReplaceKeepsSize", "mediaResize", "mediaResizePass",
-    "mediaSuggestions", "mediaTransform", "mediaUsage", "mentionReset", "scheduledUpdates",
-  ],
+    "mediaSuggestions", "mediaTransform", "mediaUsage", "mentionReset", "scheduledUpdates", "insightNotFound",
+  ].sort(),
   MediaItem: ["caption", "focus", ...V0130_ITEM].sort(),
   MediaDetail: ["caption", "focus", "twins", ...V0130_ITEM].sort(),
   MediaUploadQuery: ["resize"],
@@ -76,6 +76,7 @@ describe("the v0.5.0 contract", () => {
       "POST /media/:id/revert",
       "GET /media/:id/suggestions",
       "POST /media/resize-pass",
+      "GET /insight/not-found",
     ]);
   });
 
@@ -101,7 +102,7 @@ describe("the v0.5.0 contract", () => {
     expect(strip(after)).toEqual(strip(before));
   });
 
-  it("adds only the new schemas v0.6.0, v0.10.0 and v0.13.0 name", () => {
+  it("adds only the new schemas v0.6.0, v0.10.0, v0.13.0 and v0.16.0 name", () => {
     const v060 = ["ContentTag", "ContentTagsInput", "ContentTags", "MediaLens", "SortDir"];
     const v0100 = [
       "ScheduleCancelQuery", "ScheduledUpdate", "ScheduledUpdateSummary",
@@ -113,7 +114,7 @@ describe("the v0.5.0 contract", () => {
       "MediaResizePassResult", "MediaRevertInput", "MediaRevision", "MediaSourceUrl", "MediaSuggestions",
       "MediaTransformInput", "MediaTransformOp", "MediaTransformResult", "MediaTwin", "MediaUploadResult",
     ];
-    expect(exported.filter((n) => !(n in V050.schemas)).sort()).toEqual([...v060, ...v0100, ...v0130].sort());
+    expect(exported.filter((n) => !(n in V050.schemas)).sort()).toEqual([...v060, ...v0100, ...v0130, "NotFoundQuery", "NotFoundReport", "NotFoundRow"].sort());
   });
 
   it("parses v0.5.0 bodies with the v0.6.0 schemas", () => {

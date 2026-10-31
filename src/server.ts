@@ -10,6 +10,7 @@ import { PREFIX } from "./contract.js";
 import { runHooks, type PublishAction, type PublishHook } from "./hooks.js";
 import { contentRoutes } from "./server/content.js";
 import { describeFailure, fail, type Route } from "./server/http.js";
+import { insightRoutes } from "./server/insight.js";
 import { mediaRoutes } from "./server/media.js";
 import { mentionsRoutes } from "./server/mentions.js";
 
@@ -96,17 +97,18 @@ function bearer(request: Request): string | null {
 export function createSiteApi(config: SiteApiConfig): SiteApi {
   const { adapter, limiter } = config;
   const log = config.log ?? ((entry) => console.warn(JSON.stringify(entry)));
-  const { media, mentions } = adapter;
+  const { media, mentions, insight } = adapter;
 
   const routes: Route[] = [
     ...contentRoutes(adapter),
     ...(media ? mediaRoutes(media, log) : []),
     ...(mentions ? mentionsRoutes(mentions) : []),
+    ...(insight ? insightRoutes(insight) : []),
   ];
 
-  // Groups a site has not implemented. Media and mentions leave this list when the adapter has them.
+  // Groups a site has not implemented. Media, mentions and insight leave this list when the adapter has them.
   const LATER = new RegExp(
-    `^/(${[...(media ? [] : ["media"]), ...(mentions ? [] : ["mentions"]), "inbox", "insight", "publications"].join("|")})(/|$)`,
+    `^/(${[...(media ? [] : ["media"]), ...(mentions ? [] : ["mentions"]), ...(insight ? [] : ["insight"]), "inbox", "publications"].join("|")})(/|$)`,
   );
 
   const { onPageChange } = config;

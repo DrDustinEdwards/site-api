@@ -3,7 +3,7 @@
 // by it. The one exception is opt-in (probeMediaUpload): it uploads a file of its own, then deletes
 // that file and no other.
 
-import { MEDIA_LENSES, MediaBulkResult, ContentList, ErrorBody, RevisionList, RevisionSource, MediaDeleteResult, MediaDetail, MediaItem, MediaList, MentionList, Meta, PREFIX, schemaHash, type Meta as MetaType } from "./contract.js";
+import { MEDIA_LENSES, MediaBulkResult, ContentList, ErrorBody, RevisionList, RevisionSource, MediaDeleteResult, MediaDetail, MediaItem, MediaList, MentionList, Meta, NotFoundReport, PREFIX, schemaHash, type Meta as MetaType } from "./contract.js";
 
 export interface ConformanceConfig {
   baseUrl: string;
@@ -471,6 +471,32 @@ export async function runConformance(config: ConformanceConfig): Promise<Conform
         return "400 invalid";
       });
     }
+  }
+
+  // ---------- insight (v0.16.0): the 404 report, read only, so checked whatever probeWrites says
+
+  const hasNotFound = capabilities?.insightNotFound === true;
+  const notFoundPath = `${origin}${PREFIX}/insight/not-found`;
+
+  await check("not-found report: advertised in capabilities, or answered 501", async () => {
+    const response = await doFetch(`${notFoundPath}?days=7&limit=5`, { headers: auth });
+    if (hasNotFound) {
+      expectStatus(response, 200, "not-found report");
+      const { rows } = NotFoundReport.parse(await response.json());
+      if (rows.length > 5) throw new Error(`${rows.length} rows for a limit of 5`);
+      return `${rows.length} missing path(s) in 7 days`;
+    }
+    expectStatus(response, 501, "not-found report on a site without it");
+    const code = await errorCode(response);
+    if (code !== "not-implemented") throw new Error(`error code ${code ?? "missing"}, expected not-implemented`);
+    return "501 not-implemented";
+  });
+
+  if (hasNotFound) {
+    await check("not-found report past 90 days: refused", async () => {
+      expectStatus(await doFetch(`${notFoundPath}?days=91`, { headers: auth }), 400, "days=91");
+      return "400 invalid";
+    });
   }
 
   return { ok: checks.every((c) => c.ok), checks };

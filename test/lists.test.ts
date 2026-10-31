@@ -1,5 +1,6 @@
 // v0.6.0's list additions for media and mentions: media lenses, sort and total, and mention search
 // and the one-post filter, each echoed so a caller can tell a site that did them from one that did not.
+// v0.16.0's 404 report, the insight group's one list.
 
 import { describe, expect, it, vi } from "vitest";
 import { createSiteClient } from "../src/client.js";
@@ -61,5 +62,29 @@ describe("mention search and the one-post filter (v0.6.0)", () => {
     const spy = vi.spyOn(adapter.mentions!, "list");
     for (const q of [`q=${"x".repeat(201)}`, "targetId="]) expect((await api.handle(req(`/api/carrel/v1/mentions?${q}`))).status, q).toBe(400);
     expect(spy).not.toHaveBeenCalled();
+  });
+});
+
+describe("the 404 report (v0.16.0)", () => {
+  it("passes the checked query to the site, answers its rows, refuses a range past 90 days before the site runs, and is 501 without it", async () => {
+    const rows = [
+      { path: "/old-post", kind: "page" as const, hits: 5, referrers: [{ host: "a.example", hits: 4 }, { host: "", hits: 1 }] },
+      { path: "/wp-admin", kind: "probe" as const, hits: 2, referrers: [{ host: "", hits: 2 }] },
+    ];
+    const { adapter, client: c } = client({ notFound: rows });
+    const spy = vi.spyOn(adapter.insight!, "notFound");
+    expect((await c.meta()).capabilities).toMatchObject({ insight: true, insightNotFound: true });
+    expect(await c.insight.notFound()).toEqual({ rows: rows.slice(0, 1) });
+    expect(spy).toHaveBeenLastCalledWith({ days: 30, limit: 50, includeProbes: false });
+    expect(await c.insight.notFound({ days: 7, limit: 10, includeProbes: true })).toEqual({ rows });
+    expect(spy).toHaveBeenLastCalledWith({ days: 7, limit: 10, includeProbes: true });
+    spy.mockClear();
+    for (const q of ["days=0", "days=91", "limit=201", "includeProbes=yes"]) {
+      const response = await site(adapter).api.handle(req(`/api/carrel/v1/insight/not-found?${q}`));
+      expect(response.status, q).toBe(400);
+    }
+    expect(spy).not.toHaveBeenCalled();
+    const without = await site(memoryAdapter()).api.handle(req("/api/carrel/v1/insight/not-found"));
+    expect(without.status).toBe(501);
   });
 });
