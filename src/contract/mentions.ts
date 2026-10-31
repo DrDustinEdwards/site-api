@@ -1,7 +1,7 @@
 // The mentions group (v0.5.0).
 
 import { z } from "zod";
-import { ChangeId, ContentId, Timestamp, Version } from "./base.js";
+import { Actor, ActorName, ChangeId, ContentId, Timestamp, Version } from "./base.js";
 
 /** A site's id for one received mention, as text: a row id such as 41. Never a path. */
 export const MentionId = ContentId;
@@ -69,6 +69,7 @@ export const MentionDecideInput = z.object({
   decision: z.enum(MENTION_DECISIONS),
   expectedVersion: Version,
   changeId: ChangeId,
+  actor: Actor.optional(),
 });
 
 export const MentionWriteResult = z.object({
@@ -84,6 +85,7 @@ export const MentionWriteResult = z.object({
 export const MentionDeleteQuery = z.object({
   expectedVersion: Version,
   changeId: ChangeId,
+  actorName: ActorName.optional(),
 });
 
 export const MentionDeleteResult = z.object({
@@ -96,6 +98,7 @@ export const MentionDeleteResult = z.object({
 /** Sweeping removes the mentions past the site's retention windows: failed and rejected ones. It names no version, since it is not about one mention. */
 export const MentionSweepInput = z.object({
   changeId: ChangeId,
+  actor: Actor.optional(),
 });
 
 export const MentionSweepResult = z.object({

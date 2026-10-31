@@ -1,6 +1,10 @@
 #!/usr/bin/env node
 // The live check devkit runs against each deployed site (v0.17.0): keyless probes only, so it needs no secret and
-// changes nothing. site-api-live --origin https://example.com [--from <host>]
+// changes nothing. site-api-live --origin https://example.com [--from <where the site is served now>]
+//
+// v0.19.0: --from is devkit's contract (devkit bin/live.mjs): where the site is served now, such as its workers.dev
+// address before its domain moves. When it is an address, the probes go there and --origin only names the site; any other
+// --from only labels the run in the User-Agent, as before.
 //
 // Prints one GitHub Actions annotation per finding, `::error title=<item>::<url> <detail>` or `::warning ...`, the
 // item being the checklist's id. Exits 0 when clean (warnings allowed), 1 on any error, 2 when it could not run.
@@ -12,7 +16,7 @@ import { parseArgs } from "node:util";
 const PREFIX = "/api/carrel/v1";
 
 function usage(message) {
-  console.error(`site-api-live: ${message}\nUsage: site-api-live --origin <https://site> [--from <host>]`);
+  console.error(`site-api-live: ${message}\nUsage: site-api-live --origin <https://site> [--from <https://where it is served>]`);
   process.exit(2);
 }
 
@@ -28,7 +32,9 @@ try {
 } catch {
   usage("--origin must be an address such as https://example.com");
 }
-// --from names where the run comes from, so a site's logs can tell the probes from a stranger's.
+// Where the site is served now, when --from is an http(s) address: every probe goes there.
+const served = /^https?:\/\//i.test(args.from ?? "") ? URL.parse(args.from)?.origin : undefined;
+if (served) origin = served;
 const headers = { "user-agent": `site-api-live${args.from ? ` (from ${args.from})` : ""}` };
 
 let errors = 0;
@@ -51,7 +57,9 @@ async function get(path) {
 /** A keyless answer must be 401, problem details, and never stored by a cache. */
 function keyless({ url, response, body }, what) {
   if (response.status !== 401) return report("error", "K4", url, `${what} answered ${response.status} without the key, expected 401`);
-  if (response.headers.get("cache-control") !== "no-store") report("error", "K4", url, `${what} has cache-control ${response.headers.get("cache-control") ?? "missing"}, expected no-store`);
+  // v0.19.0: any Cache-Control whose directives include no-store (so "private, no-store" passes too).
+  const directives = (response.headers.get("cache-control") ?? "").toLowerCase().split(",").map((d) => d.trim());
+  if (!directives.includes("no-store")) report("error", "K4", url, `${what} has cache-control ${response.headers.get("cache-control") ?? "missing"}, expected one with no-store`);
   if (!(response.headers.get("content-type") ?? "").startsWith("application/problem+json")) {
     report("error", "K2", url, `${what} is ${response.headers.get("content-type") ?? "untyped"}, expected application/problem+json`);
   } else {

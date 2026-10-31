@@ -3,7 +3,8 @@
 // by it. The one exception is opt-in (probeMediaUpload): it uploads a file of its own, then deletes
 // that file and no other.
 
-import { MEDIA_LENSES, MediaBulkResult, ContentList, ErrorBody, RevisionList, RevisionSource, MediaDeleteResult, MediaDetail, MediaItem, MediaList, MentionList, Meta, NotFoundReport, PREFIX, schemaHash, type Meta as MetaType } from "./contract.js";
+import { BacklinkList, ContentDoc, HookRunList, MEDIA_LENSES, MediaBulkResult, ContentList, ErrorBody, PreviewLink, PreviewLinkList, RenameResult, RevisionList, RevisionSource, MediaDeleteResult, MediaDetail, MediaItem, MediaList, MentionList, Meta, NotFoundReport, PREFIX, WriteResult, schemaHash, type Meta as MetaType } from "./contract.js";
+import { postFieldsOf, searchFieldsOf, setPostFields, setSearchFields, splitSource, type PostValues, type SearchValues } from "./frontmatter.js";
 
 export interface ConformanceConfig {
   baseUrl: string;
@@ -16,6 +17,15 @@ export interface ConformanceConfig {
    * real write to the site's storage, though it deletes only the file it uploaded.
    */
   probeMediaUpload?: boolean;
+  /**
+   * v0.19.0 (M1): makes a probe post of its own under a unique id, takes it through its life, and deletes it, even when a
+   * step fails. Beside `probeWrites`, and off by default, since the post is published for a moment: its hooks run, and a
+   * feed or a search engine may see it (its `noindex` is set where the site renders one). A site that cannot delete
+   * content skips it, since the probe could not clean up after itself.
+   */
+  probePosts?: boolean;
+  /** How long the hooks probe waits for every hook to record its run, in milliseconds. 5000 by default. */
+  hookWaitMs?: number;
 }
 
 export interface ConformanceCheck {
@@ -24,9 +34,19 @@ export interface ConformanceCheck {
   detail: string;
 }
 
+/** One probe the run made or passed over (v0.19.0, M2): every check is one, and `skipped` ones say why in `detail`. */
+export interface ConformanceProbe {
+  name: string;
+  ok: boolean;
+  skipped?: boolean;
+  detail?: string;
+}
+
 export interface ConformanceReport {
   ok: boolean;
   checks: ConformanceCheck[];
+  /** v0.19.0: every probe in the order it ran, and every one passed over, with why. */
+  probes: ConformanceProbe[];
 }
 
 /** An id no site should hold, so the refused write names nothing real. */
@@ -49,18 +69,24 @@ export async function runConformance(config: ConformanceConfig): Promise<Conform
   const origin = config.baseUrl.replace(/\/+$/, "");
   const auth = { authorization: `Bearer ${config.key}` };
   const checks: ConformanceCheck[] = [];
+  const probes: ConformanceProbe[] = [];
+  const skip = (name: string, why: string) => void probes.push({ name, ok: true, skipped: true, detail: why });
   // v0.17.0: a fresh change id for every probe write, since a site with `replay` keeps a refused write's answer under its
   // change id and would refuse the same id on another probe as a different request.
   const run = crypto.randomUUID().slice(0, 8);
-  let probes = 0;
-  const probe = () => `conformance-probe-${run}-${++probes}`;
+  let sent = 0;
+  const probe = () => `conformance-probe-${run}-${++sent}`;
 
-  async function check(name: string, run: () => Promise<string>) {
+  async function check(name: string, run: () => Promise<string>): Promise<boolean> {
+    let result: ConformanceCheck;
     try {
-      checks.push({ name, ok: true, detail: await run() });
+      result = { name, ok: true, detail: await run() };
     } catch (error) {
-      checks.push({ name, ok: false, detail: error instanceof Error ? error.message : String(error) });
+      result = { name, ok: false, detail: error instanceof Error ? error.message : String(error) };
     }
+    checks.push(result);
+    probes.push({ ...result });
+    return result.ok;
   }
 
   async function errorCode(response: Response): Promise<string | null> {
@@ -595,5 +621,236 @@ export async function runConformance(config: ConformanceConfig): Promise<Conform
     return missing.length > 0 ? `501 for ${missing.join(", ")}` : "the site offers every filter";
   });
 
-  return { ok: checks.every((c) => c.ok), checks };
+  // ---------- v0.19.0: unknown fields refused, backlinks, and the probe post
+
+  async function expectUnknownField(response: Response, field: string): Promise<string> {
+    expectStatus(response, 400, "unknown field");
+    const body = ErrorBody.parse(await response.json());
+    if (body.error !== "unknown-field") throw new Error(`error code ${body.error}, expected unknown-field`);
+    if (body.field !== field) throw new Error(`field ${body.field ?? "missing"}, expected ${field}`);
+    return `400 unknown-field ${field}`;
+  }
+
+  await check("unknown query key: refused with unknown-field", async () =>
+    expectUnknownField(await doFetch(`${origin}${PREFIX}/content?carrelConformanceProbe=1&limit=1`, { headers: auth }), "carrelConformanceProbe"));
+
+  if (config.probeWrites !== false) {
+    await check("unknown body field: refused with unknown-field before anything is written", async () => {
+      const response = await doFetch(`${origin}${PREFIX}/content/${PROBE_ID}/draft`, {
+        method: "PUT",
+        headers: { ...auth, "content-type": "application/json" },
+        body: JSON.stringify({ source: "# Conformance probe\n", expectedVersion: STALE_VERSION, changeId: probe(), carrelConformanceProbe: true }),
+      });
+      return expectUnknownField(response, "carrelConformanceProbe");
+    });
+  } else skip("unknown body field: refused with unknown-field before anything is written", "probeWrites is off");
+
+  await check("backlinks of an unknown id: refused, or not implemented where the site has none", async () => {
+    const response = await doFetch(`${origin}${PREFIX}/content/${PROBE_ID}/backlinks`, { headers: auth });
+    const offered = capabilities?.backlinks === true;
+    expectStatus(response, offered ? 404 : 501, "backlinks");
+    const code = await errorCode(response);
+    if (code !== (offered ? "not-found" : "not-implemented")) throw new Error(`error code ${code ?? "missing"}`);
+    return offered ? "404 not-found" : "501 not-implemented";
+  });
+
+  await probePost();
+
+  return { ok: checks.every((c) => c.ok), checks, probes };
+
+  // The probe post (M1): one post of the run's own, each step a probe, and the post deleted at the end whatever failed.
+  async function probePost(): Promise<void> {
+    const names = [
+      "probe post: created as a draft",
+      "probe post: every declared post and search field reads back as written",
+      "probe post: q matches body text",
+      "probe post: a preview link works, honors a short expiry, and answers 404 once revoked",
+      "probe post: published, and its public page answers",
+      "probe post: each declared hook recorded a run for the publish",
+      "probe post: backlinks answer in shape",
+      "probe post: a rename answers 301 from the old path",
+      "probe post: trash and restore",
+      "probe post: a delete answers 410 on the old path",
+      "probe post: cleaned up",
+    ] as const;
+    const why = !config.probePosts
+      ? "probePosts is off"
+      : config.probeWrites === false
+        ? "probeWrites is off"
+        : !capabilities
+          ? "meta did not answer"
+          : capabilities.contentDelete !== true
+            ? "the site cannot delete content (a page site), so a probe post could not be cleaned up"
+            : null;
+    if (why) {
+      for (const name of names) skip(name, why);
+      return;
+    }
+    const caps = capabilities!;
+    const json = (method: string, path: string, body?: unknown) =>
+      doFetch(`${origin}${PREFIX}${path}`, {
+        method,
+        headers: { ...auth, ...(body === undefined ? {} : { "content-type": "application/json" }) },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      });
+    async function ok<T>(response: Response, schema: { parse(v: unknown): T }, what: string): Promise<T> {
+      if (!response.ok) throw new Error(`${what}: ${response.status} ${(await errorCode(response)) ?? ""}`.trim());
+      return schema.parse(await response.json());
+    }
+    // The site's own public route, through baseUrl, never following a redirect.
+    const publicPage = async (path: string) => {
+      const answer = await doFetch(`${origin}${path}`, { redirect: "manual" });
+      await answer.body?.cancel().catch(() => {});
+      return answer;
+    };
+    const step = async (name: string, passedOver: string | null, run: () => Promise<string>) => (passedOver ? (skip(name, passedOver), false) : check(name, run));
+
+    let id = `carrel-conformance-${run}`;
+    let version = "";
+    let path = "";
+    const word = `probeword${run.replace(/[^a-z0-9]/gi, "")}`;
+    const postValues: Partial<PostValues> = {
+      excerpt: "Conformance excerpt.",
+      authors: ["Conformance Probe"],
+      series: "Conformance series",
+      seriesPart: 1,
+      featureImage: "/conformance-probe.png",
+      featureImageAlt: "Conformance probe picture.",
+    };
+    const searchValues: Partial<SearchValues> = {
+      searchTitle: "Conformance search title",
+      description: "Conformance description.",
+      image: "/conformance-probe.png",
+      imageAlt: "Conformance probe picture.",
+      canonical: `${new URL(origin).origin}/conformance-probe`,
+      // Kept out of search wherever the site renders noindex.
+      noindex: true,
+    };
+    const postFields = caps.postFields ?? [];
+    const searchFields = caps.searchFields ?? [];
+    let front = `title: "Conformance probe ${run}"`;
+    front = setPostFields(front, Object.fromEntries(postFields.map((f) => [f, postValues[f]])));
+    front = setSearchFields(front, Object.fromEntries(searchFields.map((f) => [f, searchValues[f]])));
+    const source = `---\n${front}\n---\n\nA conformance probe, deleted when the check ends. ${word}\n`;
+    const read = async () => ok(await json("GET", `/content/${encodeURIComponent(id)}`), ContentDoc, "read");
+
+    try {
+      const made = await check(names[0], async () => {
+        version = (await ok(await json("PUT", `/content/${id}/draft`, { source, expectedVersion: null, changeId: probe() }), WriteResult, "create")).version;
+        return `${id} at ${version}`;
+      });
+      if (!made) {
+        for (const name of names.slice(1, -1)) skip(name, "the probe post could not be created");
+        return;
+      }
+
+      await step(names[1], postFields.length + searchFields.length === 0 ? "the site declares no post or search fields" : null, async () => {
+        const back = splitSource((await read()).source).front;
+        const [post, search] = [postFieldsOf(back), searchFieldsOf(back)];
+        const changed = [
+          ...postFields.filter((f) => JSON.stringify(post[f]) !== JSON.stringify(postValues[f])),
+          ...searchFields.filter((f) => JSON.stringify(search[f]) !== JSON.stringify(searchValues[f])),
+        ];
+        if (changed.length) throw new Error(`read back changed: ${changed.join(", ")}`);
+        return [...postFields, ...searchFields].join(", ");
+      });
+
+      await check(names[2], async () => {
+        const list = await ok(await json("GET", `/content?q=${word}&limit=50`), ContentList, "search");
+        if (!list.items.some((i) => i.id === id)) throw new Error(`q=${word}, a word only in the body, did not list ${id}`);
+        return `q=${word} lists it`;
+      });
+
+      await step(names[3], caps.previewLinks ? null : "the site makes no preview links", async () => {
+        const hours = caps.previewLinkHours ? { expiresInHours: 1 } : { hours: 1 };
+        const link = await ok(await json("POST", "/preview-links", { id, changeId: probe(), ...hours }), PreviewLink, "preview link");
+        const left = Date.parse(link.expiresAt) - Date.now();
+        if (left > 65 * 60_000 || left < 50 * 60_000) throw new Error(`asked for 1 hour, it expires at ${link.expiresAt}`);
+        // On the site's own route, through baseUrl: the link's origin may be the site's public one.
+        const at = `${origin}${new URL(link.url).pathname}`;
+        const open = await doFetch(at);
+        await open.body?.cancel().catch(() => {});
+        expectStatus(open, 200, "preview link");
+        if (!/noindex/i.test(open.headers.get("x-robots-tag") ?? "")) throw new Error("the preview link's page does not say noindex");
+        const listed = (await ok(await json("GET", `/preview-links?id=${encodeURIComponent(id)}`), PreviewLinkList, "preview links")).items[0];
+        if (!listed) throw new Error("the new link is not listed");
+        await ok(await json("DELETE", `/preview-links/${listed.id}?changeId=${probe()}`), { parse: (v) => v }, "revoke");
+        const revoked = await doFetch(at);
+        await revoked.body?.cancel().catch(() => {});
+        expectStatus(revoked, 404, "revoked preview link");
+        return "200 noindex, expires in an hour, 404 once revoked";
+      });
+
+      const published = probe();
+      const live = await check(names[4], async () => {
+        version = (await ok(await json("POST", `/content/${id}/publish`, { expectedVersion: version, changeId: published }), WriteResult, "publish")).version;
+        const doc = await read();
+        if (doc.status !== "published" || !doc.path) throw new Error(`after publish: ${doc.status}, path ${doc.path ?? "none"}`);
+        path = doc.path;
+        expectStatus(await publicPage(path), 200, `public page ${path}`);
+        return `${path} answers 200`;
+      });
+
+      await step(names[5], !live ? "the probe post did not publish" : caps.hooks?.length ? null : "the site declares no hooks it keeps runs of", async () => {
+        const wanted = caps.hooks!;
+        const until = Date.now() + (config.hookWaitMs ?? 5000);
+        for (;;) {
+          const runs = (await ok(await json("GET", `/hooks/recent?changeId=${published}`), HookRunList, "hook runs")).items;
+          const missing = wanted.filter((h) => !runs.some((r) => r.hook === h));
+          if (missing.length === 0) {
+            const failed = wanted.filter((h) => !runs.some((r) => r.hook === h && r.ok));
+            if (failed.length) throw new Error(`failed: ${failed.join(", ")}`);
+            return wanted.join(", ");
+          }
+          if (Date.now() >= until) throw new Error(`no run recorded for ${missing.join(", ")}`);
+          await new Promise((done) => setTimeout(done, 500));
+        }
+      });
+
+      await step(names[6], caps.backlinks ? null : "the site does not list backlinks", async () => {
+        const list = await ok(await json("GET", `/content/${encodeURIComponent(id)}/backlinks`), BacklinkList, "backlinks");
+        return `${list.items.length} backlink(s)`;
+      });
+
+      await step(names[7], !live ? "the probe post did not publish" : caps.contentRename ? null : "the site does not rename content", async () => {
+        const newId = `${id}-renamed`;
+        const written = await ok(await json("POST", `/content/${id}/rename`, { newId, expectedVersion: version, changeId: probe() }), RenameResult, "rename");
+        [id, version] = [newId, written.version];
+        const old = path;
+        path = (await read()).path ?? "";
+        const answer = await publicPage(old);
+        expectStatus(answer, 301, `old path ${old}`);
+        const to = new URL(answer.headers.get("location") ?? "", origin).pathname;
+        if (to !== path) throw new Error(`301 to ${to}, expected ${path}`);
+        return `${old} 301 to ${path}`;
+      });
+
+      await step(names[8], caps.contentTrash ? null : "the site has no content trash", async () => {
+        const trashed = await ok(await json("POST", `/content/${id}/trash`, { expectedVersion: version, changeId: probe() }), WriteResult, "trash");
+        const binned = await ok(await json("GET", "/content?trashed=true&limit=200"), ContentList, "trash list");
+        if (!binned.items.some((i) => i.id === id)) throw new Error("not listed in the trash");
+        version = (await ok(await json("POST", `/content/${id}/restore`, { expectedVersion: trashed.version, changeId: probe() }), WriteResult, "restore")).version;
+        const doc = await read();
+        if (doc.status !== "draft" || doc.trashedAt) throw new Error(`after restore: ${doc.status}, trashedAt ${doc.trashedAt ?? "null"}`);
+        return "trashed, listed in the trash, restored as a draft";
+      });
+
+      await step(names[9], !live ? "the probe post did not publish" : caps.replay ? null : "the site has no store, so it keeps no tombstones", async () => {
+        const doc = await read();
+        version = doc.status === "published" ? doc.version : (await ok(await json("POST", `/content/${id}/publish`, { expectedVersion: doc.version, changeId: probe() }), WriteResult, "publish again")).version;
+        const gone = (await read()).path ?? path;
+        expectStatus(await json("DELETE", `/content/${id}?expectedVersion=${encodeURIComponent(version)}&changeId=${probe()}`), 200, "delete");
+        expectStatus(await publicPage(gone), 410, `deleted page ${gone}`);
+        return `${gone} answers 410`;
+      });
+    } finally {
+      await check(names[10], async () => {
+        const left = await json("GET", `/content/${encodeURIComponent(id)}`);
+        if (left.status === 404) return `${id} is gone`;
+        const doc = await ok(left, ContentDoc, "read before cleaning up");
+        expectStatus(await json("DELETE", `/content/${id}?expectedVersion=${encodeURIComponent(doc.version)}&changeId=${probe()}`), 200, "cleanup delete");
+        return `deleted ${id}`;
+      });
+    }
+  }
 }

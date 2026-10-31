@@ -3,8 +3,10 @@
 
 import { describe, expect, it } from "vitest";
 import { d1SiteApiStore, SITE_API_STORE_SQL } from "../src/store.js";
-import { endpointOf, outboundLinks, safeTarget, webmentionHook } from "../src/webmention.js";
+import { addressRefusal, guardedFetch, OutboundRefusal } from "../src/outbound.js";
+import { endpointOf, outboundLinks, webmentionHook } from "../src/webmention.js";
 import { d1 } from "./d1.js";
+import { withDns } from "./helpers.js";
 
 const PAGE = "https://site.example/blog/a";
 
@@ -28,8 +30,9 @@ describe("outboundLinks", () => {
   });
 });
 
-describe("safeTarget", () => {
-  it("refuses local, loopback, private and link-local hosts in every spelling, and anything but http(s)", () => {
+// v0.19.0: the one outbound guard, shared by the webmention sender and the media import.
+describe("the outbound guard", () => {
+  it("refuses local, loopback, private and link-local hosts in every spelling, other ports, and anything but http(s)", () => {
     for (const bad of [
       "http://localhost/", "http://a.localhost/", "https://printer.local/", "http://127.0.0.1/", "http://2130706433/", "http://0x7f.1/",
       "http://10.1.2.3/", "http://172.20.0.1/", "http://192.168.1.1/", "http://169.254.169.254/", "http://100.64.0.1/", "http://0.0.0.0/",
@@ -37,8 +40,32 @@ describe("safeTarget", () => {
       // IPv4 hidden in IPv6: compatible, translated, NAT64 of the metadata address, 6to4, Teredo; site-local; benchmarking.
       "http://[::7f00:1]/", "http://[::ffff:0:7f00:1]/", "http://[64:ff9b::a9fe:a9fe]/", "http://[2002:7f00:1::]/", "http://[2001::1]/",
       "http://[fec0::1]/", "http://198.18.0.1/", "http://192.0.0.1/",
-    ]) expect(safeTarget(bad), bad).toBe(false);
-    for (const good of ["https://example.com/", "http://8.8.8.8/x", "https://[2606:4700::1]/", "http://172.32.0.1/", "http://[64:ff9b::808:808]/", "http://[2002:808:808::]/"]) expect(safeTarget(good), good).toBe(true);
+      "https://example.com:8443/", "http://example.com:22/", "https://user:pw@example.com/",
+    ]) expect(addressRefusal(bad, { allowHttp: true }), bad).not.toBeNull();
+    for (const good of ["https://example.com/", "http://8.8.8.8/x", "https://[2606:4700::1]/", "http://172.32.0.1/", "http://[64:ff9b::808:808]/", "http://[2002:808:808::]/", "https://example.com:443/"]) {
+      expect(addressRefusal(good, { allowHttp: true }), good).toBeNull();
+    }
+    // The media import takes https only.
+    expect(addressRefusal("http://example.com/a.png")).not.toBeNull();
+  });
+
+  it("refuses a name that resolves to a private address, checks every redirect, and fails closed when DNS cannot answer", async () => {
+    const asked: string[] = [];
+    const site = (async (input: RequestInfo | URL) => {
+      const url = String(input);
+      asked.push(url);
+      if (url === "https://hop.example/") return new Response(null, { status: 302, headers: { location: "https://127.0.0.1.nip.io/" } });
+      return new Response("ok");
+    }) as typeof fetch;
+    const fetch = withDns(site, { "127.0.0.1.nip.io": "127.0.0.1", "v6.example": "fd00::1" });
+    for (const address of ["https://127.0.0.1.nip.io/", "https://v6.example/", "https://hop.example/"]) {
+      await expect(guardedFetch(fetch, address), address).rejects.toBeInstanceOf(OutboundRefusal);
+    }
+    // The hop to the private name was refused before it was asked.
+    expect(asked).toEqual(["https://hop.example/"]);
+    expect((await guardedFetch(fetch, "https://public.example/")).response.status).toBe(200);
+    const down = (async () => new Response("", { status: 503 })) as typeof globalThis.fetch;
+    await expect(guardedFetch(down, "https://public.example/")).rejects.toBeInstanceOf(OutboundRefusal);
   });
 });
 
@@ -73,7 +100,7 @@ describe("webmentionHook", () => {
       return pages[url]?.() ?? new Response("", { status: 404 });
     }) as typeof globalThis.fetch;
     const logs: Array<Record<string, unknown>> = [];
-    const hook = webmentionHook({ store: d1SiteApiStore(d1(SITE_API_STORE_SQL)), fetch, log: (e) => logs.push(e) });
+    const hook = webmentionHook({ store: d1SiteApiStore(d1(SITE_API_STORE_SQL)), fetch: withDns(fetch), log: (e) => logs.push(e) });
     const event = (action: "publish" | "update" | "delete", status?: "published") => ({ action, id: "a", path: "/blog/a", url: PAGE, trigger: "request" as const, changeId: "c1", ...(status ? { status } : {}) });
 
     await hook.run(event("publish", "published"));

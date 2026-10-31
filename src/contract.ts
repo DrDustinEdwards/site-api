@@ -9,13 +9,16 @@ import { POST_FIELDS, SEARCH_FIELDS } from "./frontmatter.js";
 
 export { POST_FIELDS, SEARCH_FIELDS, type PostField, type SearchField } from "./frontmatter.js";
 
-export { ChangeId, ContentId, SiteInfo, SortDir, Version } from "./contract/base.js";
+export { Actor, ActorName, ChangeId, ContentId, SiteInfo, SortDir, Version } from "./contract/base.js";
 export * from "./contract/content.js";
 export * from "./contract/media.js";
 export * from "./contract/mentions.js";
 export * from "./contract/insight.js";
 import { SiteInfo, Version } from "./contract/base.js";
 import {
+  BacklinkList,
+  HookRunList,
+  HookRunsQuery,
   CONTENT_FILTERS,
   ContentDeleteQuery,
   ContentDeleteResult,
@@ -95,7 +98,7 @@ import {
 } from "./contract/mentions.js";
 import { NotFoundQuery, NotFoundReport } from "./contract/insight.js";
 
-export const PACKAGE_VERSION = "0.18.0";
+export const PACKAGE_VERSION = "0.19.0";
 export const PREFIX = "/api/carrel/v1";
 
 export const Capabilities = z.object({
@@ -194,6 +197,16 @@ export const Capabilities = z.object({
   render: z.object({ version: z.string() }).optional(),
   /** True when the site counts its 404s and reports them (v0.16.0), `GET /insight/not-found`. Absent: that route answers 501. */
   insightNotFound: z.boolean().optional(),
+  // ---------- v0.19.0, each optional per site
+  /** True when the site lists the posts that link to one, `GET /content/:id/backlinks`. Absent: that route answers 501. */
+  backlinks: z.boolean().optional(),
+  /** Beside `previewLinks`: the most hours `expiresInHours` takes. Absent: a v0.17.0 site, which takes `hours` up to 168. */
+  previewLinkHours: z.object({ max: z.number().int().min(1) }).optional(),
+  /**
+   * With a store: the publish hooks that hear a publish of a live page, by name. Each run is kept under its change id and
+   * answered at `GET /hooks/recent?changeId=`, so a check can see that each one ran. Absent: the site keeps no hook runs.
+   */
+  hooks: z.array(z.string().min(1).max(200)).optional(),
 });
 
 export const Meta = z.object({
@@ -219,6 +232,8 @@ export const ErrorCode = z.enum([
   "internal",
   /** v0.17.0: a write under this change id is still running; send it again once that one has answered. */
   "in-progress",
+  /** v0.19.0: the body or the query has a field the contract does not name; `field` names it. */
+  "unknown-field",
 ]);
 
 /**
@@ -236,6 +251,8 @@ export const ErrorBody = z.object({
   currentVersion: Version.nullable().optional(),
   /** On a refused media delete only (v0.2.0): every place the file is used. */
   usedBy: z.array(MediaUse).optional(),
+  /** On unknown-field only (v0.19.0): the first field the contract does not name. */
+  field: z.string().optional(),
 });
 
 export type Capabilities = z.infer<typeof Capabilities>;
@@ -306,6 +323,9 @@ export const ROUTES = [
   { group: "preview", method: "GET", path: "/preview-links", query: "PreviewLinkListQuery", response: "PreviewLinkList" },
   { group: "preview", method: "DELETE", path: "/preview-links/:linkId", query: "PreviewLinkRevokeQuery", response: "PreviewLinkRevokeResult" },
   { group: "insight", method: "GET", path: "/insight/not-found", query: "NotFoundQuery", response: "NotFoundReport" },
+  // v0.19.0: backlinks, 501 where the adapter lacks them, and the hook runs a store keeps, 501 without a store.
+  { group: "content", method: "GET", path: "/content/:id/backlinks", response: "BacklinkList" },
+  { group: "hooks", method: "GET", path: "/hooks/recent", query: "HookRunsQuery", response: "HookRunList" },
   { group: "inbox", method: "*", path: "/inbox/*", response: "not-implemented" },
   { group: "insight", method: "*", path: "/insight/*", response: "not-implemented" },
   { group: "publications", method: "*", path: "/publications/*", response: "not-implemented" },
@@ -328,6 +348,7 @@ const HASHED = {
   RenameInput, RenameResult, ContentTrashInput,
   PreviewLinkInput, PreviewLink, PreviewLinkListQuery, PreviewLinkList, PreviewLinkRevokeQuery, PreviewLinkRevokeResult,
   NotFoundQuery, NotFoundReport,
+  BacklinkList, HookRunsQuery, HookRunList,
 };
 
 /** JSON with sorted keys, so the hash depends on the contract and not on property order. */

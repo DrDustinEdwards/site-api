@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { JsonSourceError, joinSource, jsonSource, postFieldsOf, searchFieldsOf, setPostFields, setSearchFields, setTags, splitSource, tagsOf } from "../src/frontmatter.js";
+import { JsonSourceError, joinSource, jsonSource, missingAltFields, postFieldsOf, searchFieldsOf, setPostFields, setSearchFields, setTags, splitSource, tagsOf } from "../src/frontmatter.js";
 
 const SOURCE = [
   "---",
@@ -115,11 +115,24 @@ describe("search fields", () => {
 describe("post fields (v0.17.0)", () => {
   it("keeps authors in order with a comma in a name, reads a hand-written list, and a blank or a bad part removes the key", () => {
     const front = setPostFields(parts.front!, { authors: ["Smith, Jr.", " Ada "], excerpt: "Short.", series: "Notes", seriesPart: 2 });
-    expect(postFieldsOf(front)).toEqual({ authors: ["Smith, Jr.", "Ada"], excerpt: "Short.", series: "Notes", seriesPart: 2 });
+    expect(postFieldsOf(front)).toEqual({ authors: ["Smith, Jr.", "Ada"], excerpt: "Short.", series: "Notes", seriesPart: 2, featureImage: "", featureImageAlt: "", featureImageDecorative: false });
     expect(jsonSource({ authors: "list" }).read(`---\n${readLines(front, ["authors"])}\n---\n`).values).toEqual({ authors: ["Smith, Jr.", "Ada"] });
     expect(postFieldsOf("authors:\n  - Ada\n  - Grace\nseriesPart: 0").authors).toEqual(["Ada", "Grace"]);
     expect(postFieldsOf("seriesPart: 0").seriesPart).toBeNull();
     expect(setPostFields(front, { authors: [], excerpt: " ", series: "", seriesPart: null })).toBe(parts.front);
+  });
+
+  // v0.19.0 (A2, D8): a feature or share image with no alt blocks, unless the post marks it decorative.
+  it("names a feature or share image with no alt text, where the site renders it, and passes one marked decorative", () => {
+    const declared = { searchFields: ["image", "imageAlt"], postFields: ["featureImage", "featureImageAlt"] };
+    const bare = setSearchFields(setPostFields(parts.front!, { featureImage: "/media/a.png" }), { image: "/media/b.png" });
+    expect(missingAltFields(bare, declared)).toEqual(["imageAlt", "featureImageAlt"]);
+    expect(missingAltFields(bare, {})).toEqual([]);
+    const decorative = setPostFields(bare, { featureImageDecorative: true });
+    expect(missingAltFields(decorative, declared)).toEqual(["imageAlt"]);
+    const described = setPostFields(bare, { featureImageAlt: "A heron.", featureImageDecorative: false });
+    expect(postFieldsOf(described)).toMatchObject({ featureImage: "/media/a.png", featureImageAlt: "A heron.", featureImageDecorative: false });
+    expect(missingAltFields(described, { postFields: declared.postFields })).toEqual([]);
   });
 });
 

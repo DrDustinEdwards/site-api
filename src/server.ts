@@ -9,9 +9,10 @@ import { hasContentTrash, type DueSchedule, type SiteAdapter } from "./adapter.j
 import { PREFIX } from "./contract.js";
 import { Timestamp } from "./contract/base.js";
 import type { ContentStatus } from "./contract.js";
-import { runHooks, type PublishAction, type PublishEvent, type PublishHook } from "./hooks.js";
+import { hears, runHooks, type PublishAction, type PublishEvent, type PublishHook } from "./hooks.js";
 import { contentRoutes } from "./server/content.js";
-import { describeFailure, fail, MAX_BODY_BYTES, type Route } from "./server/http.js";
+import { HookRunList, HookRunsQuery } from "./contract.js";
+import { describeFailure, fail, json, checked, MAX_BODY_BYTES, readQuery, refuseAnyQuery, type Route } from "./server/http.js";
 import { insightRoutes } from "./server/insight.js";
 import { mediaRoutes } from "./server/media.js";
 import { mentionsRoutes } from "./server/mentions.js";
@@ -19,7 +20,8 @@ import { page, PREVIEW_LINK_PATH, previewLinkRoutes, servePreviewLink } from "./
 import { claim, REPLAY_DAYS, REPLAYED } from "./server/replay.js";
 import type { SiteApiStore } from "./store.js";
 
-export type { HookRetry, PreviewLinkRow, SiteApiStore, StoredWrite } from "./store.js";
+export type { D1SiteApiStore, HookRetry, PreviewLinkRow, SiteApiStore, StoredWrite } from "./store.js";
+export { goneResponse, gonePath } from "./store.js";
 export { PREVIEW_LINK_PATH } from "./server/preview-links.js";
 
 /** The shape of Cloudflare's `ratelimit` binding, so a site passes its binding straight in. */
@@ -99,12 +101,12 @@ export interface SiteApi {
    * pass finds nothing. A site whose adapter has no `schedules` applies nothing.
    */
   runSchedules(options?: { now?: Date; limit?: number }): Promise<ScheduleRun>;
-  /** v0.17.0: true for a GET under PREVIEW_LINK_PATH, outside the prefix. Mount `servePreviewLink` where this holds. */
+  /** v0.17.0: true for a GET (v0.19.0: or a HEAD) under PREVIEW_LINK_PATH, outside the prefix. Mount `servePreviewLink` where this holds. */
   matchesPreviewLink(request: Request): boolean;
   /**
    * Serves a shareable preview link with no key (v0.17.0): the item's current source through the site's preview, never
-   * indexed, cached or sent on as a referrer. An expired or revoked link answers 410, any other 404, and a site with no
-   * store answers every link 404. Rate limited like the API.
+   * indexed, cached or sent on as a referrer. An expired link answers 410; a revoked one (v0.19.0) and any other 404, and a
+   * site with no store answers every link 404. A HEAD gets the GET's status and headers, no body. Rate limited like the API.
    */
   servePreviewLink(request: Request): Promise<Response>;
 }
@@ -149,8 +151,42 @@ export function createSiteApi(config: SiteApiConfig): SiteApi {
   const { media, mentions, insight } = adapter;
   const { store } = config;
 
+  const { onPageChange } = config;
+  const hooks: PublishHook[] = [
+    ...(config.hooks ?? []),
+    ...(onPageChange
+      ? [
+          {
+            name: "onPageChange",
+            run: async (e: { path: string | null; url: string | null; request?: Request }) => {
+              if (e.path === null || e.url === null) return;
+              await onPageChange([e.path], e.request ?? new Request(e.url));
+            },
+          },
+        ]
+      : []),
+  ];
+  // v0.19.0: the hooks a publish of a live page runs, by name, for capabilities.hooks and the conformance probe.
+  const probe: PublishEvent = { action: "publish", id: "", path: "/", url: adapter.site.origin, trigger: "request", changeId: null, status: "published" };
+  const publishHooks = hooks.filter((h) => hears(h, probe)).map((h) => h.name);
+
+  const hookRuns: Route[] = store?.hookRuns
+    ? [
+        {
+          method: "GET",
+          query: true,
+          pattern: /^\/hooks\/recent$/,
+          run: async (_m, url) => {
+            const { changeId } = readQuery(url, HookRunsQuery);
+            return json(200, checked(HookRunList, { items: await store.hookRuns!(changeId) }, "hook runs"));
+          },
+        },
+      ]
+    : [];
+
   const routes: Route[] = [
-    ...contentRoutes(adapter, { store: Boolean(store) }),
+    ...contentRoutes(adapter, { store: Boolean(store), hooks: publishHooks }),
+    ...hookRuns,
     ...(media ? mediaRoutes(media, log) : []),
     ...(mentions ? mentionsRoutes(mentions) : []),
     ...(store ? previewLinkRoutes(adapter, store) : []),
@@ -160,16 +196,8 @@ export function createSiteApi(config: SiteApiConfig): SiteApi {
   // Groups a site has not implemented. Media, mentions and insight leave this list when the adapter has them, preview
   // links when the site has a store.
   const LATER = new RegExp(
-    `^/(${[...(media ? [] : ["media"]), ...(mentions ? [] : ["mentions"]), ...(insight ? [] : ["insight"]), ...(store ? [] : ["preview-links"]), "inbox", "publications"].join("|")})(/|$)`,
+    `^/(${[...(media ? [] : ["media"]), ...(mentions ? [] : ["mentions"]), ...(insight ? [] : ["insight"]), ...(store ? [] : ["preview-links"]), ...(hookRuns.length ? [] : ["hooks"]), "inbox", "publications"].join("|")})(/|$)`,
   );
-
-  const { onPageChange } = config;
-  const hooks: PublishHook[] = [
-    ...(config.hooks ?? []),
-    ...(onPageChange
-      ? [{ name: "onPageChange", run: async (e: { path: string; url: string; request?: Request }) => void (await onPageChange([e.path], e.request ?? new Request(e.url))) }]
-      : []),
-  ];
 
   type Page = { path: string | null; status: ContentStatus | null };
 
@@ -179,36 +207,59 @@ export function createSiteApi(config: SiteApiConfig): SiteApi {
     return { path: doc?.path ?? null, status: doc?.status ?? null };
   }
 
-  async function tellPageChange(id: string, action: PublishAction, before: Page, request: Request, response: Response) {
-    // A rename answers the item under its new id.
-    const written = (await response.json()) as { id?: string; changeId?: string };
-    const now = written.id ?? id;
-    const after = action === "delete" ? null : await pageOf(now);
+  // The event for one content write, from the page before it and after it. A draft that was never published has no page,
+  // so its writes tell no one, except a schedule or an unschedule (v0.19.0), which a hook naming them hears with no path.
+  function pageEvent(id: string, action: PublishAction, before: Page, after: Page | null, written: { changeId?: string }, request: Request): PublishEvent | null {
     const path = after?.path ?? before.path;
-    if (!path) return;
-    const moved = action === "rename" && before.path && before.path !== path ? before.path : null;
-    await tell({
+    if (!path && action !== "schedule" && action !== "unschedule") return null;
+    const moved = action === "rename" && before.path && path && before.path !== path ? before.path : null;
+    return {
       action,
-      id: now,
+      id,
       path,
-      url: new URL(path, adapter.site.origin).href,
+      url: path ? new URL(path, adapter.site.origin).href : null,
       trigger: "request",
       changeId: written.changeId ?? null,
       request,
       ...(before.status ? { previousStatus: before.status } : {}),
       ...(after?.status ? { status: after.status } : {}),
       ...(moved ? { previousPath: moved, previousUrl: new URL(moved, adapter.site.origin).href } : {}),
-    });
+    };
+  }
+
+  /**
+   * v0.19.0 (F5): the tombstones. A delete or a trash of a live item leaves its path answering 410; a publish there, or a
+   * rename onto it, takes the tombstone away. The trash emptying itself keeps it. A store that cannot keep one is logged,
+   * and the write stands.
+   */
+  async function keepTombstones(action: PublishAction, before: Page, after: Page | null): Promise<void> {
+    if (!store?.markGone || !store.clearGone) return;
+    try {
+      const at = new Date().toISOString();
+      if ((action === "delete" || action === "trash") && before.status === "published" && before.path) await store.markGone(before.path, at);
+      if ((action === "publish" || action === "rename") && after?.status === "published" && after.path) await store.clearGone(after.path);
+    } catch (error) {
+      log({ siteApi: "tombstone-failed", action, error: String(error) });
+    }
   }
 
   // v0.17.0: a hook that fails is kept for the cron to try again, where the site has a store.
+  // v0.19.0: each run is kept under its change id, where the store keeps hook runs, for `GET /hooks/recent`.
   const tell = (event: PublishEvent) =>
-    runHooks(hooks, event, log, async (hook, error) => {
-      if (!store) return;
-      const { request: _r, ...kept } = event;
-      const nextAt = new Date(Date.now() + HOOK_BACKOFF_MINUTES[0]! * MINUTE).toISOString();
-      await store.putHookRetry({ id: crypto.randomUUID(), hook: hook.name, event: JSON.stringify(kept), attempts: 1, nextAt, lastError: error });
-    });
+    runHooks(
+      hooks,
+      event,
+      log,
+      async (hook, error) => {
+        if (!store) return;
+        const { request: _r, ...kept } = event;
+        const nextAt = new Date(Date.now() + HOOK_BACKOFF_MINUTES[0]! * MINUTE).toISOString();
+        await store.putHookRetry({ id: crypto.randomUUID(), hook: hook.name, event: JSON.stringify(kept), attempts: 1, nextAt, lastError: error });
+      },
+      async (hook, ok) => {
+        if (store?.putHookRun && event.changeId) await store.putHookRun({ changeId: event.changeId, hook: hook.name, ok, at: new Date().toISOString() });
+      },
+    );
 
   // Each kept failure is run again when due, on its own hook only, until it works or has been tried after every backoff.
   async function retryHooks(now: Date, limit: number): Promise<number> {
@@ -279,7 +330,9 @@ export function createSiteApi(config: SiteApiConfig): SiteApi {
     const run: ScheduleRun = { applied: [], skipped: 0, failed: 0, more: false, emptied: 0, retried: 0 };
     const now = options.now ?? new Date();
     if (store) {
-      await store.pruneWrites(new Date(now.getTime() - REPLAY_DAYS * DAY).toISOString()).catch((error) => log({ siteApi: "replay-store-failed", error: String(error) }));
+      const before = new Date(now.getTime() - REPLAY_DAYS * DAY).toISOString();
+      await store.pruneWrites(before).catch((error) => log({ siteApi: "replay-store-failed", error: String(error) }));
+      await store.pruneHookRuns?.(before).catch((error) => log({ siteApi: "hook-runs-prune-failed", error: String(error) }));
     }
     const limit = options.limit ?? SCHEDULE_BATCH_LIMIT;
     run.emptied = await emptyTrash(now, limit);
@@ -303,6 +356,7 @@ export function createSiteApi(config: SiteApiConfig): SiteApi {
         }
         run.applied.push({ ...item, version: written.version });
         const page = await pageOf(item.id);
+        if (item.kind === "publish") await keepTombstones("publish", { path: null, status: "scheduled" }, page);
         if (page.path && page.status === "published") {
           const url = new URL(page.path, adapter.site.origin).href;
           const previousStatus = item.kind === "publish" ? "scheduled" : "published";
@@ -354,7 +408,17 @@ export function createSiteApi(config: SiteApiConfig): SiteApi {
     const hit = candidates.find((c) => c.route.method === request.method);
     if (!hit) return fail("method-not-allowed", "Method not allowed.");
 
-    const write = hooks.length > 0 && request.method !== "GET" ? PAGE_WRITE.exec(path) : null;
+    // v0.19.0: a route that takes no query refuses one, before anything runs.
+    if (!hit.route.query) {
+      try {
+        refuseAnyQuery(url);
+      } catch (error) {
+        const failure = describeFailure(error, log);
+        return fail(failure.code, failure.message, failure.field !== undefined ? { field: failure.field } : {});
+      }
+    }
+
+    const write = (hooks.length > 0 || store?.markGone) && request.method !== "GET" ? PAGE_WRITE.exec(path) : null;
     const action = write ? ACTION[`${request.method} ${write[2] ?? ""}`] : undefined;
     const id = write ? decodeURIComponent(write[1]!) : "";
     let finish: ((response: Response) => Promise<void>) | undefined;
@@ -370,15 +434,25 @@ export function createSiteApi(config: SiteApiConfig): SiteApi {
       const before = action ? await pageOf(id) : null;
       response = await hit.route.run(hit.match, url, run);
       if (action && before && response.ok) {
-        const told = tellPageChange(id, action, before, request, response.clone()).catch((error) => log({ siteApi: "page-change-failed", error: String(error) }));
-        if (ctx) ctx.waitUntil(told);
-        else await told;
+        // A rename answers the item under its new id.
+        const written = (await response.clone().json()) as { id?: string; changeId?: string };
+        const now = written.id ?? id;
+        const after = action === "delete" ? null : await pageOf(now);
+        // The tombstone is part of the write, so a 404 handler asked the moment it answers already says 410.
+        await keepTombstones(action, before, after);
+        const event = pageEvent(now, action, before, after, written, request);
+        if (event && hooks.length > 0) {
+          const told = tell(event).catch((error) => log({ siteApi: "page-change-failed", error: String(error) }));
+          if (ctx) ctx.waitUntil(told);
+          else await told;
+        }
       }
     } catch (error) {
       const failure = describeFailure(error, log);
       response = fail(failure.code, failure.message, {
         ...(failure.currentVersion !== undefined ? { currentVersion: failure.currentVersion } : {}),
         ...(failure.usedBy ? { usedBy: failure.usedBy } : {}),
+        ...(failure.field !== undefined ? { field: failure.field } : {}),
       });
     }
     await finish?.(response);
@@ -389,7 +463,8 @@ export function createSiteApi(config: SiteApiConfig): SiteApi {
     try {
       const ip = request.headers.get("cf-connecting-ip") ?? "unknown";
       if (!(await limiter.limit({ key: ip })).success) return page(429, "Too many requests.");
-      return await servePreviewLink(adapter, store, new URL(request.url).pathname);
+      const answer = await servePreviewLink(adapter, store, new URL(request.url).pathname);
+      return request.method === "HEAD" ? new Response(null, { status: answer.status, headers: answer.headers }) : answer;
     } catch (error) {
       log({ siteApi: "preview-link-failed", error: error instanceof Error ? error.message : String(error) });
       return page(503, "This preview is unavailable.");
@@ -400,7 +475,8 @@ export function createSiteApi(config: SiteApiConfig): SiteApi {
     matches: (request) => insidePrefix(new URL(request.url).pathname),
     handle,
     runSchedules,
-    matchesPreviewLink: (request) => request.method === "GET" && new URL(request.url).pathname.startsWith(PREVIEW_LINK_PATH),
+    // v0.19.0: HEAD as well, so a link checker's HEAD meets the same noindex answer as a browser's GET.
+    matchesPreviewLink: (request) => (request.method === "GET" || request.method === "HEAD") && new URL(request.url).pathname.startsWith(PREVIEW_LINK_PATH),
     servePreviewLink: servePreview,
   };
 }

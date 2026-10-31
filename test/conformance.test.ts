@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { createSiteApi } from "../src/index.js";
 import { runConformance } from "../src/conformance.js";
 import { memoryAdapter } from "../src/testing.js";
-import { d1SiteApiStore, SITE_API_STORE_SQL } from "../src/store.js";
+import { d1SiteApiStore, goneResponse, SITE_API_STORE_SQL } from "../src/store.js";
 import { d1 } from "./d1.js";
 import { KEY, ORIGIN, allow, site } from "./helpers.js";
 
@@ -61,7 +61,14 @@ describe("conformance", () => {
       "content restore of an unknown id: refused, or not implemented where the site lacks it",
       "preview link for an unknown id: refused, or not implemented where the site has none",
       "content list filters: each one the site does not offer answers 501",
+      "unknown query key: refused with unknown-field",
+      "unknown body field: refused with unknown-field before anything is written",
+      "backlinks of an unknown id: refused, or not implemented where the site has none",
     ]);
+    // v0.19.0 (M2): every check is a probe, and the probe post's steps, off by default, are each listed as passed over.
+    expect(report.probes.filter((p) => !p.skipped).map((p) => p.name)).toEqual(report.checks.map((c) => c.name));
+    expect(report.probes.filter((p) => p.skipped)).toHaveLength(11);
+    expect(report.probes.find((p) => p.skipped)).toMatchObject({ name: "probe post: created as a draft", detail: "probePosts is off" });
   });
 
   it("passes a v0.14.0 content group, and a site with a store, whose stale write it sends twice and sees replayed", async () => {
@@ -75,7 +82,7 @@ describe("conformance", () => {
   it("runs only the content checks on a site with no media manager", async () => {
     const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: site(memoryAdapter({ media: false })).fetch });
     expect(failing(report)).toEqual([]);
-    expect(report.checks).toHaveLength(31);
+    expect(report.checks).toHaveLength(34);
   });
 
   it("expects 501 on a site with no content delete, and 404 where it has one", async () => {
@@ -350,6 +357,57 @@ describe("conformance", () => {
     const report = await runConformance({ baseUrl: ORIGIN, key: `${KEY}-other`, fetch: site().fetch });
     expect(failing(report)).toContain("meta: answers with this contract's schema hash");
     expect(report.ok).toBe(false);
+  });
+
+  // v0.19.0 (M1): the probe post, on a site whose public routes answer as a real site's do.
+  function liveSite(options: { tombstones?: boolean; contentDelete?: boolean } = {}) {
+    const adapter = memoryAdapter({ site: { id: "memory", name: "Memory site", origin: ORIGIN }, ...(options.contentDelete === false ? { contentDelete: false } : {}) });
+    const store = d1SiteApiStore(d1(SITE_API_STORE_SQL));
+    const api = createSiteApi({ adapter, key: KEY, limiter: allow, log: () => {}, store, hooks: [{ name: "probe-hook", run: () => true }] });
+    const fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const request = new Request(input, init);
+      if (api.matchesPreviewLink(request)) return api.servePreviewLink(request);
+      if (api.matches(request)) return api.handle(request);
+      const { pathname } = new URL(request.url);
+      const moved = adapter.redirects.get(pathname);
+      if (moved) return new Response(null, { status: 301, headers: { location: moved } });
+      if ([...adapter.store.values()].some((s) => s.doc.status === "published" && s.doc.path === pathname)) return new Response("<p>post</p>");
+      if (options.tombstones !== false && (await store.isGone(pathname))) return goneResponse(request);
+      return new Response("Not found", { status: 404 });
+    }) as typeof globalThis.fetch;
+    return { adapter, fetch };
+  }
+
+  it("with probePosts, takes a post of its own through its life, lists every probe, and leaves nothing behind", async () => {
+    const { adapter, fetch } = liveSite();
+    const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch, probePosts: true });
+    expect(failing(report)).toEqual([]);
+    const post = report.probes.filter((p) => p.name.startsWith("probe post:"));
+    expect(post.map((p) => [p.name.slice(12), p.skipped ?? false])).toEqual([
+      ["created as a draft", false],
+      ["every declared post and search field reads back as written", false],
+      ["q matches body text", false],
+      ["a preview link works, honors a short expiry, and answers 404 once revoked", false],
+      ["published, and its public page answers", false],
+      ["each declared hook recorded a run for the publish", false],
+      ["backlinks answer in shape", false],
+      ["a rename answers 301 from the old path", false],
+      ["trash and restore", false],
+      ["a delete answers 410 on the old path", false],
+      ["cleaned up", false],
+    ]);
+    expect(post[5]!.detail).toBe("probe-hook");
+    expect(adapter.store.size).toBe(0);
+  });
+
+  it("PLANT: fails a site whose not-found page never answers 410, and still deletes its probe post; skips a page site", async () => {
+    const { adapter, fetch } = liveSite({ tombstones: false });
+    const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch, probePosts: true });
+    expect(failing(report)).toEqual(["probe post: a delete answers 410 on the old path"]);
+    expect(adapter.store.size).toBe(0);
+    const page = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: liveSite({ contentDelete: false }).fetch, probePosts: true });
+    expect(failing(page)).toEqual([]);
+    expect(page.probes.filter((p) => p.name.startsWith("probe post:")).every((p) => p.skipped && /cannot delete/.test(p.detail!))).toBe(true);
   });
 
   it("skips the write probe when told to", async () => {

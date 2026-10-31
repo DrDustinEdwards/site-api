@@ -183,6 +183,7 @@ export function memoryAdapter(
     changes: { source?: string; status: ContentStatus; publishAt?: string | null; pending?: ScheduledUpdate | null; publishedAt?: string; redate?: string; trashedAt?: string | null },
     changeId: string,
     message: string,
+    actor?: { name: string },
   ): WriteResult {
     const at = now().toISOString();
     const version = `v${++counter}`;
@@ -206,7 +207,8 @@ export function memoryAdapter(
     const pending = changes.status !== "published" ? undefined : changes.pending === undefined ? previous?.pending : (changes.pending ?? undefined);
     if (schedules) doc.scheduledUpdate = pending ? { publishAt: pending.publishAt, changeId: pending.changeId } : null;
     const history = previous?.history ?? [];
-    history.unshift({ revision: { version, at, author: "carrel", message: `${message} [${changeId}]` }, source });
+    // v0.19.0: the person Carrel names is the revision's author.
+    history.unshift({ revision: { version, at, author: actor?.name ?? "carrel", message: `${message} [${changeId}]` }, source });
     store.set(id, { doc, history, ...(pending ? { pending } : {}), ...(changes.status === "scheduled" ? { scheduleChangeId: changeId } : {}) });
     return { id, version, status: doc.status, changeId, ...(schedules ? { scheduledUpdate: doc.scheduledUpdate } : {}) };
   }
@@ -415,7 +417,7 @@ export function memoryAdapter(
                 async setAlt(id: string, input: { alt: string; expectedVersion: string; changeId: string }) {
                   return touchMedia(heldMedia(id, input.expectedVersion), { alt: input.alt });
                 },
-                async setTags(id: string, input: { tags: string[]; expectedVersion: string; changeId: string }) {
+                async setTags(id: string, input: { tags: string[]; expectedVersion: string; changeId: string; actor?: { name: string } }) {
                   return touchMedia(heldMedia(id, input.expectedVersion), { tags: input.tags });
                 },
                 async trash(id: string, input: { expectedVersion: string; changeId: string }) {
@@ -647,6 +649,16 @@ export function memoryAdapter(
 
   const at = (time: string) => Date.parse(time);
 
+  /** v0.19.0: every other post whose source links to this one's path, as a site's link table would answer. */
+  async function backlinks(id: string) {
+    const target = `/blog/${id}`;
+    // An id holds only letters, digits, dots, underscores and hyphens, so the dot is the one character to escape.
+    const linking = new RegExp(`${target.replace(/\./g, "\\.")}(?![\\w.-])`);
+    return [...store.values()]
+      .filter(({ doc }) => doc.id !== id && linking.test(doc.source))
+      .map(({ doc }) => ({ id: doc.id, title: doc.title, path: doc.status === "published" ? doc.path : null }));
+  }
+
   /** The reference schedules group (v0.10.0): the update sits beside the live item until `apply` puts it live. */
   const schedulesAdapter: SchedulesAdapter = {
     async get(id) {
@@ -656,13 +668,13 @@ export function memoryAdapter(
       const previous = existing(id, input.expectedVersion);
       if (previous.doc.status !== "published") throw new RefusedError("Only a live post takes a scheduled update.");
       const pending = { id, source: input.source, publishAt: input.publishAt, changeId: input.changeId, scheduledAt: now().toISOString() };
-      return commit(id, previous, { status: "published", pending }, input.changeId, "Schedule update");
+      return commit(id, previous, { status: "published", pending }, input.changeId, "Schedule update", input.actor);
     },
     async cancel(id, input) {
       if (!store.has(id)) throw new NotFoundError();
       const previous = existing(id, input.expectedVersion);
-      if (previous.pending) return commit(id, previous, { status: "published", pending: null }, input.changeId, "Cancel scheduled update");
-      if (previous.doc.status === "scheduled") return commit(id, previous, { status: "draft" }, input.changeId, "Unschedule");
+      if (previous.pending) return commit(id, previous, { status: "published", pending: null }, input.changeId, "Cancel scheduled update", input.actor);
+      if (previous.doc.status === "scheduled") return commit(id, previous, { status: "draft" }, input.changeId, "Unschedule", input.actor);
       throw new RefusedError("Nothing is scheduled for this post.");
     },
     async due({ now: time, limit }) {
@@ -746,65 +758,66 @@ export function memoryAdapter(
       async saveDraft(id, input) {
         const previous = expect(id, input.expectedVersion);
         const status = previous?.doc.status === "published" ? "published" : "draft";
-        return commit(id, previous, { source: input.source, status, publishAt: previous?.doc.publishAt }, input.changeId, "Save");
+        return commit(id, previous, { source: input.source, status, publishAt: previous?.doc.publishAt }, input.changeId, "Save", input.actor);
       },
       async publish(id, input) {
         const previous = existing(id, input.expectedVersion);
         // A publish now drops any update that was waiting: what goes live is this.
         const redate = input.publishedAt ? { redate: new Date(input.publishedAt).toISOString() } : {};
-        return commit(id, previous, { source: input.source, status: "published", pending: null, ...redate }, input.changeId, "Publish");
+        return commit(id, previous, { source: input.source, status: "published", pending: null, ...redate }, input.changeId, "Publish", input.actor);
       },
       async schedule(id, input) {
         const previous = existing(id, input.expectedVersion);
-        return commit(id, previous, { source: input.source, status: "scheduled", publishAt: input.publishAt }, input.changeId, "Schedule");
+        return commit(id, previous, { source: input.source, status: "scheduled", publishAt: input.publishAt }, input.changeId, "Schedule", input.actor);
       },
       async unpublish(id, input) {
         const previous = existing(id, input.expectedVersion);
-        return commit(id, previous, { status: "draft" }, input.changeId, "Unpublish");
+        return commit(id, previous, { status: "draft" }, input.changeId, "Unpublish", input.actor);
       },
       async revisions(id) {
         return store.get(id)?.history.map((h) => h.revision) ?? null;
       },
+      ...(contentExtras ? { backlinks } : {}),
       async revisionSource(id, version) {
         return store.get(id)?.history.find((h) => h.revision.version === version)?.source ?? null;
       },
       ...(options.contentTags === false
         ? {}
         : {
-            async setTags(id: string, input: { tags: string[]; expectedVersion: string; changeId: string }) {
+            async setTags(id: string, input: { tags: string[]; expectedVersion: string; changeId: string; actor?: { name: string } }) {
               if (!store.has(id)) throw new NotFoundError();
               const previous = existing(id, input.expectedVersion);
               const parts = splitSource(previous.doc.source);
               if (parts.front === null) throw new RefusedError("This post has no frontmatter, so it has nowhere to keep tags.");
               const source = joinSource({ ...parts, front: writeTags(parts.front, input.tags) });
-              return commit(id, previous, { source, status: previous.doc.status, publishAt: previous.doc.publishAt }, input.changeId, "Tags");
+              return commit(id, previous, { source, status: previous.doc.status, publishAt: previous.doc.publishAt }, input.changeId, "Tags", input.actor);
             },
           }),
       ...(contentExtras
         ? {
-            async rename(id: string, input: { newId: string; expectedVersion: string; changeId: string }) {
+            async rename(id: string, input: { newId: string; expectedVersion: string; changeId: string; actor?: { name: string } }) {
               if (!store.has(id)) throw new NotFoundError();
               const previous = existing(id, input.expectedVersion);
               if (store.has(input.newId)) throw new RefusedError(`${input.newId} is already taken.`);
               const previousPath = previous.doc.publishedAt ? previous.doc.path : null;
               store.delete(id);
               const moved = { ...previous, doc: { ...previous.doc, id: input.newId } };
-              const written = commit(input.newId, moved, { status: previous.doc.status, publishAt: previous.doc.publishAt }, input.changeId, `Rename from ${id}`);
+              const written = commit(input.newId, moved, { status: previous.doc.status, publishAt: previous.doc.publishAt }, input.changeId, `Rename from ${id}`, input.actor);
               if (previousPath) redirects.set(previousPath, store.get(input.newId)!.doc.path!);
               return { ...written, previousPath };
             },
             // A live item leaves the site as it goes to the trash, and comes back a draft.
-            async trash(id: string, input: { expectedVersion: string; changeId: string }) {
+            async trash(id: string, input: { expectedVersion: string; changeId: string; actor?: { name: string } }) {
               if (!store.has(id)) throw new NotFoundError();
               const previous = existing(id, input.expectedVersion);
               if (previous.doc.trashedAt) throw new RefusedError("This post is already in the trash.");
-              return commit(id, previous, { status: "draft", pending: null, trashedAt: now().toISOString() }, input.changeId, "Trash");
+              return commit(id, previous, { status: "draft", pending: null, trashedAt: now().toISOString() }, input.changeId, "Trash", input.actor);
             },
-            async restore(id: string, input: { expectedVersion: string; changeId: string }) {
+            async restore(id: string, input: { expectedVersion: string; changeId: string; actor?: { name: string } }) {
               if (!store.has(id)) throw new NotFoundError();
               const previous = existing(id, input.expectedVersion);
               if (!previous.doc.trashedAt) throw new RefusedError("This post is not in the trash.");
-              return commit(id, previous, { status: "draft", trashedAt: null }, input.changeId, "Restore");
+              return commit(id, previous, { status: "draft", trashedAt: null }, input.changeId, "Restore", input.actor);
             },
           }
         : {}),

@@ -1,9 +1,11 @@
-// v0.17.0: the content group's new writes and list options, each optional per site, against the reference adapter.
+// v0.17.0 and v0.19.0: the content group's new writes and list options, each optional per site, against the reference adapter.
 
 import { describe, expect, it } from "vitest";
 import { createSiteClient } from "../src/client.js";
 import { memoryAdapter } from "../src/testing.js";
-import { createSiteApi } from "../src/index.js";
+import { createSiteApi, indexNowHook, type PublishEvent, type PublishHook } from "../src/index.js";
+import { d1SiteApiStore, goneResponse, SITE_API_STORE_SQL } from "../src/store.js";
+import { d1 } from "./d1.js";
 import { KEY, ORIGIN, allow, site } from "./helpers.js";
 
 function client(adapter = memoryAdapter()) {
@@ -122,5 +124,90 @@ describe("list filters (v0.17.0)", () => {
     const other = client(memoryAdapter({ contentExtras: false })).c;
     await expect(other.list({ tag: "news" })).rejects.toMatchObject({ status: 501 });
     expect((await other.list({ trashed: false })).items).toEqual([]);
+  });
+});
+
+// ---------- v0.19.0
+
+function stored(hooks: PublishHook[] = []) {
+  const adapter = memoryAdapter({ site: { id: "memory", name: "Memory site", origin: ORIGIN } });
+  const store = d1SiteApiStore(d1(SITE_API_STORE_SQL));
+  const api = createSiteApi({ adapter, key: KEY, limiter: allow, log: () => {}, store, hooks });
+  const c = createSiteClient({ baseUrl: ORIGIN, key: KEY, fetch: (async (i: RequestInfo | URL, init?: RequestInit) => api.handle(new Request(i, init))) as typeof fetch });
+  return { adapter, store, api, c };
+}
+
+describe("unknown fields (v0.19.0, A8)", () => {
+  it("refuses an unknown body field or query key on every route, naming it, before the adapter runs", async () => {
+    const { api, adapter } = stored();
+    const send = (path: string, init: RequestInit = {}) => api.handle(new Request(`${ORIGIN}/api/carrel/v1${path}`, { ...init, headers: { authorization: `Bearer ${KEY}`, "content-type": "application/json" } }));
+    const answers = [
+      await send("/content/a/draft", { method: "PUT", body: JSON.stringify({ source: "# A\n", expectedVersion: null, changeId: "c1", bogusField: 1 }) }),
+      await send("/content?series=x"),
+      // A route that takes no query at all.
+      await send("/content/a?series=x"),
+    ];
+    for (const answer of answers) {
+      expect(answer.status).toBe(400);
+      expect(await answer.json()).toMatchObject({ error: "unknown-field", title: "Unknown field" });
+    }
+    expect(adapter.store.size).toBe(0);
+  });
+});
+
+describe("schedule events (v0.19.0, J1)", () => {
+  it("tells a hook that names them of a schedule and an unschedule of a never-published post, with no page", async () => {
+    const heard: PublishEvent[] = [];
+    const announced: string[] = [];
+    const { c } = stored([
+      { name: "listener", on: ["schedule", "unschedule"], run: (e) => void heard.push(e) },
+      indexNowHook({ submit: async ({ urls }) => (announced.push(...urls), true), key: "k", origin: ORIGIN }),
+    ]);
+    const draft = await c.saveDraft("a", { source: "# A\n", expectedVersion: null, changeId: "c1" });
+    const scheduled = await c.schedule("a", { expectedVersion: draft.version, changeId: "c2", publishAt: "2999-01-01T00:00:00Z" });
+    await c.cancelSchedule("a", { expectedVersion: scheduled.version, changeId: "c3" });
+    expect(heard.map((e) => [e.action, e.path, e.url, e.status])).toEqual([["schedule", null, null, "scheduled"], ["unschedule", null, null, "draft"]]);
+    // A page that was never live is never announced.
+    expect(announced).toEqual([]);
+  });
+});
+
+describe("tombstones (v0.19.0, F5)", () => {
+  it("answers 410 for a deleted or trashed live page until something is published there again, and keeps it through the trash's end", async () => {
+    const { c, store } = stored();
+    const a = await c.saveDraft("a", { source: "# A\n", expectedVersion: null, changeId: "c1" });
+    const live = await c.publish("a", { expectedVersion: a.version, changeId: "c2" });
+    await c.delete("a", { expectedVersion: live.version, changeId: "c3" });
+    expect(await store.isGone("/blog/a/")).toBe(true);
+    const again = await c.saveDraft("a", { source: "# A again\n", expectedVersion: null, changeId: "c4" });
+    const back = await c.publish("a", { expectedVersion: again.version, changeId: "c5" });
+    expect(await store.isGone("/blog/a")).toBe(false);
+    await c.trash("a", { expectedVersion: back.version, changeId: "c6" });
+    expect(await store.isGone("/blog/a")).toBe(true);
+    // A draft never published leaves no tombstone.
+    const b = await c.saveDraft("b", { source: "# B\n", expectedVersion: null, changeId: "c7" });
+    await c.delete("b", { expectedVersion: b.version, changeId: "c8" });
+    expect(await store.isGone("/blog/b")).toBe(false);
+
+    const page = goneResponse(new Request(`${ORIGIN}/blog/a`, { headers: { accept: "text/html" } }));
+    expect([page.status, page.headers.get("cache-control"), page.headers.get("content-type")]).toEqual([410, "no-store", "text/html; charset=utf-8"]);
+    const problem = goneResponse(new Request(`${ORIGIN}/blog/a`, { headers: { accept: "application/problem+json" } }));
+    expect([problem.status, problem.headers.get("content-type"), (await problem.json()).status]).toEqual([410, "application/problem+json; charset=utf-8", 410]);
+  });
+});
+
+describe("the acting person, backlinks and the feature image (v0.19.0, C2, F4, A2)", () => {
+  it("keeps the actor as the revision's author, lists backlinks, and refuses a feature image with no alt unless decorative", async () => {
+    const { c } = stored();
+    const a = await c.saveDraft("a", { source: "# A\n", expectedVersion: null, changeId: "c1", actor: { name: "Ada Example" } });
+    expect((await c.revisions("a")).items[0]!.author).toBe("Ada Example");
+    await c.saveDraft("b", { source: "# B\n\nSee [A](/blog/a).\n", expectedVersion: null, changeId: "c2" });
+    expect((await c.backlinks("a")).items).toEqual([{ id: "b", title: "B", path: null }]);
+    await expect(c.backlinks("missing")).rejects.toMatchObject({ status: 404 });
+
+    const bare = await c.saveDraft("a", { source: '---\ntitle: "A"\nfeatureImage: "/media/a.png"\n---\n\nA\n', expectedVersion: a.version, changeId: "c3" });
+    await expect(c.publish("a", { expectedVersion: bare.version, changeId: "c4" })).rejects.toMatchObject({ status: 422 });
+    const decorative = await c.saveDraft("a", { source: '---\ntitle: "A"\nfeatureImage: "/media/a.png"\nfeatureImageDecorative: true\n---\n\nA\n', expectedVersion: bare.version, changeId: "c5" });
+    expect((await c.publish("a", { expectedVersion: decorative.version, changeId: "c6", actor: { name: "Ada Example" } })).status).toBe("published");
   });
 });

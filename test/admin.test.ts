@@ -22,7 +22,7 @@ import {
 } from "../src/admin.js";
 import { createSiteClient, localClient, SiteApiError, type SiteClient } from "../src/client.js";
 import { memoryAdapter, type MemoryAdapterOptions } from "../src/testing.js";
-import { KEY, ORIGIN, png, site } from "./helpers.js";
+import { KEY, ORIGIN, png, site, withDns } from "./helpers.js";
 
 const OWNER: Permissions = { edit: true, publish: true, deleteContent: true, deleteMedia: true, decideMentions: true };
 const EDITOR: Permissions = { edit: true, publish: false, deleteContent: false, deleteMedia: false, decideMentions: false };
@@ -297,6 +297,19 @@ describe("posts", () => {
     expect(await runPostsIntent(none.source, { intent: "delete", ids: ["a"] })).toEqual({ ok: false, message: "This site does not delete posts through the site API." });
   });
 
+  it("warns with the posts that link to one before a trash or a delete, and names the acting person on the write (v0.19.0)", async () => {
+    const { client, source } = setup({}, { actor: { name: "Ada Example" } });
+    await post(client, "a", "title: A");
+    await client.saveDraft("b", { source: "---\ntitle: B\n---\nSee [A](/blog/a).\n", expectedVersion: null, changeId: "c-b" });
+    const asked = await runPostsIntent(source, { intent: "trash", ids: ["a"] });
+    expect(asked.confirm).toMatchObject({ items: ["a"], backlinks: [{ id: "a", linkedFrom: [{ id: "b", title: "B", path: null }] }] });
+    expect(asked.confirm!.lead).toContain("1 link from other posts will break");
+    expect(await runPostsIntent(source, { intent: "trash", ids: ["a"], confirm: "1" })).toMatchObject({ ok: true });
+    expect((await client.revisions("a")).items[0]!.author).toBe("Ada Example");
+    // Nothing links to b, so its trash goes at once.
+    expect(await runPostsIntent(source, { intent: "trash", ids: ["b"] })).toMatchObject({ ok: true });
+  });
+
   it("trashes and restores with Undo, deletes for good only from the Trash, lists and counts the Trash, and renames with Undo (v0.17.0)", async () => {
     const { adapter, client, source } = setup();
     await post(client, "a", "title: A", true);
@@ -491,7 +504,7 @@ describe("media", () => {
 
   it("imports from the web, says when an upload was already in the library, and saves credit and license (v0.13.0)", async () => {
     const remote = (async () => new Response(png(30, 20) as Uint8Array<ArrayBuffer>, { headers: { "content-type": "image/png" } })) as typeof fetch;
-    const { adapter, source, records } = setup({ mediaDuplicates: true, mediaImportFetch: remote });
+    const { adapter, source, records } = setup({ mediaDuplicates: true, mediaImportFetch: withDns(remote) });
     expect((await loadMedia(source)).offers).toMatchObject({ import: true, credit: true, duplicates: true, transform: true, history: true, live: true, resize: { maxEdge: 2048 }, resizePass: true });
     const file = () => new File([png(10, 10) as Uint8Array<ArrayBuffer>], "a.png", { type: "image/png" });
     expect(await runMediaIntent(source, { intent: "upload", file: file() })).toMatchObject({ ok: true, message: "Uploaded a.png." });

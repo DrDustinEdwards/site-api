@@ -1,7 +1,7 @@
 // The content group: list, read, write, scheduled updates, revisions, diff, delete, tags and the preview.
 
 import { z } from "zod";
-import { ChangeId, ContentId, Source, SortDir, Timestamp, Version } from "./base.js";
+import { Actor, ActorName, ChangeId, ContentId, Source, SortDir, Timestamp, Version } from "./base.js";
 
 export const ContentStatus = z.enum(["draft", "scheduled", "published"]);
 
@@ -96,6 +96,7 @@ export const ContentTagsInput = z.object({
   tags: ContentTags,
   expectedVersion: Version,
   changeId: ChangeId,
+  actor: Actor.optional(),
 });
 
 /** expectedVersion null means "this id must not exist yet": the create case. */
@@ -103,12 +104,14 @@ export const SaveDraftInput = z.object({
   source: Source,
   expectedVersion: Version.nullable(),
   changeId: ChangeId,
+  actor: Actor.optional(),
 });
 
 const PublishFields = z.object({
   expectedVersion: Version,
   changeId: ChangeId,
   source: Source.optional(),
+  actor: Actor.optional(),
 });
 
 /**
@@ -126,6 +129,7 @@ export const ScheduleInput = PublishFields.extend({
 export const UnpublishInput = z.object({
   expectedVersion: Version,
   changeId: ChangeId,
+  actor: Actor.optional(),
 });
 
 export const WriteResult = z.object({
@@ -141,6 +145,7 @@ export const WriteResult = z.object({
 export const ContentTrashInput = z.object({
   expectedVersion: Version,
   changeId: ChangeId,
+  actor: Actor.optional(),
 });
 
 /**
@@ -151,6 +156,7 @@ export const RenameInput = z.object({
   newId: ContentId,
   expectedVersion: Version,
   changeId: ChangeId,
+  actor: Actor.optional(),
 });
 
 /** The write under the new id, and the path that now redirects to it (null for an item never published). */
@@ -173,6 +179,7 @@ export const ScheduledUpdate = ScheduledUpdateSummary.extend({
 export const ScheduleCancelQuery = z.object({
   expectedVersion: Version,
   changeId: ChangeId,
+  actorName: ActorName.optional(),
 });
 
 export const Revision = z.object({
@@ -214,6 +221,7 @@ export const RevisionSource = z.object({
 export const ContentDeleteQuery = z.object({
   expectedVersion: Version,
   changeId: ChangeId,
+  actorName: ActorName.optional(),
 });
 
 export const ContentDeleteResult = z.object({
@@ -228,11 +236,22 @@ export const PreviewInput = z.object({
   source: Source,
 });
 
-/** A shareable preview link for one item (v0.17.0, where `previewLinks`): it lives `hours`, 48 by default, at most a week. */
+/** The longest a preview link lives (v0.19.0), in hours: 30 days. */
+export const PREVIEW_LINK_MAX_HOURS = 720;
+/** How long a preview link lives when the request does not say, in hours. */
+export const PREVIEW_LINK_DEFAULT_HOURS = 48;
+
+/**
+ * A shareable preview link for one item (v0.17.0, where `previewLinks`). v0.19.0: it lives `expiresInHours`, 1 to 720,
+ * 48 by default (capabilities.previewLinkHours says the most). `hours` is the v0.17.0 name, at most a week; send one.
+ */
 export const PreviewLinkInput = z.object({
   id: ContentId,
-  hours: z.number().int().min(1).max(168).default(48),
+  expiresInHours: z.number().int().min(1).max(PREVIEW_LINK_MAX_HOURS).optional(),
+  /** @deprecated v0.19.0: send `expiresInHours`. */
+  hours: z.number().int().min(1).max(168).optional(),
   changeId: ChangeId,
+  actor: Actor.optional(),
 });
 
 /** The link's whole token, answered once: the site keeps only its hash. `url` is the page anyone with it can open. */
@@ -244,12 +263,30 @@ export const PreviewLink = z.object({
 
 export const PreviewLinkListQuery = z.object({ id: ContentId });
 
+/** A post that links to another (v0.19.0, where `backlinks`): its id, title and public path (null or absent while not live). */
+export const Backlink = z.object({
+  id: ContentId,
+  title: z.string().max(1000),
+  path: z.string().startsWith("/").nullable().optional(),
+});
+
+/** `GET /content/:id/backlinks` (v0.19.0): every post that links to this one, so a delete or a trash can warn first. */
+export const BacklinkList = z.object({ items: z.array(Backlink).max(1000) });
+
+/** `GET /hooks/recent?changeId=` (v0.19.0, with a store): the publish hooks that ran for one change. */
+export const HookRunsQuery = z.object({ changeId: ChangeId });
+
+/** One hook run as the store keeps it (`hook_runs`): the hook's name, whether it worked, and when. */
+export const HookRun = z.object({ hook: z.string().min(1).max(200), ok: z.boolean(), at: Timestamp });
+
+export const HookRunList = z.object({ items: z.array(HookRun) });
+
 /** An item's working links, the newest first. `id` is the first 12 hex characters of the token's hash: it revokes the link, and cannot open it. */
 export const PreviewLinkList = z.object({
   items: z.array(z.object({ id: z.string().regex(/^[0-9a-f]{12}$/), createdAt: Timestamp, expiresAt: Timestamp })),
 });
 
-export const PreviewLinkRevokeQuery = z.object({ changeId: ChangeId });
+export const PreviewLinkRevokeQuery = z.object({ changeId: ChangeId, actorName: ActorName.optional() });
 
 export const PreviewLinkRevokeResult = z.object({
   id: z.string().regex(/^[0-9a-f]{12}$/),
@@ -260,6 +297,10 @@ export const PreviewLinkRevokeResult = z.object({
 export type PreviewLinkInput = z.input<typeof PreviewLinkInput>;
 export type PreviewLink = z.infer<typeof PreviewLink>;
 export type PreviewLinkList = z.infer<typeof PreviewLinkList>;
+export type Backlink = z.infer<typeof Backlink>;
+export type BacklinkList = z.infer<typeof BacklinkList>;
+export type HookRun = z.infer<typeof HookRun>;
+export type HookRunList = z.infer<typeof HookRunList>;
 export type ContentStatus = z.infer<typeof ContentStatus>;
 export type ContentSummary = z.infer<typeof ContentSummary>;
 export type ContentDoc = z.infer<typeof ContentDoc>;

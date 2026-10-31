@@ -1,7 +1,7 @@
 // What the host supplies, what an intent returns, and the plumbing the posts, media and mentions halves share.
 
 import { SiteApiError, type SiteClient } from "../client.js";
-import { Version, type ContentList, type ListQuery, type MediaUse } from "../contract.js";
+import { Version, type Backlink, type ContentList, type ListQuery, type MediaUse } from "../contract.js";
 
 // ---------- what the host supplies
 
@@ -45,6 +45,35 @@ export interface ContentSource {
   record?(change: { kind: string; ids: string[]; changeId: string }): Promise<void>;
   /** Where unexpected failures are logged. Defaults to console.error. */
   log?(entry: Record<string, unknown>): void;
+  /**
+   * Optional (v0.19.0): the signed-in person, by display name. Every write the posts list sends carries it as `actor` (as
+   * `actorName` on a DELETE), and the site keeps it as the revision's author.
+   */
+  actor?: { name: string };
+}
+
+/** The client with `actor` on every content write it sends (v0.19.0), so a host passes the person once. */
+export function actingClient(client: SiteClient, actor: { name: string } | undefined): SiteClient {
+  if (!actor) return client;
+  const name = { actorName: actor.name };
+  return {
+    ...client,
+    saveDraft: (id, input) => client.saveDraft(id, { ...input, actor }),
+    publish: (id, input) => client.publish(id, { ...input, actor }),
+    schedule: (id, input) => client.schedule(id, { ...input, actor }),
+    unpublish: (id, input) => client.unpublish(id, { ...input, actor }),
+    setTags: (id, input) => client.setTags(id, { ...input, actor }),
+    rename: (id, input) => client.rename(id, { ...input, actor }),
+    trash: (id, input) => client.trash(id, { ...input, actor }),
+    restore: (id, input) => client.restore(id, { ...input, actor }),
+    delete: (id, input) => client.delete(id, { ...input, ...name }),
+    cancelSchedule: (id, input) => client.cancelSchedule(id, { ...input, ...name }),
+    previewLinks: {
+      ...client.previewLinks,
+      create: (input) => client.previewLinks.create({ ...input, actor }),
+      revoke: (linkId, input) => client.previewLinks.revoke(linkId, { ...input, ...name }),
+    },
+  };
 }
 
 // ---------- what an intent returns
@@ -93,6 +122,11 @@ export interface ConfirmRequest {
   /** Every item it will change, one line each. Never shortened. */
   items: string[];
   fields: Fields;
+  /**
+   * v0.19.0, on a delete or a trash where the site lists backlinks: each post about to go that other posts link to, and
+   * those posts, so the dialog warns with the list before the person confirms. Absent: nothing links to them.
+   */
+  backlinks?: Array<{ id: string; linkedFrom: Backlink[] }>;
 }
 
 /** The most items one intent acts on, as the site's own bulk route allows. */

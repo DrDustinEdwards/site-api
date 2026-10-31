@@ -54,3 +54,20 @@ export function png(width: number, height: number, text: Record<string, string> 
   const texts = Object.entries(text).flatMap(([k, v]) => chunk("tEXt", [...[...k].map((c) => c.charCodeAt(0)), 0, ...[...v].map((c) => c.charCodeAt(0))]));
   return Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, ...chunk("IHDR", [...be(width), ...be(height), 8, 2, 0, 0, 0]), ...texts]);
 }
+
+/**
+ * A fetch that answers the outbound guard's DNS over HTTPS (v0.19.0) the way a public resolver would: every name a public
+ * address, except those `names` maps to their own. Every other request goes to `fetch`.
+ */
+export function withDns(fetch: typeof globalThis.fetch, names: Record<string, string> = {}): typeof globalThis.fetch {
+  return (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = new URL(String(input instanceof Request ? input.url : input));
+    if (url.origin !== "https://cloudflare-dns.com") return fetch(input, init);
+    const name = url.searchParams.get("name")!;
+    const ip = names[name] ?? "93.184.216.34";
+    const v6 = ip.includes(":");
+    const type = url.searchParams.get("type") === "AAAA" ? 28 : 1;
+    const Answer = (type === 28) === v6 ? [{ name, type, data: ip }] : [];
+    return new Response(JSON.stringify({ Status: 0, Answer }), { headers: { "content-type": "application/dns-json" } });
+  }) as typeof globalThis.fetch;
+}

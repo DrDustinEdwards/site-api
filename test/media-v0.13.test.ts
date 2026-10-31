@@ -6,7 +6,7 @@ import { createSiteClient, SiteApiError } from "../src/client.js";
 import { transformFocus } from "../src/media.js";
 import { MEDIA_TRANSFORMS } from "../src/contract.js";
 import { memoryAdapter, type MemoryAdapterOptions } from "../src/testing.js";
-import { KEY, ORIGIN, body, png, req, site } from "./helpers.js";
+import { KEY, ORIGIN, body, png, req, site, withDns } from "./helpers.js";
 
 function setup(options: MemoryAdapterOptions = {}) {
   const s = site(memoryAdapter(options));
@@ -88,7 +88,7 @@ describe("import (4)", () => {
       "https://photos.example.com/r/1": new Response(null, { status: 302, headers: { location: "/files/River%20at%20dusk.png" } }),
       "https://photos.example.com/files/River%20at%20dusk.png": new Response(png(30, 20) as Uint8Array<ArrayBuffer>, { headers: { "content-type": "image/png" } }),
     });
-    const { client, adapter } = setup({ mediaImportFetch: fetchRemote });
+    const { client, adapter } = setup({ mediaImportFetch: withDns(fetchRemote) });
     const item = await client.media.importUrl({ url: "https://photos.example.com/r/1", alt: "A river", changeId: "i1" });
     expect(item).toMatchObject({ filename: "River at dusk.png", alt: "A river", sourceUrl: "https://photos.example.com/r/1", url: `/media/${item.id}` });
     expect(adapter.mediaStore.get(item.id)!.revisions![0]!.reason).toBe("import");
@@ -99,12 +99,15 @@ describe("import (4)", () => {
       "https://bounce.example.com/a": new Response(null, { status: 301, headers: { location: "https://127.0.0.1/admin" } }),
       "https://pages.example.com/a": new Response("<html>", { headers: { "content-type": "text/html" } }),
     });
-    const { adapter, api } = setup({ mediaImportFetch: fetchRemote });
+    // v0.19.0: a name that resolves to a private address is refused at the fetch, after DNS, before the site is asked.
+    const { adapter, api } = setup({ mediaImportFetch: withDns(fetchRemote, { "127.0.0.1.nip.io": "127.0.0.1" }) });
     const upload = vi.spyOn(adapter.media!, "upload");
     const send = (url: string) => api.handle(req("/api/carrel/v1/media/import", { method: "POST", ...body({ url, changeId: "i1" }) }));
     for (const url of ["http://example.com/a.png", "https://10.0.0.1/a.png", "https://[::1]/a.png", "https://localhost/a.png", "https://example.com:8443/a.png", "https://me:pw@example.com/a.png", "https://intranet/a.png"]) {
       expect((await send(url)).status, url).toBe(400);
     }
+    expect(fetchRemote).not.toHaveBeenCalled();
+    expect((await send("https://127.0.0.1.nip.io/a.png")).status).toBe(422);
     expect(fetchRemote).not.toHaveBeenCalled();
     expect((await send("https://bounce.example.com/a")).status).toBe(422);
     expect(fetchRemote).toHaveBeenCalledTimes(1);

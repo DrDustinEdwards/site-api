@@ -3,6 +3,7 @@
 import { createTwoFilesPatch } from "diff";
 import { capabilitiesOf, contentFiltersOf, hasContentTrash, NotFoundError, RefusedError, VersionConflictError, type SiteAdapter } from "../adapter.js";
 import {
+  BacklinkList,
   ContentDeleteQuery,
   ContentDeleteResult,
   ContentDoc,
@@ -31,10 +32,29 @@ import {
   schemaHash,
   filtersAsked,
 } from "../contract.js";
+import { missingAltFields, splitSource } from "../frontmatter.js";
 import { BadRequest, BASE_HEADERS, ContractBreach, ID, checked, fail, json, pathParam, readBody, readQuery, type Route } from "./http.js";
 
-export function contentRoutes(adapter: SiteAdapter, options: { store: boolean }): Route[] {
+/** A DELETE's `actorName` (v0.19.0) as the `actor` every other write hands the adapter. */
+function withActor<T extends { actorName?: string | undefined }>(query: T): Omit<T, "actorName"> & { actor?: { name: string } } {
+  const { actorName, ...rest } = query;
+  return { ...rest, ...(actorName ? { actor: { name: actorName } } : {}) };
+}
+
+export function contentRoutes(adapter: SiteAdapter, options: { store: boolean; hooks?: readonly string[] }): Route[] {
   const id = (m: RegExpMatchArray) => pathParam(m[1], ContentId, "content id");
+
+  // v0.19.0 (A2, D8): a feature image with no alt text blocks the text going out, as the share image's does in Carrel's
+  // gate: a publish, a schedule, or a save to a live item. Only where the site lists featureImage; a decorative one passes.
+  const postFields = adapter.content.postFields ?? [];
+  async function altGate(contentId: string, source: string | undefined) {
+    if (!postFields.includes("featureImage")) return;
+    const outgoing = source ?? (await adapter.content.get(contentId))?.source;
+    if (outgoing === undefined) return;
+    if (missingAltFields(splitSource(outgoing).front, { postFields }).includes("featureImageAlt")) {
+      throw new RefusedError("The feature image has no alt text. Describe what it shows, or mark it decorative (featureImageDecorative: true), before the post goes out.");
+    }
+  }
 
   const write = async (
     m: RegExpMatchArray,
@@ -57,6 +77,7 @@ export function contentRoutes(adapter: SiteAdapter, options: { store: boolean })
     },
     {
       method: "GET",
+      query: true,
       pattern: /^\/content$/,
       run: async (_m, url) => {
         const query = readQuery(url, ListQuery);
@@ -80,7 +101,12 @@ export function contentRoutes(adapter: SiteAdapter, options: { store: boolean })
     {
       method: "PUT",
       pattern: new RegExp(`^/content/${ID}/draft$`),
-      run: (m, _u, r) => write(m, r, async (i, req) => adapter.content.saveDraft(i, await readBody(req, SaveDraftInput))),
+      run: (m, _u, r) =>
+        write(m, r, async (i, req) => {
+          const input = await readBody(req, SaveDraftInput);
+          if (postFields.includes("featureImage") && (await adapter.content.get(i))?.status === "published") await altGate(i, input.source);
+          return adapter.content.saveDraft(i, input);
+        }),
     },
     {
       method: "POST",
@@ -93,6 +119,7 @@ export function contentRoutes(adapter: SiteAdapter, options: { store: boolean })
             // A minute's grace for the caller's clock; a later date is a schedule, which says when the post goes live.
             if (Date.parse(input.publishedAt) > Date.now() + 60_000) throw new BadRequest("invalid", "publishedAt is in the future. To publish later, schedule it.");
           }
+          await altGate(i, input.source);
           return adapter.content.publish(i, input);
         }),
     },
@@ -103,14 +130,15 @@ export function contentRoutes(adapter: SiteAdapter, options: { store: boolean })
         write(m, r, async (i, req) => {
           const input = await readBody(req, ScheduleInput);
           const current = await adapter.content.get(i);
+          await altGate(i, input.source ?? current?.source);
           // v0.10.0: a live item keeps being served, and the schedule is an update that replaces it at the time.
           if (current?.status !== "published") return adapter.content.schedule(i, input);
           if (current.version !== input.expectedVersion) throw new VersionConflictError(current.version);
           if (!adapter.schedules) {
             throw new RefusedError("This site cannot schedule an update to a live post: scheduling it would take the post off the site until then. Publish the change now, or unpublish first.");
           }
-          const { publishAt, expectedVersion, changeId } = input;
-          return adapter.schedules.update(i, { source: input.source ?? current.source, publishAt, expectedVersion, changeId });
+          const { publishAt, expectedVersion, changeId, actor } = input;
+          return adapter.schedules.update(i, { source: input.source ?? current.source, publishAt, expectedVersion, changeId, ...(actor ? { actor } : {}) });
         }),
     },
     {
@@ -126,11 +154,12 @@ export function contentRoutes(adapter: SiteAdapter, options: { store: boolean })
     },
     {
       method: "DELETE",
+      query: true,
       pattern: new RegExp(`^/content/${ID}/schedule$`),
       run: async (m, url) => {
         const contentId = id(m);
         if (!adapter.schedules) return fail("not-implemented", "This site does not schedule updates to live posts.");
-        return json(200, checked(WriteResult, await adapter.schedules.cancel(contentId, readQuery(url, ScheduleCancelQuery)), "schedule cancel"));
+        return json(200, checked(WriteResult, await adapter.schedules.cancel(contentId, withActor(readQuery(url, ScheduleCancelQuery))), "schedule cancel"));
       },
     },
     {
@@ -160,13 +189,14 @@ export function contentRoutes(adapter: SiteAdapter, options: { store: boolean })
     },
     {
       method: "DELETE",
+      query: true,
       pattern: new RegExp(`^/content/${ID}$`),
       run: async (m, url) => {
         const contentId = id(m);
         // A site with no delete answers 501 whatever the query says.
         if (!adapter.content.delete) return fail("not-implemented", "This site does not delete content through the API.");
         const query = readQuery(url, ContentDeleteQuery);
-        await adapter.content.delete(contentId, query);
+        await adapter.content.delete(contentId, withActor(query));
         return json(200, checked(ContentDeleteResult, { id: contentId, deleted: true, changeId: query.changeId }, "content delete"));
       },
     },
@@ -194,6 +224,16 @@ export function contentRoutes(adapter: SiteAdapter, options: { store: boolean })
         return json(200, checked(RenameResult, await adapter.content.rename(contentId, input), "content rename"));
       },
     },
+    {
+      method: "GET",
+      pattern: new RegExp(`^/content/${ID}/backlinks$`),
+      run: async (m) => {
+        const contentId = id(m);
+        if (!adapter.content.backlinks) return fail("not-implemented", "This site does not list the posts that link to one.");
+        if (!(await adapter.content.get(contentId))) throw new NotFoundError();
+        return json(200, checked(BacklinkList, { items: await adapter.content.backlinks(contentId) }, "backlinks"));
+      },
+    },
     ...(["trash", "restore"] as const).map((op) => ({
       method: "POST",
       pattern: new RegExp(`^/content/${ID}/${op}$`),
@@ -206,6 +246,7 @@ export function contentRoutes(adapter: SiteAdapter, options: { store: boolean })
     })),
     {
       method: "GET",
+      query: true,
       pattern: new RegExp(`^/content/${ID}/diff$`),
       run: async (m, url) => {
         const contentId = id(m);

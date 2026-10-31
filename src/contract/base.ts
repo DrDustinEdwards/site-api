@@ -18,6 +18,16 @@ export const Source = z.string().max(2_000_000);
 
 export const SortDir = z.enum(["asc", "desc"]);
 
+/**
+ * The person who made a write (v0.19.0), as Carrel signs them in: their display name. Optional on every write body; a
+ * DELETE, which has no body, takes the name as the query key `actorName`. The package passes it to the adapter as `actor`,
+ * and the site keeps it as the revision's author.
+ */
+export const Actor = z.object({ name: z.string().trim().min(1).max(200) });
+
+/** `actorName` on a DELETE's query (v0.19.0): the same name `actor` carries in a body. */
+export const ActorName = z.string().trim().min(1).max(200);
+
 export const SiteInfo = z.object({
   id: z.string().regex(/^[a-z0-9-]{1,64}$/),
   name: z.string().min(1).max(200),
@@ -26,3 +36,4 @@ export const SiteInfo = z.object({
 
 export type SiteInfo = z.infer<typeof SiteInfo>;
 export type SortDir = z.infer<typeof SortDir>;
+export type Actor = z.infer<typeof Actor>;

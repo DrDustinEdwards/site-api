@@ -64,11 +64,24 @@ export function setSearchFields(front: string, values: Partial<SearchValues>): s
 /**
  * The post fields (v0.17.0), beside the search fields and kept the same way: `excerpt` (the summary a list shows),
  * `authors` (display names in credit order, the first the primary author), `series` (its name) and `seriesPart` (a
- * positive whole number). A site lists the ones it renders in its capabilities' `postFields`.
+ * positive whole number). v0.19.0: `featureImage` (the picture a post leads with: a URL, a site path or a media key) and
+ * `featureImageAlt` (its alt text). A site lists the ones it renders in its capabilities' `postFields`.
  */
-export const POST_FIELDS = ["excerpt", "authors", "series", "seriesPart"] as const;
+export const POST_FIELDS = ["excerpt", "authors", "series", "seriesPart", "featureImage", "featureImageAlt"] as const;
 export type PostField = (typeof POST_FIELDS)[number];
-export type PostValues = { excerpt: string; authors: string[]; series: string; seriesPart: number | null };
+export type PostValues = {
+  excerpt: string;
+  authors: string[];
+  series: string;
+  seriesPart: number | null;
+  featureImage: string;
+  featureImageAlt: string;
+  /**
+   * v0.19.0: true when the post marks its feature image decorative (`featureImageDecorative: true`), so an empty alt is
+   * right and does not block a publish. Not a post field of its own: it goes with `featureImage`.
+   */
+  featureImageDecorative: boolean;
+};
 
 export function postFieldsOf(front: string | null): PostValues {
   const part = Number(readKey(front, "seriesPart"));
@@ -77,6 +90,9 @@ export function postFieldsOf(front: string | null): PostValues {
     authors: authorsOf(front),
     series: readKey(front, "series"),
     seriesPart: Number.isInteger(part) && part > 0 ? part : null,
+    featureImage: readKey(front, "featureImage"),
+    featureImageAlt: readKey(front, "featureImageAlt"),
+    featureImageDecorative: readKey(front, "featureImageDecorative") === "true",
   };
 }
 
@@ -95,14 +111,19 @@ function authorsOf(front: string | null): string[] {
   return list.map((n) => n.trim()).filter(Boolean);
 }
 
-/** The frontmatter with these post fields set, as JSON literals like the search fields. A blank text, no authors or a null part removes the key. */
+/**
+ * The frontmatter with these post fields set, as JSON literals like the search fields. A blank text, no authors, a null
+ * part or a false `featureImageDecorative` removes the key.
+ */
 export function setPostFields(front: string, values: Partial<PostValues>): string {
   let out = front;
-  for (const field of POST_FIELDS) {
+  for (const field of [...POST_FIELDS, "featureImageDecorative"] as const) {
     const value = values[field];
     if (value === undefined) continue;
     let literal: string | null;
-    if (Array.isArray(value)) {
+    if (typeof value === "boolean") {
+      literal = value ? "true" : null;
+    } else if (Array.isArray(value)) {
       const names = value.map((n) => n.trim()).filter(Boolean);
       literal = names.length > 0 ? JSON.stringify(names) : null;
     } else if (typeof value === "number" || value === null) {
@@ -113,6 +134,24 @@ export function setPostFields(front: string, values: Partial<PostValues>): strin
     out = setBlock(out, field, literal === null ? [] : [`${field}: ${literal}`]);
   }
   return out;
+}
+
+/**
+ * The picture fields whose alt text is missing (v0.19.0, D8): the share image (`image` without `imageAlt`) where the site
+ * lists `image`, and the feature image (`featureImage` without `featureImageAlt`) where it lists `featureImage`. Each blocks a publish, as alt text in the body does. A picture the post marks decorative (`imageDecorative:
+ * true` or `featureImageDecorative: true`) takes an empty alt and is not listed; nothing else does. Carrel's gate and the
+ * package's publish both read this.
+ */
+export function missingAltFields(front: string | null, declared: { searchFields?: readonly string[]; postFields?: readonly string[] }): Array<"imageAlt" | "featureImageAlt"> {
+  const faults: Array<"imageAlt" | "featureImageAlt"> = [];
+  if ((declared.searchFields ?? []).includes("image") && readKey(front, "image") && !readKey(front, "imageAlt") && readKey(front, "imageDecorative") !== "true") {
+    faults.push("imageAlt");
+  }
+  const post = postFieldsOf(front);
+  if ((declared.postFields ?? []).includes("featureImage") && post.featureImage && !post.featureImageAlt && !post.featureImageDecorative) {
+    faults.push("featureImageAlt");
+  }
+  return faults;
 }
 
 // The JSON source format: the front matter a site writes for Carrel when it stores its fields in columns,
