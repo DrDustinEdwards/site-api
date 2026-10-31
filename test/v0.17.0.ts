@@ -24,8 +24,9 @@ export const V0170_ADDED: Record<string, string[]> = {
 const ACTOR = ["actor"];
 const ACTOR_NAME = ["actorName"];
 export const V0190_ADDED: Record<string, string[]> = {
-  Capabilities: ["backlinks", "hooks", "previewLinkHours"],
+  Capabilities: ["backlinks", "contentHasDraft", "hooks", "previewLinkHours"],
   ErrorBody: ["field"],
+  ContentSummary: ["hasDraft"], ContentDoc: ["hasDraft"],
   SaveDraftInput: ACTOR, PublishInput: ACTOR, ScheduleInput: ACTOR, UnpublishInput: ACTOR, ContentTagsInput: ACTOR,
   ContentDeleteQuery: ACTOR_NAME, ScheduleCancelQuery: ACTOR_NAME,
   MediaAltInput: ACTOR, MediaTagsInput: ACTOR, MediaTrashInput: ACTOR, MediaFocusInput: ACTOR, MediaCaptionInput: ACTOR,

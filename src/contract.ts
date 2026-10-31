@@ -191,6 +191,8 @@ export const Capabilities = z.object({
   previewLinks: z.boolean().optional(),
   /** True when a publish takes `publishedAt`, the date it is published under. */
   contentPublishedAt: z.boolean().optional(),
+  /** v0.19.0: items carry `hasDraft`, and a `draft` list also lists a live item with a pending draft. */
+  contentHasDraft: z.boolean().optional(),
   /** The post fields the site renders from a post's frontmatter, each under its shared name. Absent: none. */
   postFields: z.array(z.enum(POST_FIELDS)).optional(),
   /** The Prelum RENDER_VERSION the site's stored HTML was rendered with (v0.17.0); a site re-renders when it is behind. Absent: the site does not say. */

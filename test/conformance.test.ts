@@ -67,7 +67,7 @@ describe("conformance", () => {
     ]);
     // v0.19.0 (M2): every check is a probe, and the probe post's steps, off by default, are each listed as passed over.
     expect(report.probes.filter((p) => !p.skipped).map((p) => p.name)).toEqual(report.checks.map((c) => c.name));
-    expect(report.probes.filter((p) => p.skipped)).toHaveLength(11);
+    expect(report.probes.filter((p) => p.skipped)).toHaveLength(12);
     expect(report.probes.find((p) => p.skipped)).toMatchObject({ name: "probe post: created as a draft", detail: "probePosts is off" });
   });
 
@@ -391,6 +391,7 @@ describe("conformance", () => {
       ["published, and its public page answers", false],
       ["each declared hook recorded a run for the publish", false],
       ["backlinks answer in shape", false],
+      ["a draft saved over the live post reads hasDraft and lists as published and as a draft", false],
       ["a rename answers 301 from the old path", false],
       ["trash and restore", false],
       ["a delete answers 410 on the old path", false],

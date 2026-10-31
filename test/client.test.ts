@@ -27,6 +27,7 @@ describe("client round trip", () => {
       contentDelete: true,
       contentTags: true,
       contentPublishedAt: true,
+      contentHasDraft: true,
       contentRename: true,
       contentTrash: true,
       contentFilters: ["kind", "tag", "author", "published", "trashed"],

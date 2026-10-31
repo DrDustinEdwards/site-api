@@ -180,7 +180,7 @@ export function memoryAdapter(
   function commit(
     id: string,
     previous: Stored | undefined,
-    changes: { source?: string; status: ContentStatus; publishAt?: string | null; pending?: ScheduledUpdate | null; publishedAt?: string; redate?: string; trashedAt?: string | null },
+    changes: { source?: string; status: ContentStatus; publishAt?: string | null; pending?: ScheduledUpdate | null; publishedAt?: string; redate?: string; trashedAt?: string | null; hasDraft?: boolean },
     changeId: string,
     message: string,
     actor?: { name: string },
@@ -202,6 +202,9 @@ export function memoryAdapter(
       source,
       version,
       ...(contentExtras ? { trashedAt: changes.trashedAt !== undefined ? changes.trashedAt : (previous?.doc.trashedAt ?? null) } : {}),
+      // v0.19.0: only a live item has a pending draft; a write that does not say keeps what it had. (In memory the draft is
+      // the source itself: there is no separate public copy to keep.)
+      ...(contentExtras ? { hasDraft: changes.status === "published" && (changes.hasDraft ?? previous?.doc.hasDraft ?? false) } : {}),
     };
     // Only a live item carries an update, and a write that does not name one keeps what was waiting.
     const pending = changes.status !== "published" ? undefined : changes.pending === undefined ? previous?.pending : (changes.pending ?? undefined);
@@ -513,7 +516,7 @@ export function memoryAdapter(
           more,
         };
       },
-      ...(resize && !options.mediaReplaceKeepsSize
+      ...(resize
         ? {
             async shrink(id: string, input: { expectedVersion: string; changeId: string }) {
               const stored = heldMedia(id, input.expectedVersion);
@@ -719,12 +722,12 @@ export function memoryAdapter(
     deletedContent,
     ...(mediaAdapter ? { media: mediaAdapter } : {}),
     content: {
-      ...(contentExtras ? { publishedAtSettable: true, postFields: POST_FIELDS, filters: ["kind", "tag", "author", "published"] as const } : {}),
+      ...(contentExtras ? { publishedAtSettable: true, hasDraft: true, postFields: POST_FIELDS, filters: ["kind", "tag", "author", "published"] as const } : {}),
       async list(query) {
         const needle = query.q?.toLowerCase();
         const all = [...store.values()]
           .map((s) => s.doc)
-          .filter((d) => !query.status || d.status === query.status)
+          .filter((d) => !query.status || d.status === query.status || (query.status === "draft" && d.hasDraft === true))
           .filter((d) => Boolean(d.trashedAt) === Boolean(query.trashed))
           .filter((d) => !query.kind || d.kind === query.kind)
           .filter((d) => !query.tag || (withTags(d).tags ?? []).some((t) => t.toLowerCase() === query.tag!.toLowerCase()))
@@ -758,13 +761,13 @@ export function memoryAdapter(
       async saveDraft(id, input) {
         const previous = expect(id, input.expectedVersion);
         const status = previous?.doc.status === "published" ? "published" : "draft";
-        return commit(id, previous, { source: input.source, status, publishAt: previous?.doc.publishAt }, input.changeId, "Save", input.actor);
+        return commit(id, previous, { source: input.source, status, publishAt: previous?.doc.publishAt, hasDraft: status === "published" }, input.changeId, "Save", input.actor);
       },
       async publish(id, input) {
         const previous = existing(id, input.expectedVersion);
         // A publish now drops any update that was waiting: what goes live is this.
         const redate = input.publishedAt ? { redate: new Date(input.publishedAt).toISOString() } : {};
-        return commit(id, previous, { source: input.source, status: "published", pending: null, ...redate }, input.changeId, "Publish", input.actor);
+        return commit(id, previous, { source: input.source, status: "published", pending: null, hasDraft: false, ...redate }, input.changeId, "Publish", input.actor);
       },
       async schedule(id, input) {
         const previous = existing(id, input.expectedVersion);

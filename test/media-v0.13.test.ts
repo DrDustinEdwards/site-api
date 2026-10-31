@@ -252,15 +252,24 @@ describe("shrinking large pictures (11)", () => {
     expect(adapter.mediaStore.get(kept.id)!.revisions!.map((r) => r.reason)).toEqual(["upload", "resize"]);
   });
 
-  it("PLANT: refuses more files than one pass takes before the adapter, and offers no pass where addresses carry the size", async () => {
+  it("PLANT: refuses more files than one pass takes before the adapter, and where a replace keeps the size, a shrink that changes the proportions", async () => {
     const { adapter, api } = setup();
     const shrink = vi.spyOn(adapter.media!, "shrink");
     const items = Array.from({ length: 21 }, (_, n) => ({ id: `uploads/${n}.png`, expectedVersion: "m1", changeId: `p${n}` }));
     expect((await api.handle(req("/api/carrel/v1/media/resize-pass", { method: "POST", ...body({ items }) }))).status).toBe(400);
     expect(shrink).not.toHaveBeenCalled();
+    // v0.19.0: txasm's pages hold each picture's width and height, so a shrink in the same proportions is offered there.
     const keeps = setup({ mediaReplaceKeepsSize: true });
-    expect((await keeps.client.meta()).capabilities.mediaResizePass).toBeUndefined();
-    expect((await keeps.api.handle(req("/api/carrel/v1/media/resize-pass", { method: "POST", ...body({ items: items.slice(0, 1) }) }))).status).toBe(501);
+    expect((await keeps.client.meta()).capabilities.mediaResizePass).toBe(true);
+    const a = await keeps.put("a.png", png(4000, 3000), { resize: "no" });
+    const b = await keeps.put("b.png", png(4000, 3000, {}, 1), { resize: "no" });
+    const fair = keeps.adapter.media!.shrink!.bind(keeps.adapter.media);
+    vi.spyOn(keeps.adapter.media!, "shrink").mockImplementation(async (id, input) => {
+      const done = await fair(id, input);
+      return id === b.id ? { ...done, item: { ...done.item, height: done.item.width } } : done;
+    });
+    const pass = await keeps.client.media.resizePass({ items: [a, b].map((f, n) => ({ id: f.id, expectedVersion: f.version!, changeId: `k${n}` })) });
+    expect(pass.results).toMatchObject([{ ok: true, id: a.id, resized: true, width: 2048, height: 1536 }, { ok: false, id: b.id, error: "internal" }]);
   });
 });
 

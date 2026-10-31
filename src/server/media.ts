@@ -298,14 +298,20 @@ export function mediaRoutes(media: MediaAdapter, log: Log): Route[] {
       pattern: /^\/media\/resize-pass$/,
       run: async (_m, _u, request) => {
         if (!media.resize || !media.shrink) return fail("not-implemented", "This site does not shrink stored pictures.");
-        if (media.replaceKeepsSize) return fail("not-implemented", "This site's addresses carry each picture's size, so a stored picture is never shrunk in place.");
         const input = await readBody(request, MediaResizePassInput);
         const results: MediaResizeOutcome[] = [];
         // One at a time, like bulk: image work is slow, and one file's refusal is that file's outcome alone.
         for (const { id, expectedVersion, changeId } of input.items) {
           try {
+            // v0.19.0: where a replace keeps the size, pages hold each picture's width and height, so a shrink may only make
+            // the picture smaller in the same proportions (the boxes those pages drew still fit it). A site whose addresses
+            // carry the size leaves `shrink` out altogether.
+            const before = media.replaceKeepsSize ? await held(id, expectedVersion, "shrunk") : null;
             const { resized, item } = await media.shrink(id, { expectedVersion, changeId });
             if (item.id !== id) throw new ContractBreach(`shrink moved ${id} to ${item.id}`);
+            if (before && resized && !keepsProportions(before, item)) {
+              throw new ContractBreach(`shrink of ${id} went from ${before.width}x${before.height} to ${item.width}x${item.height}; on a site whose replace keeps the size a shrink only makes a picture smaller, in the same proportions`);
+            }
             results.push({ ok: true, id, changeId, resized, ...(item.version ? { version: item.version } : {}), width: item.width, height: item.height, bytes: item.bytes });
           } catch (error) {
             results.push({ ...failedOutcome(error, log), id, changeId });
@@ -516,4 +522,11 @@ async function bulkOne(
     const usedBy = error instanceof MediaInUseError ? error.usedBy : undefined;
     return { ...failedOutcome(error, log), id, changeId, ...(usedBy ? { usedBy } : {}) };
   }
+}
+
+/** True when `after` is no larger than `before` on either edge and has its proportions, to the pixel a rounding moves. */
+function keepsProportions(before: { width: number | null; height: number | null }, after: { width: number | null; height: number | null }): boolean {
+  const [w0, h0, w1, h1] = [before.width, before.height, after.width, after.height];
+  if (w0 === null || h0 === null || w1 === null || h1 === null) return false;
+  return w1 <= w0 && h1 <= h0 && Math.abs(w1 * h0 - h1 * w0) <= Math.max(w0, h0);
 }

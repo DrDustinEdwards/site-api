@@ -47,6 +47,11 @@ export const ContentSummary = z.object({
   excerpt: z.string().max(5000).optional(),
   /** When the item went to the trash (v0.17.0), null when it is not there. Absent: the site has no content trash. */
   trashedAt: Timestamp.nullable().optional(),
+  /**
+   * v0.19.0, where capabilities.contentHasDraft: true when the item is live and a saved draft waits that is not published
+   * yet; false otherwise. Such an item's `status` stays `published`, and a list filtered to `draft` lists it too.
+   */
+  hasDraft: z.boolean().optional(),
 });
 
 export const ContentDoc = ContentSummary.extend({

@@ -668,6 +668,7 @@ export async function runConformance(config: ConformanceConfig): Promise<Conform
       "probe post: published, and its public page answers",
       "probe post: each declared hook recorded a run for the publish",
       "probe post: backlinks answer in shape",
+      "probe post: a draft saved over the live post reads hasDraft and lists as published and as a draft",
       "probe post: a rename answers 301 from the old path",
       "probe post: trash and restore",
       "probe post: a delete answers 410 on the old path",
@@ -812,7 +813,20 @@ export async function runConformance(config: ConformanceConfig): Promise<Conform
         return `${list.items.length} backlink(s)`;
       });
 
-      await step(names[7], !live ? "the probe post did not publish" : caps.contentRename ? null : "the site does not rename content", async () => {
+      await step(names[7], !live ? "the probe post did not publish" : caps.contentHasDraft ? null : "the site does not mark a live item's pending draft", async () => {
+        version = (await ok(await json("PUT", `/content/${id}/draft`, { source: `${source}\nA pending edit.\n`, expectedVersion: version, changeId: probe() }), WriteResult, "draft over live")).version;
+        const doc = await read();
+        if (doc.status !== "published" || doc.hasDraft !== true) throw new Error(`after a draft over the live post: ${doc.status}, hasDraft ${String(doc.hasDraft)}`);
+        for (const status of ["published", "draft"] as const) {
+          const list = await ok(await json("GET", `/content?status=${status}&limit=200`), ContentList, `status=${status}`);
+          const row = list.items.find((i) => i.id === id);
+          if (!row) throw new Error(`status=${status} does not list it`);
+          if (row.status !== "published" || row.hasDraft !== true) throw new Error(`status=${status} lists it as ${row.status}, hasDraft ${String(row.hasDraft)}`);
+        }
+        return "hasDraft true, listed under published and draft";
+      });
+
+      await step(names[8], !live ? "the probe post did not publish" : caps.contentRename ? null : "the site does not rename content", async () => {
         const newId = `${id}-renamed`;
         const written = await ok(await json("POST", `/content/${id}/rename`, { newId, expectedVersion: version, changeId: probe() }), RenameResult, "rename");
         [id, version] = [newId, written.version];
@@ -825,7 +839,7 @@ export async function runConformance(config: ConformanceConfig): Promise<Conform
         return `${old} 301 to ${path}`;
       });
 
-      await step(names[8], caps.contentTrash ? null : "the site has no content trash", async () => {
+      await step(names[9], caps.contentTrash ? null : "the site has no content trash", async () => {
         const trashed = await ok(await json("POST", `/content/${id}/trash`, { expectedVersion: version, changeId: probe() }), WriteResult, "trash");
         const binned = await ok(await json("GET", "/content?trashed=true&limit=200"), ContentList, "trash list");
         if (!binned.items.some((i) => i.id === id)) throw new Error("not listed in the trash");
@@ -835,7 +849,7 @@ export async function runConformance(config: ConformanceConfig): Promise<Conform
         return "trashed, listed in the trash, restored as a draft";
       });
 
-      await step(names[9], !live ? "the probe post did not publish" : caps.replay ? null : "the site has no store, so it keeps no tombstones", async () => {
+      await step(names[10], !live ? "the probe post did not publish" : caps.replay ? null : "the site has no store, so it keeps no tombstones", async () => {
         const doc = await read();
         version = doc.status === "published" ? doc.version : (await ok(await json("POST", `/content/${id}/publish`, { expectedVersion: doc.version, changeId: probe() }), WriteResult, "publish again")).version;
         const gone = (await read()).path ?? path;
@@ -844,7 +858,7 @@ export async function runConformance(config: ConformanceConfig): Promise<Conform
         return `${gone} answers 410`;
       });
     } finally {
-      await check(names[10], async () => {
+      await check(names[11], async () => {
         const left = await json("GET", `/content/${encodeURIComponent(id)}`);
         if (left.status === 404) return `${id} is gone`;
         const doc = await ok(left, ContentDoc, "read before cleaning up");
