@@ -77,6 +77,8 @@ export interface IntentResult {
   conflict?: { id: string; currentVersion: string | null };
   /** Set instead of acting, for a step nothing can undo: what to ask, and the fields to post again with `confirm`. */
   confirm?: ConfirmRequest;
+  /** Set by the posts list's `preview-link` (v0.15.0): the link to show once, and when it stops working. */
+  previewLink?: { url: string; expiresAt: string };
 }
 
 /** What a one-way intent asks before it runs (Capsomer's confirm dialog with script, its confirm page without). */
