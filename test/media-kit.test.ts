@@ -1,6 +1,7 @@
 // The media kit (v0.14.0): the parts a mistake in would ship silently. A write the site refused or lost to another must
 // reach the handler as the error it answers; a preview found by a crawler must say noindex and cannot be broken out of by
-// its title; and a site's cost cap must stop the suggester before the model is paid for.
+// its title; a site's cost cap must stop the suggester before the model is paid for; and a gateway or an answer gone
+// wrong must not reach the person as a failure or as alt text.
 
 import { describe, expect, it, vi } from "vitest";
 import { NotFoundError, RefusedError, VersionConflictError } from "../src/adapter.js";
@@ -52,5 +53,20 @@ describe("media kit", () => {
     const suggest = mediaSuggester({ app: "sample", describe: "on a sample site", afterCall });
     expect(await suggest(env, { body: picture() }, "a.png")).toEqual({ tags: ["dog"], alt: "A dog.", model: expect.any(String) });
     expect(afterCall).toHaveBeenCalledWith(env, expect.objectContaining({ promptTokens: 5, completionTokens: 0 }), "a.png");
+  });
+
+  it("PLANT: a custom-domain gateway never fails a suggestion, and alt text with a chatbot's leftovers is not offered", async () => {
+    const run = vi.fn(async (_model: string, _input: unknown, _options?: object) => ({ response: { alt: "As an AI language model, I see a dog.", tags: ["dog"] } }));
+    const output = async () => ({ response: () => new Response("jpeg") });
+    const images = { input: () => ({ output, transform: () => ({ output }) }) };
+    const suggest = mediaSuggester({ app: "sample", describe: "on a sample site" });
+    const custom = "https://ai.example.com/anthropic";
+    const gatewayOn = async (env: Partial<SuggestEnv>) => {
+      await suggest({ AI: { run }, IMAGES: images, ...env }, new Response("png").body!);
+      return (run.mock.calls.at(-1)?.[2] as { gateway?: { id: string } }).gateway?.id;
+    };
+    expect(await gatewayOn({ AI_GATEWAY_BASE_URL: custom, AI_GATEWAY_ID: "sample-gw" })).toBe("sample-gw");
+    expect(await gatewayOn({ AI_GATEWAY_BASE_URL: custom })).toBeUndefined();
+    expect(await suggest({ AI: { run }, IMAGES: images }, new Response("png").body!)).toEqual({ tags: ["dog"], alt: null, model: expect.any(String) });
   });
 });
