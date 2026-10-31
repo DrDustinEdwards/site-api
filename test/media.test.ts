@@ -33,7 +33,7 @@ function client(adapter = memoryAdapter()) {
 }
 
 function upload(bytes: Uint8Array, type: string, filename = "photo.png", headers: Record<string, string> = {}) {
-  return req(`/api/carrel/v1/media?filename=${encodeURIComponent(filename)}&changeId=c1`, {
+  return req(`/api/carrel/v1/media?filename=${encodeURIComponent(filename)}&alt=A%20test%20picture&changeId=c1`, {
     method: "POST",
     body: new Blob([bytes as Uint8Array<ArrayBuffer>]),
     headers: { "content-type": type, ...headers },
@@ -47,7 +47,7 @@ describe("media round trip", () => {
     expect(item).toMatchObject({ url: `/media/${item.id}`, filename: "Paluxy River.png", contentType: "image/png", bytes: PNG.byteLength, alt: "The river", deletable: true });
     expect(adapter.mediaStore.get(item.id)?.bytes).toEqual(PNG);
 
-    await c.media.upload({ bytes: JPEG, contentType: "image/jpeg", filename: "tracks.jpg", changeId: "c2" });
+    await c.media.upload({ bytes: JPEG, contentType: "image/jpeg", filename: "tracks.jpg", alt: "A test picture", changeId: "c2" });
     expect((await c.media.list()).items.map((i) => i.filename)).toEqual(["tracks.jpg", "Paluxy River.png"]);
     expect((await c.media.list({ q: "river" })).items.map((i) => i.id)).toEqual([item.id]);
     expect(await c.media.list({ limit: 1 })).toMatchObject({ items: [{ filename: "tracks.jpg" }], nextCursor: "1" });
@@ -69,7 +69,7 @@ describe("media round trip", () => {
 describe("PLANT: deleting a file a post uses", () => {
   it("is refused with the post named, and deletes once the post stops using it", async () => {
     const { client: c, adapter } = client();
-    const item = await c.media.upload({ bytes: PNG, contentType: "image/png", filename: "cover.png", changeId: "c1" });
+    const item = await c.media.upload({ bytes: PNG, contentType: "image/png", filename: "cover.png", alt: "A test picture", changeId: "c1" });
     const saved = await adapter.content.saveDraft("river-post", {
       source: `---\ntitle: The river\n---\nIntro.\n\n![The river](${item.url})\n`,
       expectedVersion: null,
@@ -92,7 +92,7 @@ describe("PLANT: deleting a file a post uses", () => {
 
   it("names every post that uses it", async () => {
     const { client: c, adapter } = client();
-    const item = await c.media.upload({ bytes: PNG, contentType: "image/png", filename: "shared.png", changeId: "c1" });
+    const item = await c.media.upload({ bytes: PNG, contentType: "image/png", filename: "shared.png", alt: "A test picture", changeId: "c1" });
     for (const id of ["one", "two"]) await adapter.content.saveDraft(id, { source: `# Post ${id}\n\n![](${item.url})\n`, expectedVersion: null, changeId: `s-${id}` });
     const error = (await c.media.delete(item.id, "c2").catch((e: unknown) => e)) as SiteApiError;
     expect(error.body?.usedBy?.map((u) => u.id)).toEqual(["one", "two"]);
@@ -124,7 +124,7 @@ describe("PLANT: an upload the site does not accept", () => {
       },
       // No read-ahead: a pull happens only when someone reads.
     }, { highWaterMark: 0 });
-    const request = new Request(`${ORIGIN}/api/carrel/v1/media?filename=a.png&changeId=c1`, {
+    const request = new Request(`${ORIGIN}/api/carrel/v1/media?filename=a.png&alt=A%20test%20picture&changeId=c1`, {
       method: "POST",
       body,
       headers: { authorization: `Bearer ${KEY}`, "content-type": "image/png", "content-length": "1000000" },

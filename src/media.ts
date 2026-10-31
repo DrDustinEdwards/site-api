@@ -3,7 +3,7 @@
 // the bytes must look like the declared type where the type has a signature. The site's own checks
 // (measuring an image, its storage) come after these, never instead of them.
 
-import type { MediaKind, MediaOrientation, MediaTransformOp, MediaUploadLimits } from "./contract.js";
+import { MAX_ALT_CHARS, type MediaItem, type MediaKind, type MediaOrientation, type MediaTransformOp, type MediaUploadLimits } from "./contract.js";
 
 /** The media type without parameters, lower case: "image/png; x=1" is "image/png". */
 export function essence(contentType: string | null): string {
@@ -103,6 +103,49 @@ export function checkUpload(contentType: string, bytes: Uint8Array | null, limit
  * family's one copy (v0.14.0; the same digest this package wrote itself before).
  */
 export { sha256Hex } from "@dustinedwards/site-runtime/encoding";
+
+/** Alt text that names a kind of file rather than what it shows. */
+const EMPTY_ALT = new Set(["image", "img", "photo", "picture", "pic", "graphic", "screenshot", "untitled", "alt", "alt text", "placeholder", "figure"]);
+
+const words = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+
+/**
+ * Why an alt text cannot be stored (v0.19.0, checklist B2 and B3), or null: an upload, an import and an alt write need
+ * alt or an explicit decorative choice, never both; and an alt is at most MAX_ALT_CHARS, and is not the file's name, an
+ * address, or a word such as "image" or "photo".
+ */
+export function altRefusal(alt: string | undefined, decorative: boolean, filename: string | null): string | null {
+  const text = (alt ?? "").trim();
+  if (decorative) return text ? "A decorative picture has no alt text: send the alt text or mark it decorative, not both." : null;
+  if (!text) return "Say what the picture shows in its alt text, or mark it decorative if it adds nothing a reader would miss.";
+  if (text.length > MAX_ALT_CHARS) return `Alt text is at most ${MAX_ALT_CHARS} characters; put the rest in the caption.`;
+  const said = words(text);
+  const stem = filename ? words(filename.replace(/\.[^.]+$/, "")) : "";
+  if (/^(?:https?:\/\/|www\.)\S*$/i.test(text) || /^\S+\.(?:jpe?g|png|webp|avif|gif|svg|heic|heif)$/i.test(text) || said === stem || EMPTY_ALT.has(said)) {
+    return "Alt text says what the picture shows, not its file name, its address or a word such as \"image\".";
+  }
+  return null;
+}
+
+/**
+ * A library file's rights as Prelum's ImageObject takes them (pageImage and imageObject: `creditText`, `copyrightNotice`,
+ * `license`, `acquireLicensePage`), each only where the file has it (v0.19.0), so a figure shows the stored credit and a
+ * page's ImageObject carries it. `license` is the license page, else the license itself where it is an address.
+ */
+export function imageRights(item: Pick<MediaItem, "credit" | "license" | "copyright" | "licenseUrl" | "acquireLicenseUrl">): {
+  creditText?: string;
+  copyrightNotice?: string;
+  license?: string;
+  acquireLicensePage?: string;
+} {
+  const license = item.licenseUrl || (/^https?:\/\//i.test(item.license ?? "") ? item.license : undefined);
+  return {
+    ...(item.credit ? { creditText: item.credit } : {}),
+    ...(item.copyright ? { copyrightNotice: item.copyright } : {}),
+    ...(license ? { license } : {}),
+    ...(item.acquireLicenseUrl ? { acquireLicensePage: item.acquireLicenseUrl } : {}),
+  };
+}
 
 /** What a file is, from its type, for the list's `kind` filter: image, video and audio by their type, everything else a document. */
 export function kindOf(contentType: string): MediaKind {

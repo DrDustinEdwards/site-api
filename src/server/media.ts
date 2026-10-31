@@ -14,6 +14,8 @@ import {
   MediaDeleteQuery,
   MediaDeleteResult,
   MediaDetail,
+  MediaFileSuggestQuery,
+  MediaFileSuggestions,
   MediaFocusInput,
   MediaHistory,
   MediaId,
@@ -41,7 +43,8 @@ import {
   type MediaResizeOutcome,
   type MediaUse,
 } from "../contract.js";
-import { ImportRefusal, checkUpload, essence, fetchImport, importRefusal, kindOf, readUpload, sha256Hex, turnsSize } from "../media.js";
+import { ImportRefusal, altRefusal, checkUpload, essence, fetchImport, importRefusal, kindOf, readUpload, sha256Hex, turnsSize } from "../media.js";
+import { stripMetadata } from "../media-upload.js";
 import { BadRequest, ContractBreach, ID, checked, describeFailure, fail, json, pathParam, readBody, readQuery, type Log, type Route } from "./http.js";
 
 /** How many trashed files one page of the empty-trash gather asks the site for. */
@@ -72,14 +75,29 @@ export function mediaRoutes(media: MediaAdapter, log: Log): Route[] {
       run: async (_m, url, request) => {
         const query = readQuery(url, MediaUploadQuery);
         const contentType = essence(request.headers.get("content-type"));
-        // The type first, so a file the site does not accept is never read at all.
+        // The type first, so a file the site does not accept is never read at all; then the alt, before a byte is read.
         const wrongType = checkUpload(contentType, null, media.limits);
         if (wrongType) throw new BadRequest(wrongType.code, wrongType.message);
-        const read = await readUpload(request, media.limits);
-        if (!read.ok) throw new BadRequest(read.refusal.code, read.refusal.message);
-        const wrongBytes = checkUpload(contentType, read.bytes, media.limits);
-        if (wrongBytes) throw new BadRequest(wrongBytes.code, wrongBytes.message);
-        return store(read.bytes, contentType, query);
+        const decorative = query.decorative === "yes";
+        checkAlt(query.alt, decorative, query.filename);
+        return store(await uploaded(request, contentType), contentType, { ...query, alt: decorative ? "" : query.alt!.trim(), decorative });
+      },
+    },
+    // v0.19.0: the model's alt text and tags for a file not yet stored, for the upload form to offer. Nothing is stored.
+    {
+      method: "POST",
+      pattern: /^\/media\/suggestions$/,
+      run: async (_m, url, request) => {
+        if (!media.suggestFile) return fail("not-implemented", "This site does not suggest alt text before an upload.");
+        const { url: address } = readQuery(url, MediaFileSuggestQuery);
+        if (address && !media.importFetch) return fail("not-implemented", "This site does not import files from the web.");
+        const file = address ? await imported(address) : { contentType: essence(request.headers.get("content-type")), bytes: null };
+        const wrongType = checkUpload(file.contentType, null, media.limits);
+        if (wrongType) throw new BadRequest(wrongType.code, wrongType.message);
+        if (kindOf(file.contentType) !== "image") throw new BadRequest("invalid", "Only a picture has alt text to suggest.");
+        const bytes = file.bytes ?? (await uploaded(request, file.contentType));
+        const found = await media.suggestFile({ bytes, contentType: file.contentType });
+        return json(200, checked(MediaFileSuggestions, suggestionOf(found), "media file suggestions"));
       },
     },
     // v0.13.0: the site's own copy of a file on the web, checked as an upload is.
@@ -89,27 +107,10 @@ export function mediaRoutes(media: MediaAdapter, log: Log): Route[] {
       run: async (_m, _u, request) => {
         if (!media.importFetch) return fail("not-implemented", "This site does not import files from the web.");
         const input = await readBody(request, MediaImportInput);
-        const refusal = importRefusal(input.url);
-        if (refusal) throw new BadRequest("invalid", refusal);
-        let response: Response;
-        let address: string;
-        try {
-          ({ response, address } = await fetchImport(media.importFetch, input.url));
-        } catch (error) {
-          if (error instanceof ImportRefusal) throw new RefusedError(error.message);
-          throw error;
-        }
-        const contentType = essence(response.headers.get("content-type"));
-        const wrongType = checkUpload(contentType, null, media.limits);
-        if (wrongType) {
-          await response.body?.cancel().catch(() => {});
-          throw new BadRequest(wrongType.code, wrongType.message);
-        }
-        const read = await readUpload(response, media.limits);
-        if (!read.ok) throw new BadRequest(read.refusal.code, read.refusal.message);
-        const wrongBytes = checkUpload(contentType, read.bytes, media.limits);
-        if (wrongBytes) throw new BadRequest(wrongBytes.code, wrongBytes.message);
-        return store(read.bytes, contentType, { ...input, filename: input.filename ?? nameOf(address) }, input.url);
+        const decorative = input.decorative === true;
+        checkAlt(input.alt, decorative, input.filename ?? nameOf(input.url));
+        const { bytes, contentType, address } = await imported(input.url);
+        return store(bytes, contentType, { ...input, filename: input.filename ?? nameOf(address), alt: decorative ? "" : input.alt!.trim(), decorative }, input.url);
       },
     },
     {
@@ -139,7 +140,10 @@ export function mediaRoutes(media: MediaAdapter, log: Log): Route[] {
         const id = mediaId(m);
         if (!media.setAlt) return fail("not-implemented", "This site does not edit alt text through the API.");
         const input = await readBody(request, MediaAltInput);
-        const result = await media.setAlt(id, input);
+        const decorative = input.decorative === true;
+        // An alt that may be the file's own name is checked against it; a decorative choice needs no read.
+        checkAlt(input.alt, decorative, decorative ? null : ((await media.get(id))?.filename ?? null));
+        const result = await media.setAlt(id, { ...input, alt: input.alt.trim(), decorative });
         return json(200, checked(MediaWriteResult, { id, version: result.version, changeId: input.changeId }, "media alt"));
       },
     },
@@ -200,7 +204,8 @@ export function mediaRoutes(media: MediaAdapter, log: Log): Route[] {
         const wrongBytes = checkUpload(contentType, read.bytes, media.limits);
         if (wrongBytes) throw new BadRequest(wrongBytes.code, wrongBytes.message);
         const { item, sizesNeedPurge } = await media.replace(id, {
-          bytes: read.bytes,
+          // A replacement's private metadata goes before the site sees it, as an upload's does in prepareUpload (v0.19.0).
+          bytes: stripMetadata(read.bytes, contentType),
           contentType,
           filename: query.filename,
           expectedVersion: query.expectedVersion,
@@ -219,7 +224,12 @@ export function mediaRoutes(media: MediaAdapter, log: Log): Route[] {
         const id = mediaId(m);
         if (!media.setCredit) return fail("not-implemented", "This site does not keep credit and license on files.");
         const input = await readBody(request, MediaCreditInput);
-        const result = await media.setCredit(id, { ...input, credit: input.credit.trim(), license: input.license.trim() });
+        const result = await media.setCredit(id, {
+          ...input,
+          credit: input.credit.trim(),
+          license: input.license.trim(),
+          ...(input.copyright !== undefined ? { copyright: input.copyright.trim() } : {}),
+        });
         return json(200, checked(MediaWriteResult, { id, version: result.version, changeId: input.changeId }, "media credit"));
       },
     },
@@ -281,10 +291,7 @@ export function mediaRoutes(media: MediaAdapter, log: Log): Route[] {
         if (!media.suggest) return fail("not-implemented", "This site does not suggest tags or alt text.");
         const found = await media.suggest(id);
         if (!found) throw new NotFoundError("No such media.");
-        // A model's words, in the contract's spelling: what cannot be a tag is dropped, never passed on.
-        const tags = [...new Set(found.tags.map((t) => t.trim().toLowerCase().replace(/[\s_]+/g, "-")))].filter((t) => MediaTag.safeParse(t).success).slice(0, 12);
-        const alt = found.alt?.trim() ? found.alt.trim().slice(0, 2000) : null;
-        return json(200, checked(MediaSuggestions, { id, tags, alt, model: found.model }, "media suggestions"));
+        return json(200, checked(MediaSuggestions, { id, ...suggestionOf(found) }, "media suggestions"));
       },
     },
     {
@@ -388,6 +395,36 @@ export function mediaRoutes(media: MediaAdapter, log: Log): Route[] {
     },
   ];
 
+  /** An upload's body, read up to the site's limit and checked against its declared type. */
+  async function uploaded(request: Parameters<typeof readUpload>[0], contentType: string): Promise<Uint8Array> {
+    const read = await readUpload(request, media.limits);
+    if (!read.ok) throw new BadRequest(read.refusal.code, read.refusal.message);
+    const wrongBytes = checkUpload(contentType, read.bytes, media.limits);
+    if (wrongBytes) throw new BadRequest(wrongBytes.code, wrongBytes.message);
+    return read.bytes;
+  }
+
+  /** A file on the web, fetched through the site's importFetch and checked as an upload is. */
+  async function imported(url: string): Promise<{ bytes: Uint8Array; contentType: string; address: string }> {
+    const refusal = importRefusal(url);
+    if (refusal) throw new BadRequest("invalid", refusal);
+    let response: Response;
+    let address: string;
+    try {
+      ({ response, address } = await fetchImport(media.importFetch!, url));
+    } catch (error) {
+      if (error instanceof ImportRefusal) throw new RefusedError(error.message);
+      throw error;
+    }
+    const contentType = essence(response.headers.get("content-type"));
+    const wrongType = checkUpload(contentType, null, media.limits);
+    if (wrongType) {
+      await response.body?.cancel().catch(() => {});
+      throw new BadRequest(wrongType.code, wrongType.message);
+    }
+    return { bytes: await uploaded(response, contentType), contentType, address };
+  }
+
   /** The file at the version the caller saw, and one the site lets this API change: the checks before a write to its bytes. */
   async function held(id: string, expectedVersion: string, done: string): Promise<MediaDetailType> {
     const current = await media.get(id);
@@ -404,7 +441,7 @@ export function mediaRoutes(media: MediaAdapter, log: Log): Route[] {
   async function store(
     bytes: Uint8Array,
     contentType: string,
-    fields: { filename: string; alt: string; changeId: string; resize?: "no" | undefined },
+    fields: { filename: string; alt: string; decorative: boolean; changeId: string; resize?: "no" | undefined },
     sourceUrl?: string,
   ): Promise<Response> {
     const sha256 = await sha256Hex(bytes);
@@ -417,6 +454,7 @@ export function mediaRoutes(media: MediaAdapter, log: Log): Route[] {
       contentType,
       filename: fields.filename,
       alt: fields.alt,
+      ...(fields.decorative ? { decorative: true } : {}),
       changeId: fields.changeId,
       sha256,
       resize: media.resize !== undefined && fields.resize !== "no",
@@ -436,6 +474,18 @@ export function mediaRoutes(media: MediaAdapter, log: Log): Route[] {
     if (found.items.length + found.removed.length > limit) throw new ContractBreach(`media changes: ${found.items.length + found.removed.length} answered for a limit of ${limit}`);
     return json(200, checked(MediaList, { items: found.items, nextCursor: null, changeCursor: found.cursor, removed: found.removed, moreChanges: found.more }, "media changes"));
   }
+}
+
+/** Refuses, as 400 before anything is read or stored, an alt the contract does not take (altRefusal). */
+function checkAlt(alt: string | undefined, decorative: boolean, filename: string | null): void {
+  const refusal = altRefusal(alt, decorative, filename);
+  if (refusal) throw new BadRequest("invalid", `alt: ${refusal}`);
+}
+
+/** A model's words, in the contract's spelling: what cannot be a tag is dropped, never passed on, and a blank alt is none. */
+function suggestionOf(found: { tags: string[]; alt: string | null; model: string }): { tags: string[]; alt: string | null; model: string } {
+  const tags = [...new Set(found.tags.map((t) => t.trim().toLowerCase().replace(/[\s_]+/g, "-")))].filter((t) => MediaTag.safeParse(t).success).slice(0, 12);
+  return { tags, alt: found.alt?.trim() ? found.alt.trim().slice(0, 2000) : null, model: found.model };
 }
 
 /** The name an import keeps when it names none: the address's last segment, made a plain file name. */

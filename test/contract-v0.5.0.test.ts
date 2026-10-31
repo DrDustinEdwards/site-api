@@ -10,6 +10,7 @@ import { z } from "zod";
 import * as contract from "../src/contract.js";
 import { additiveOnly, added, now, widened, type JsonSchema } from "./additive.js";
 import { V0170_CODES, V0170_ROUTES, V0170_SCHEMAS, V0170_WIDEN, withV0170 } from "./v0.17.0.js";
+import { V0190_ROUTES, V0190_SCHEMAS, asOfV0190, withV0190 } from "./v0.19.0.js";
 
 const V050 = JSON.parse(readFileSync(new URL("./fixtures/contract-v0.5.0.json", import.meta.url), "utf8")) as {
   version: string;
@@ -17,12 +18,13 @@ const V050 = JSON.parse(readFileSync(new URL("./fixtures/contract-v0.5.0.json", 
   routes: Array<Record<string, string>>;
   schemas: Record<string, JsonSchema>;
 };
+asOfV0190(V050.schemas);
 
 /** What every file may carry from v0.13.0 (contract-v0.12.0.test.ts holds the rest of v0.13.0). */
 const V0130_ITEM = ["color", "credit", "downloadUrl", "license", "licenseExpires", "placeholder", "sourceUrl", "takenAt", "usedCount"];
 
 /** Every v0.5.0 schema later versions extend, and exactly the optional properties each adds (v0.10.0: scheduled updates, and a file's focal point and caption). */
-const ADDED: Record<string, string[]> = withV0170({
+const ADDED: Record<string, string[]> = withV0190(withV0170({
   Capabilities: [
     "contentTags", "mediaCaption", "mediaChanges", "mediaCredit", "mediaDuplicates", "mediaEmbedded", "mediaFilters", "mediaFocus",
     "mediaHistory", "mediaImport", "mediaLenses", "mediaReplace", "mediaReplaceKeepsSize", "mediaResize", "mediaResizePass",
@@ -41,7 +43,7 @@ const ADDED: Record<string, string[]> = withV0170({
   MediaList: ["changeCursor", "moreChanges", "removed", "sorted", "total"],
   MentionListQuery: ["q", "targetId"],
   MentionList: ["filtered"],
-});
+}), V050.schemas);
 
 /** The one v0.5.0 schema v0.6.0 widens rather than extends: a decision may also be reset. */
 const WIDENED = "MentionDecideInput";
@@ -79,6 +81,7 @@ describe("the v0.5.0 contract", () => {
       "POST /media/resize-pass",
       ...V0170_ROUTES,
       "GET /insight/not-found",
+      ...V0190_ROUTES,
     ]);
   });
 
@@ -120,7 +123,7 @@ describe("the v0.5.0 contract", () => {
       "MediaResizePassResult", "MediaRevertInput", "MediaRevision", "MediaSourceUrl", "MediaSuggestions",
       "MediaTransformInput", "MediaTransformOp", "MediaTransformResult", "MediaTwin", "MediaUploadResult",
     ];
-    expect(exported.filter((n) => !(n in V050.schemas)).sort()).toEqual([...v060, ...v0100, ...v0130, "NotFoundQuery", "NotFoundReport", "NotFoundRow", ...V0170_SCHEMAS].sort());
+    expect(exported.filter((n) => !(n in V050.schemas)).sort()).toEqual([...v060, ...v0100, ...v0130, "NotFoundQuery", "NotFoundReport", "NotFoundRow", ...V0170_SCHEMAS, ...V0190_SCHEMAS].sort());
   });
 
   it("parses v0.5.0 bodies with the v0.6.0 schemas", () => {

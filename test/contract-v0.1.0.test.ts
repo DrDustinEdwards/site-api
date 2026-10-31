@@ -10,6 +10,7 @@ import { describe, expect, it } from "vitest";
 import * as contract from "../src/contract.js";
 import { additiveOnly, now, widened, type JsonSchema } from "./additive.js";
 import { V0170_ADDED, V0170_CODES, V0170_WIDEN } from "./v0.17.0.js";
+import { V0190_ROUTES } from "./v0.19.0.js";
 const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as { version: string };
 
 const V010 = JSON.parse(readFileSync(new URL("./fixtures/contract-v0.1.0.json", import.meta.url), "utf8")) as {
@@ -58,6 +59,7 @@ describe("the v0.1.0 contract", () => {
       "POST /media/trash/empty",
       "POST /media/bulk",
       "POST /media/resize-pass",
+      ...V0190_ROUTES,
     ]);
   });
 

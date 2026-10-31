@@ -115,7 +115,10 @@ export interface MediaUpload {
   /** One of the site's declared types, without parameters. */
   contentType: string;
   filename: string;
+  /** What the picture shows: never "" unless `decorative` (v0.19.0), and already checked by altRefusal. */
   alt: string;
+  /** v0.19.0: true when the person said the picture is decorative, so its alt is "" on purpose. A site that keeps it answers `decorative`. */
+  decorative?: boolean;
   changeId: string;
   /**
    * v0.13.0: the SHA-256 of the bytes as lower case hex, which the site keeps to find duplicates (findByHash, the duplicates
@@ -189,7 +192,7 @@ export interface MediaAdapter {
    * identifies its editable metadata, so each write here moves it. The write and whatever must
    * follow it (a cache purge) are one unit, run together in the method.
    */
-  setAlt?(id: string, input: { alt: string; expectedVersion: string; changeId: string }): Promise<{ version: string }>;
+  setAlt?(id: string, input: { alt: string; decorative?: boolean; expectedVersion: string; changeId: string }): Promise<{ version: string }>;
   /** `tags` is the whole set after the write, already in the contract's spelling. */
   setTags?(id: string, input: { tags: string[]; expectedVersion: string; changeId: string }): Promise<{ version: string }>;
   /** Soft delete: hides the file from list and removes nothing. Both trash and restore, or neither. */
@@ -224,10 +227,24 @@ export interface MediaAdapter {
    * bytes the site already holds. A site with it also answers the `duplicates` lens and `twins` on a detail.
    */
   findByHash?(sha256: string): Promise<MediaItem | null>;
-  /** Sets the file's credit, license, source and license end as one write, moving the version like the writes above. */
+  /**
+   * Sets the file's credit, license, source and license end as one write, moving the version like the writes above. v0.19.0:
+   * `copyright`, `licenseUrl` and `acquireLicenseUrl` where the write names them; a site that keeps them answers them on
+   * every item, and one that does not ignores them.
+   */
   setCredit?(
     id: string,
-    input: { credit: string; license: string; sourceUrl: string | null; licenseExpires: string | null; expectedVersion: string; changeId: string },
+    input: {
+      credit: string;
+      license: string;
+      sourceUrl: string | null;
+      licenseExpires: string | null;
+      copyright?: string;
+      licenseUrl?: string | null;
+      acquireLicenseUrl?: string | null;
+      expectedVersion: string;
+      changeId: string;
+    },
   ): Promise<{ version: string }>;
   /**
    * Turns or mirrors the picture (capabilities.mediaTransform). The package has checked that the file exists, is at
@@ -269,6 +286,13 @@ export interface MediaAdapter {
    * exist. The package keeps the tags that are tags in the contract's spelling, at most 12.
    */
   suggest?(id: string): Promise<{ tags: string[]; alt: string | null; model: string } | null>;
+  /**
+   * Optional (v0.19.0, capabilities.mediaUploadSuggestions): what the site's model suggests for a file not yet stored, so the
+   * upload form fills its alt field with a suggestion the person keeps, changes or replaces before the upload. The package
+   * has checked the bytes as an upload's. Nothing is stored. With `mediaSuggester`:
+   * `suggestFile: ({ bytes }) => suggest(env, new Response(toArrayBuffer(bytes)).body!)`.
+   */
+  suggestFile?(input: { bytes: Uint8Array; contentType: string }): Promise<{ tags: string[]; alt: string | null; model: string }>;
 }
 
 /** One replace (v0.10.0), already checked by the package. */
@@ -436,6 +460,7 @@ export function capabilitiesOf(adapter: SiteAdapter, options: { store?: boolean 
     ...(adapter.media?.resize && adapter.media.shrink && !adapter.media.replaceKeepsSize ? { mediaResizePass: true } : {}),
     ...(adapter.media?.readsEmbedded ? { mediaEmbedded: true } : {}),
     ...(adapter.media?.suggest ? { mediaSuggestions: true } : {}),
+    ...(adapter.media?.suggestFile ? { mediaUploadSuggestions: true } : {}),
     ...(adapter.mentions ? { mentions: true } : {}),
     ...(adapter.mentions?.reset ? { mentionReset: true } : {}),
     ...(adapter.schedules ? { scheduledUpdates: true } : {}),

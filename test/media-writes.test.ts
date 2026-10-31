@@ -148,7 +148,7 @@ describe("trash, restore and empty", () => {
   it("deletes at most 100 per request and says when more remain", async () => {
     const { client, adapter } = setup();
     for (let i = 0; i < 102; i++) {
-      const f = await client.media.upload({ bytes: PNG, contentType: "image/png", filename: `f${i}.png`, changeId: `u${i}` });
+      const f = await client.media.upload({ bytes: PNG, contentType: "image/png", filename: `f${i}.png`, alt: "A test picture", changeId: `u${i}` });
       await client.media.trash(f.id, { expectedVersion: f.version!, changeId: `t${i}` });
     }
     const first = await client.media.emptyTrash({ changeId: "e1" });
