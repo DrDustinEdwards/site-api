@@ -169,7 +169,8 @@ export const Capabilities = z.object({
   // ---------- v0.15.0, each optional per site
   /**
    * True when every write is safe to retry under its change id: the same request again answers what the first one did,
-   * with `Idempotent-Replayed: true`, and never runs twice. Absent: a retry runs again, as before.
+   * with `Idempotent-Replayed: true`, and never runs twice. Preview links are the exception: their answer holds the
+   * token, which is never stored, so a retried create makes a second link. Absent: a retry runs again, as before.
    */
   replay: z.boolean().optional(),
   /** True when an item moves to a new id, `POST /content/:id/rename`, its old path redirecting to the new one. */

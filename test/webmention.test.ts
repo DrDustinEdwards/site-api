@@ -34,15 +34,18 @@ describe("safeTarget", () => {
       "http://localhost/", "http://a.localhost/", "https://printer.local/", "http://127.0.0.1/", "http://2130706433/", "http://0x7f.1/",
       "http://10.1.2.3/", "http://172.20.0.1/", "http://192.168.1.1/", "http://169.254.169.254/", "http://100.64.0.1/", "http://0.0.0.0/",
       "http://[::1]/", "http://[fe80::1]/", "http://[fd00::1]/", "http://[::ffff:127.0.0.1]/", "ftp://example.com/", "file:///etc/passwd", "http://intranet/",
+      // IPv4 hidden in IPv6: compatible, translated, NAT64 of the metadata address, 6to4, Teredo; site-local; benchmarking.
+      "http://[::7f00:1]/", "http://[::ffff:0:7f00:1]/", "http://[64:ff9b::a9fe:a9fe]/", "http://[2002:7f00:1::]/", "http://[2001::1]/",
+      "http://[fec0::1]/", "http://198.18.0.1/", "http://192.0.0.1/",
     ]) expect(safeTarget(bad), bad).toBe(false);
-    for (const good of ["https://example.com/", "http://8.8.8.8/x", "https://[2606:4700::1]/", "http://172.32.0.1/"]) expect(safeTarget(good), good).toBe(true);
+    for (const good of ["https://example.com/", "http://8.8.8.8/x", "https://[2606:4700::1]/", "http://172.32.0.1/", "http://[64:ff9b::808:808]/", "http://[2002:808:808::]/"]) expect(safeTarget(good), good).toBe(true);
   });
 });
 
 describe("endpointOf", () => {
   it("takes the Link header first, then the first link or a with rel webmention in document order, resolved", () => {
     expect(endpointOf('<https://e.example/other>; rel="other", </wm>; rel="webmention me"', "", "https://t.example/p")).toBe("https://t.example/wm");
-    const html = `<!-- <link rel="webmention" href="/commented"> --><a rel="nofollow webmention" href="/first">x</a><link rel="webmention" href="/second">`;
+    const html = `<!-- <link rel="webmention" href="/commented"> --><script>"<link rel='webmention' href='/script'>"</script><a rel="nofollow webmention" href="/first">x</a><link rel="webmention" href="/second">`;
     expect(endpointOf(null, html, "https://t.example/p")).toBe("https://t.example/first");
     expect(endpointOf(null, `<link rel="webmention" href="">`, "https://t.example/p?q=1")).toBe("https://t.example/p?q=1");
     expect(endpointOf(null, "<p>none</p>", "https://t.example/p")).toBeNull();

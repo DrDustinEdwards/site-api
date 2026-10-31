@@ -84,6 +84,11 @@ export const ContentList = z.object({
   total: z.number().int().min(0).optional(),
   /** The order the site applied (v0.6.0). Absent: the site did not sort as asked, so a caller sorts the page itself. */
   sorted: z.object({ sort: z.enum(CONTENT_SORTS), dir: SortDir }).optional(),
+  /**
+   * The v0.15.0 filters the site applied. A v0.14.0 site drops a filter it does not know and lists everything, so the
+   * client refuses an answer that leaves out one it asked for, rather than show live posts as the trash.
+   */
+  filtered: z.array(z.enum(CONTENT_FILTERS)).optional(),
 });
 
 /** A post's whole tag set after the write (v0.6.0, optional per site). */
@@ -263,6 +268,18 @@ export type ContentList = z.infer<typeof ContentList>;
 export type ContentTagsInput = z.infer<typeof ContentTagsInput>;
 export type ContentSort = (typeof CONTENT_SORTS)[number];
 export type ContentFilter = (typeof CONTENT_FILTERS)[number];
+
+/** The v0.15.0 filters a list query asks for. */
+export function filtersAsked(query: Partial<z.infer<typeof ListQuery>>): ContentFilter[] {
+  const asked: Record<ContentFilter, boolean> = {
+    kind: query.kind !== undefined,
+    tag: query.tag !== undefined,
+    author: query.author !== undefined,
+    published: query.publishedAfter !== undefined || query.publishedBefore !== undefined,
+    trashed: query.trashed === true,
+  };
+  return CONTENT_FILTERS.filter((f) => asked[f]);
+}
 export type SaveDraftInput = z.infer<typeof SaveDraftInput>;
 export type PublishInput = z.infer<typeof PublishInput>;
 export type ScheduleInput = z.infer<typeof ScheduleInput>;

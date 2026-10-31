@@ -3,7 +3,6 @@
 import { createTwoFilesPatch } from "diff";
 import { capabilitiesOf, contentFiltersOf, hasContentTrash, NotFoundError, RefusedError, VersionConflictError, type SiteAdapter } from "../adapter.js";
 import {
-  CONTENT_FILTERS,
   ContentDeleteQuery,
   ContentDeleteResult,
   ContentDoc,
@@ -30,7 +29,7 @@ import {
   Version,
   WriteResult,
   schemaHash,
-  type ContentFilter,
+  filtersAsked,
 } from "../contract.js";
 import { BadRequest, BASE_HEADERS, ContractBreach, ID, checked, fail, json, pathParam, readBody, readQuery, type Route } from "./http.js";
 
@@ -62,16 +61,11 @@ export function contentRoutes(adapter: SiteAdapter, options: { store: boolean })
       run: async (_m, url) => {
         const query = readQuery(url, ListQuery);
         const offered = contentFiltersOf(adapter);
-        const asked: Record<ContentFilter, boolean> = {
-          kind: query.kind !== undefined,
-          tag: query.tag !== undefined,
-          author: query.author !== undefined,
-          published: query.publishedAfter !== undefined || query.publishedBefore !== undefined,
-          trashed: query.trashed === true,
-        };
-        const missing = CONTENT_FILTERS.find((f) => asked[f] && !offered.includes(f));
+        const asked = filtersAsked(query);
+        const missing = asked.find((f) => !offered.includes(f));
         if (missing) return fail("not-implemented", `This site does not filter its content list by ${missing}.`);
-        return json(200, checked(ContentList, await adapter.content.list(query), "content list"));
+        const list = checked(ContentList, await adapter.content.list(query), "content list");
+        return json(200, asked.length ? { ...list, filtered: asked } : list);
       },
     },
     {

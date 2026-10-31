@@ -76,6 +76,8 @@ export async function servePreviewLink(adapter: SiteAdapter, store: SiteApiStore
   if (link.revokedAt || Date.parse(link.expiresAt) <= Date.now()) return page(410, "This preview link has expired.");
   const doc = await adapter.content.get(link.contentId);
   if (!doc) return page(404, "No such preview link.");
+  // A trashed item is off the site, so its links stop with it.
+  if (doc.trashedAt) return page(410, "This preview link has expired.");
   const html = await adapter.preview.render({ id: doc.id, source: doc.source });
   if (typeof html !== "string") throw new ContractBreach("preview: not a string");
   return new Response(html, { status: 200, headers: { ...PRIVATE, "content-type": "text/html; charset=utf-8" } });

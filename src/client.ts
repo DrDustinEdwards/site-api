@@ -6,6 +6,7 @@ import {
   ContentDeleteResult,
   ContentDoc,
   ContentList,
+  filtersAsked,
   Diff,
   ErrorBody,
   MediaBulkResult,
@@ -120,7 +121,13 @@ export function createSiteClient(config: SiteClientConfig) {
 
   return {
     meta: () => get(Meta, "GET", "/meta"),
-    list: (q: Partial<ListQuery> = {}) => get(ContentList, "GET", `/content${query(q)}`),
+    /** A list. A filter the answer does not name in `filtered` was not applied (a v0.14.0 site), so it is refused as 501. */
+    list: async (q: Partial<ListQuery> = {}) => {
+      const list = await get(ContentList, "GET", `/content${query(q)}`);
+      const missing = filtersAsked(q).find((f) => !list.filtered?.includes(f));
+      if (missing) throw new SiteApiError(501, { error: "not-implemented", message: `This site does not filter its content list by ${missing}.` });
+      return list;
+    },
     get: (id: string) => get(ContentDoc, "GET", `/content/${enc(id)}`),
     saveDraft: (id: string, input: SaveDraftInput) => get(WriteResult, "PUT", `/content/${enc(id)}/draft`, input),
     publish: (id: string, input: PublishInput) => get(WriteResult, "POST", `/content/${enc(id)}/publish`, input),

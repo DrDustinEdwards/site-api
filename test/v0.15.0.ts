@@ -12,7 +12,7 @@ export const V0150_ADDED: Record<string, string[]> = {
   ContentSummary: ["authors", "excerpt", "trashedAt"],
   ContentDoc: ["authors", "excerpt", "trashedAt"],
   ListQuery: ["author", "kind", "publishedAfter", "publishedBefore", "tag", "trashed"],
-  ContentList: [],
+  ContentList: ["filtered"],
   Revision: ["authors"],
   RevisionList: [],
 };

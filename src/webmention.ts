@@ -11,6 +11,10 @@ import type { SiteApiStore } from "./store.js";
 const MAX_REDIRECTS = 5;
 const TIMEOUT_MS = 5000;
 const MAX_BYTES = 1024 * 1024;
+// A hook runs in waitUntil, which a Worker gives about 30 seconds: every target is sent at once, and all of them stop
+// at BUDGET_MS, so the targets are always stored. A post linking to more than MAX_TARGETS pages tells the first ones.
+const BUDGET_MS = 20_000;
+const MAX_TARGETS = 100;
 
 /** True for an address the hook may fetch: http or https, and a host that is neither local nor private. */
 export function safeTarget(address: string | URL): boolean {
@@ -29,26 +33,39 @@ export function safeTarget(address: string | URL): boolean {
   return host.includes(".");
 }
 
-function safeIPv4([a, b]: number[]): boolean {
+function safeIPv4([a, b, c]: number[]): boolean {
   if (a === 0 || a === 10 || a === 127 || a! >= 224) return false;
+  if (a === 100 && b! >= 64 && b! <= 127) return false;
   if (a === 169 && b === 254) return false;
   if (a === 172 && b! >= 16 && b! <= 31) return false;
-  if (a === 192 && b === 168) return false;
-  if (a === 100 && b! >= 64 && b! <= 127) return false;
+  if (a === 192 && (b === 168 || (b === 0 && (c === 0 || c === 2)))) return false;
+  // Benchmarking (198.18.0.0/15) and the documentation ranges.
+  if ((a === 198 && (b === 18 || b === 19 || (b === 51 && c === 100))) || (a === 203 && b === 0 && c === 113)) return false;
   return true;
 }
 
+/** The eight 16-bit groups of an IPv6 address as the URL parser writes it (hex, `::` for the longest zero run). */
+function groups(host: string): number[] {
+  const [head, tail] = host.split("::") as [string, string | undefined];
+  const part = (text: string | undefined) => (text ? text.split(":").map((g) => parseInt(g, 16)) : []);
+  const [first, last] = [part(head), part(tail)];
+  return [...first, ...Array(8 - first.length - last.length).fill(0), ...last];
+}
+
 function safeIPv6(host: string): boolean {
-  if (host === "::" || host === "::1") return false;
-  // An IPv4 address inside IPv6 (::ffff:7f00:1, as the parser writes ::ffff:127.0.0.1) is judged as that address.
-  const mapped = /^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/.exec(host);
-  if (mapped) {
-    const [hi, lo] = [parseInt(mapped[1]!, 16), parseInt(mapped[2]!, 16)];
-    return safeIPv4([hi >> 8, hi & 255, lo >> 8, lo & 255]);
-  }
-  const first = parseInt(host.split(":")[0] || "0", 16);
-  // fc00::/7 unique local, fe80::/10 link-local, ff00::/8 multicast.
-  return !((first & 0xfe00) === 0xfc00 || (first & 0xffc0) === 0xfe80 || (first & 0xff00) === 0xff00);
+  const g = groups(host);
+  const v4 = (hi: number, lo: number) => safeIPv4([hi >> 8, hi & 255, lo >> 8, lo & 255]);
+  const zero = (from: number, to: number) => g.slice(from, to).every((x) => x === 0);
+  // An IPv4 address carried inside IPv6 is judged as that address: compatible (::a.b.c.d, which covers :: and ::1),
+  // mapped (::ffff:a.b.c.d), translated (::ffff:0:a.b.c.d), NAT64 (64:ff9b::a.b.c.d) and 6to4 (2002:aabb:ccdd::).
+  if (zero(0, 6) || (zero(0, 5) && g[5] === 0xffff) || (zero(0, 4) && g[4] === 0xffff && g[5] === 0)) return v4(g[6]!, g[7]!);
+  if (g[0] === 0x64 && g[1] === 0xff9b && zero(2, 6)) return v4(g[6]!, g[7]!);
+  if (g[0] === 0x2002) return v4(g[1]!, g[2]!);
+  // NAT64 local use (64:ff9b:1::/48), discard (100::/64), Teredo (2001::/32, which hides its IPv4) and documentation (2001:db8::/32).
+  if ((g[0] === 0x64 && g[1] === 0xff9b) || (g[0] === 0x100 && zero(1, 4)) || (g[0] === 0x2001 && (g[1] === 0 || g[1] === 0xdb8))) return false;
+  // fc00::/7 unique local, fe80::/10 link-local, fec0::/10 site-local, ff00::/8 multicast.
+  const first = g[0]!;
+  return !((first & 0xfe00) === 0xfc00 || (first & 0xff80) === 0xfe80 || (first & 0xff00) === 0xff00);
 }
 
 type Tag = { name: string; attrs: string; start: number; end: number; closing: boolean };
@@ -67,6 +84,9 @@ function attr(attrs: string, name: string): string | null {
 }
 
 const words = (value: string | null) => (value ?? "").toLowerCase().split(/\s+/).filter(Boolean);
+
+/** The page without what is never read for links: comments, scripts, styles and templates. */
+const unread = (html: string) => html.replace(/<!--[\s\S]*?-->/g, "").replace(/<(script|style|template)\b[\s\S]*?<\/\1\s*>/gi, "");
 
 /** The inner HTML of the first element `found` picks, from its start tag to its matching close; null when none. */
 function region(html: string, found: (tag: Tag) => boolean, from = 0, to = html.length): { start: number; end: number } | null {
@@ -91,7 +111,7 @@ function region(html: string, found: (tag: Tag) => boolean, from = 0, to = html.
  * own origin are left out: they are the site's own. Comments, scripts and styles are never read.
  */
 export function outboundLinks(html: string, pageUrl: string): string[] {
-  const text = html.replace(/<!--[\s\S]*?-->/g, "").replace(/<(script|style|template)\b[\s\S]*?<\/\1\s*>/gi, "");
+  const text = unread(html);
   const entry = region(text, (t) => words(attr(t.attrs, "class")).includes("h-entry"));
   const area =
     (entry && region(text, (t) => words(attr(t.attrs, "class")).includes("e-content"), entry.start, entry.end)) ??
@@ -123,7 +143,7 @@ export function endpointOf(linkHeader: string | null, html: string, pageUrl: str
     const rel = m && /;\s*rel\s*=\s*(?:"([^"]*)"|([^\s;,]+))/i.exec(m[2]!);
     if (m && rel && words(rel[1] ?? rel[2]!).includes("webmention")) return resolve(m[1]!, pageUrl);
   }
-  for (const tag of tags(html.replace(/<!--[\s\S]*?-->/g, ""))) {
+  for (const tag of tags(unread(html))) {
     if (tag.closing || (tag.name !== "link" && tag.name !== "a")) continue;
     const href = attr(tag.attrs, "href");
     if (href !== null && words(attr(tag.attrs, "rel")).includes("webmention")) return resolve(href, pageUrl);
@@ -140,11 +160,11 @@ function resolve(href: string, base: string): string | null {
 }
 
 /** A GET that checks every address on its way, follows at most MAX_REDIRECTS, and reads at most MAX_BYTES of HTML. */
-async function getPage(doFetch: typeof fetch, address: string, userAgent: string): Promise<{ url: string; link: string | null; html: string }> {
+async function getPage(doFetch: typeof fetch, address: string, userAgent: string, deadline: AbortSignal): Promise<{ url: string; link: string | null; html: string }> {
   let url = address;
   for (let hop = 0; ; hop++) {
     if (!safeTarget(url)) throw new Error(`refused address ${url}`);
-    const response = await doFetch(url, { redirect: "manual", headers: { "user-agent": userAgent, accept: "text/html" }, signal: AbortSignal.timeout(TIMEOUT_MS) });
+    const response = await doFetch(url, { redirect: "manual", headers: { "user-agent": userAgent, accept: "text/html" }, signal: limit(deadline) });
     const location = response.headers.get("location");
     if (response.status >= 300 && response.status < 400 && location) {
       await response.body?.cancel().catch(() => {});
@@ -160,6 +180,9 @@ async function getPage(doFetch: typeof fetch, address: string, userAgent: string
     return { url, link: response.headers.get("link"), html };
   }
 }
+
+/** Each fetch's own timeout, cut short by the whole run's deadline. */
+const limit = (deadline: AbortSignal) => AbortSignal.any([AbortSignal.timeout(TIMEOUT_MS), deadline]);
 
 async function readText(response: Response): Promise<string> {
   if (!response.body) return "";
@@ -195,9 +218,9 @@ export function webmentionHook(options: { store: TargetStore; fetch?: typeof fet
   const userAgent = options.userAgent ?? "site-api webmention sender";
   const log = options.log ?? ((entry) => console.warn(JSON.stringify(entry)));
 
-  async function send(source: string, target: string): Promise<void> {
+  async function send(source: string, target: string, deadline: AbortSignal): Promise<void> {
     try {
-      const page = await getPage(doFetch, target, userAgent);
+      const page = await getPage(doFetch, target, userAgent, deadline);
       const endpoint = endpointOf(page.link, page.html, page.url);
       if (!endpoint) return log({ siteApi: "webmention", source, target, result: "no endpoint" });
       if (!safeTarget(endpoint)) return log({ siteApi: "webmention", source, target, result: "refused endpoint" });
@@ -206,7 +229,7 @@ export function webmentionHook(options: { store: TargetStore; fetch?: typeof fet
         redirect: "manual",
         headers: { "content-type": "application/x-www-form-urlencoded", "user-agent": userAgent },
         body: new URLSearchParams({ source, target }).toString(),
-        signal: AbortSignal.timeout(TIMEOUT_MS),
+        signal: limit(deadline),
       });
       await response.body?.cancel().catch(() => {});
       log({ siteApi: "webmention", source, target, result: response.ok ? "sent" : `endpoint answered ${response.status}` });
@@ -215,10 +238,12 @@ export function webmentionHook(options: { store: TargetStore; fetch?: typeof fet
     }
   }
 
-  async function update(source: string, gone: boolean): Promise<void> {
-    const links = gone ? [] : outboundLinks((await getPage(doFetch, source, userAgent)).html, source);
+  async function update(source: string, gone: boolean, deadline: AbortSignal): Promise<void> {
+    const links = gone ? [] : outboundLinks((await getPage(doFetch, source, userAgent, deadline)).html, source);
     const before = await options.store.webmentionTargets(source);
-    for (const target of new Set([...links, ...before])) await send(source, target);
+    const targets = [...new Set([...links, ...before])];
+    if (targets.length > MAX_TARGETS) log({ siteApi: "webmention", source, result: `${targets.length} targets, the first ${MAX_TARGETS} told` });
+    await Promise.all(targets.slice(0, MAX_TARGETS).map((target) => send(source, target, deadline)));
     await options.store.putWebmentionTargets(source, links, new Date().toISOString());
   }
 
@@ -226,9 +251,10 @@ export function webmentionHook(options: { store: TargetStore; fetch?: typeof fet
     name: "webmention",
     on: ["publish", "update", "unpublish", "delete", "trash", "rename"],
     run: async (event) => {
-      if (event.previousUrl) await update(event.previousUrl, true);
+      const deadline = AbortSignal.timeout(BUDGET_MS);
+      if (event.previousUrl) await update(event.previousUrl, true, deadline);
       // A page that is not live (after an unpublish, a delete, a trash, or a save to a draft) links to nothing now.
-      await update(event.url, event.status !== "published");
+      await update(event.url, event.status !== "published", deadline);
     },
   };
 }

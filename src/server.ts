@@ -7,6 +7,7 @@ import { safeEqual } from "@dustinedwards/site-runtime/compare";
 
 import { hasContentTrash, type DueSchedule, type SiteAdapter } from "./adapter.js";
 import { PREFIX } from "./contract.js";
+import { Timestamp } from "./contract/base.js";
 import type { ContentStatus } from "./contract.js";
 import { runHooks, type PublishAction, type PublishEvent, type PublishHook } from "./hooks.js";
 import { contentRoutes } from "./server/content.js";
@@ -250,7 +251,12 @@ export function createSiteApi(config: SiteApiConfig): SiteApi {
         const page = await content.list({ trashed: true, limit: 200, ...(cursor ? { cursor } : {}) });
         for (const item of page.items) {
           if (emptied >= limit) return emptied;
-          if (!item.trashedAt || !item.version || Date.parse(item.trashedAt) > before) continue;
+          // Only a contract timestamp past 30 days deletes: Date.parse reads "1 Oct" as 2001, so it is never asked alone.
+          if (!Timestamp.safeParse(item.trashedAt).success || Date.parse(item.trashedAt!) > before) continue;
+          if (!item.version) {
+            log({ siteApi: "trash-empty-skipped", id: item.id, reason: "the list gives no version" });
+            continue;
+          }
           const changeId = `trash-expired-${item.id}`.replace(/[^A-Za-z0-9_-]/g, "-").slice(0, 128);
           try {
             await content.delete!(item.id, { expectedVersion: item.version, changeId });

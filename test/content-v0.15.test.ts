@@ -80,6 +80,31 @@ describe("the content trash (v0.15.0)", () => {
     await expect(other.list({ trashed: true })).rejects.toMatchObject({ status: 501 });
     await expect(other.trash("a", { expectedVersion: "v1", changeId: "c1" })).rejects.toMatchObject({ status: 501 });
   });
+
+  // The two ways a deletion that cannot be undone could reach a post that is not old trash.
+  it("never empties a trashed date it cannot read, and refuses a trash list from a site that ignored the filter", async () => {
+    const adapter = memoryAdapter();
+    const { c, fetch } = client(adapter);
+    const a = await c.saveDraft("a", { source: "# A\n", expectedVersion: null, changeId: "c1" });
+    await c.trash("a", { expectedVersion: a.version, changeId: "c2" });
+    const list = adapter.content.list.bind(adapter.content);
+    adapter.content.list = async (q) => {
+      const page = await list(q);
+      return { ...page, items: page.items.map((i) => ({ ...i, trashedAt: "1 Oct" })) };
+    };
+    const api = createSiteApi({ adapter, key: KEY, limiter: allow, log: () => {} });
+    expect((await api.runSchedules({ now: new Date("2999-01-01T00:00:00Z") })).emptied).toBe(0);
+    adapter.content.list = list;
+
+    // A v0.14.0 site lists everything and names no filters.
+    const old = async (input: RequestInfo | URL, init?: RequestInit) => {
+      const body = await (await fetch(input, init)).json();
+      delete body.filtered;
+      return Response.json(body);
+    };
+    const stale = createSiteClient({ baseUrl: ORIGIN, key: KEY, fetch: old as typeof globalThis.fetch });
+    await expect(stale.list({ trashed: true })).rejects.toMatchObject({ status: 501 });
+  });
 });
 
 describe("list filters (v0.15.0)", () => {
