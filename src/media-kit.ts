@@ -6,7 +6,7 @@ import { anthropicRoute } from "@dustinedwards/site-runtime/ai-gateway";
 import { toBase64 } from "@dustinedwards/site-runtime/encoding";
 import { escapeHtml } from "@dustinedwards/site-runtime/html";
 import { editImage, type ImagesLike } from "@dustinedwards/site-runtime/image";
-import { checkProse, PATTERNS } from "@dustinedwards/site-runtime/prose";
+import { checkProse } from "@dustinedwards/site-runtime/prose";
 
 import { NotFoundError, RefusedError, VersionConflictError } from "./adapter.js";
 
@@ -182,9 +182,6 @@ export function readSuggestion(answer: unknown): { tags: string[]; alt: string |
   return { tags, alt };
 }
 
-/** The prose checks that hold for any model's text: site-runtime's PATTERNS, not its lists of Claude's tells. */
-const CHATBOT_LEFTOVERS = new Set(PATTERNS.map((pattern) => pattern.check));
-
 /**
  * The AI tag and alt-text suggester every site wrote behind its adapter's `suggest`: a 768px JPEG of the picture (through
  * site-runtime's editImage) shown to Workers AI, through the site's AI Gateway when AI_GATEWAY_BASE_URL names one. Nothing
@@ -223,10 +220,10 @@ export function mediaSuggester<E extends SuggestEnv>(options: MediaSuggesterOpti
       await options.afterCall(env, { model: SUGGEST_MODEL, promptTokens: usage?.prompt_tokens ?? 0, completionTokens: usage?.completion_tokens ?? 0 }, id);
     }
     const { tags, alt } = readSuggestion(answer);
-    // Alt text with what a chatbot leaves in text (a refusal, a cutoff note, a blank, citation markup) is not offered.
-    // Only those checks: they are errors whoever wrote the text, while checkProse's word lists are tells seen in Claude's
-    // output, and this is Llama's (W4).
-    const flagged = alt !== null && checkProse(alt).some((issue) => CHATBOT_LEFTOVERS.has(issue.check));
+    // Alt text with a high or critical prose finding (a refusal, a cutoff note, a blank, citation markup) is not offered.
+    // checkProse is told the model, so the word lists seen only in Claude's output are left out for Llama's text (W4).
+    const flagged =
+      alt !== null && checkProse(alt, { model: SUGGEST_MODEL }).some((issue) => issue.severity === "high" || issue.severity === "critical");
     return { tags, alt: flagged ? null : alt, model: SUGGEST_MODEL };
   };
 }

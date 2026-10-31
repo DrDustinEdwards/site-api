@@ -257,7 +257,7 @@ export async function runConformance(config: ConformanceConfig): Promise<Conform
       });
 
       await check("media upload of a type the site does not accept: refused", async () => {
-        const response = await doFetch(`${origin}${PREFIX}/media?filename=carrel-conformance-probe.bin&changeId=${probe()}`, {
+        const response = await doFetch(`${origin}${PREFIX}/media?filename=carrel-conformance-probe.bin&alt=Conformance%20probe&changeId=${probe()}`, {
           method: "POST",
           headers: { ...auth, "content-type": PROBE_TYPE },
           body: "A conforming site refuses this upload.",

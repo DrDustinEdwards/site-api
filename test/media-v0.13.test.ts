@@ -12,7 +12,7 @@ function setup(options: MemoryAdapterOptions = {}) {
   const s = site(memoryAdapter(options));
   const client = createSiteClient({ baseUrl: ORIGIN, key: KEY, fetch: s.fetch });
   const put = (c: typeof client, name: string, bytes: Uint8Array, extra: { resize?: "no" } = {}) =>
-    c.media.upload({ bytes, contentType: "image/png", filename: name, changeId: `u-${name.replace(/\W/g, "")}`, ...extra });
+    c.media.upload({ bytes, contentType: "image/png", filename: name, alt: "A test picture", changeId: `u-${name.replace(/\W/g, "")}`, ...extra });
   return { ...s, client, put: (name: string, bytes: Uint8Array, extra?: { resize?: "no" }) => put(client, name, bytes, extra) };
 }
 
@@ -101,7 +101,7 @@ describe("import (4)", () => {
     });
     const { adapter, api } = setup({ mediaImportFetch: fetchRemote });
     const upload = vi.spyOn(adapter.media!, "upload");
-    const send = (url: string) => api.handle(req("/api/carrel/v1/media/import", { method: "POST", ...body({ url, changeId: "i1" }) }));
+    const send = (url: string) => api.handle(req("/api/carrel/v1/media/import", { method: "POST", ...body({ url, alt: "A test picture", changeId: "i1" }) }));
     for (const url of ["http://example.com/a.png", "https://10.0.0.1/a.png", "https://[::1]/a.png", "https://localhost/a.png", "https://example.com:8443/a.png", "https://me:pw@example.com/a.png", "https://intranet/a.png"]) {
       expect((await send(url)).status, url).toBe(400);
     }
@@ -268,7 +268,7 @@ describe("suggestions (14)", () => {
     expect(await status(client.media.suggestions("uploads/none.png"))).toBe(404);
     adapter.media!.suggest = async () => ({ tags: ["River", "golden hour", "dusk", "dusk", "not/a tag"], alt: "  The Brazos at dusk.  ", model: "@cf/example/vision" });
     expect(await client.media.suggestions(file.id)).toEqual({ id: file.id, tags: ["river", "golden-hour", "dusk"], alt: "The Brazos at dusk.", model: "@cf/example/vision" });
-    expect(adapter.mediaStore.get(file.id)!.item).toMatchObject({ alt: "", tags: [], version: file.version });
+    expect(adapter.mediaStore.get(file.id)!.item).toMatchObject({ alt: "A test picture", tags: [], version: file.version });
   });
 
   it("PLANT: answers 501 on a site without a model, before the adapter", async () => {

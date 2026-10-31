@@ -46,9 +46,9 @@ describe("replay (v0.17.0)", () => {
 
     // An upload hashes its bytes: the same file under the same id is stored once.
     const upload = () => ({ method: "POST", body: new Blob([png(2, 2) as Uint8Array<ArrayBuffer>]), headers: { "content-type": "image/png" } });
-    const up = await send("/media?filename=a.png&changeId=c4", upload());
+    const up = await send("/media?filename=a.png&alt=A%20test%20picture&changeId=c4", upload());
     expect(up.status).toBe(201);
-    expect((await send("/media?filename=a.png&changeId=c4", upload())).replayed).toBe("true");
+    expect((await send("/media?filename=a.png&alt=A%20test%20picture&changeId=c4", upload())).replayed).toBe("true");
     expect(adapter.mediaStore.size).toBe(1);
   });
 

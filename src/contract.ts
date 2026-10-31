@@ -70,6 +70,8 @@ import {
   MediaResizePassResult,
   MediaRevertInput,
   MediaSuggestions,
+  MediaFileSuggestQuery,
+  MediaFileSuggestions,
   MediaTagsInput,
   MediaTransformInput,
   MediaTransformResult,
@@ -95,7 +97,7 @@ import {
 } from "./contract/mentions.js";
 import { NotFoundQuery, NotFoundReport } from "./contract/insight.js";
 
-export const PACKAGE_VERSION = "0.19.0";
+export const PACKAGE_VERSION = "0.20.0";
 export const PREFIX = "/api/carrel/v1";
 
 export const Capabilities = z.object({
@@ -168,6 +170,8 @@ export const Capabilities = z.object({
   mediaEmbedded: z.boolean().optional(),
   /** True when the site's model suggests tags and alt text for a file, `GET /media/:id/suggestions`. */
   mediaSuggestions: z.boolean().optional(),
+  /** True when the site's model suggests alt text and tags for a file before it is stored (v0.19.0), `POST /media/suggestions`. */
+  mediaUploadSuggestions: z.boolean().optional(),
   // ---------- v0.17.0, each optional per site
   /**
    * True when every write is safe to retry under its change id: the same request again answers what the first one did,
@@ -256,7 +260,9 @@ export type ErrorBody = z.infer<typeof ErrorBody>;
  * import, credit, transform, history, revert, suggestions and the resize pass, each 501 where the adapter lacks it, and
  * the upload answers MediaUploadResult, a MediaItem with three optional properties more. v0.16.0 adds the insight group's
  * first route, the 404 report, 501 for a site whose adapter has no `insight`. v0.17.0 adds rename, trash and restore of
- * content and the preview links, each 501 where the adapter or the store is absent.
+ * content and the preview links, each 501 where the adapter or the store is absent. v0.19.0 adds the model's suggestions for
+ * a file before it is stored, 501 where the adapter lacks it, and an upload or import with neither alt nor `decorative`
+ * answers 400.
  */
 export const ROUTES = [
   { group: "meta", method: "GET", path: "/meta", response: "Meta" },
@@ -306,6 +312,8 @@ export const ROUTES = [
   { group: "preview", method: "GET", path: "/preview-links", query: "PreviewLinkListQuery", response: "PreviewLinkList" },
   { group: "preview", method: "DELETE", path: "/preview-links/:linkId", query: "PreviewLinkRevokeQuery", response: "PreviewLinkRevokeResult" },
   { group: "insight", method: "GET", path: "/insight/not-found", query: "NotFoundQuery", response: "NotFoundReport" },
+  // v0.19.0, 501 where the adapter lacks it.
+  { group: "media", method: "POST", path: "/media/suggestions", query: "MediaFileSuggestQuery", request: "the file's bytes, or none with url", response: "MediaFileSuggestions" },
   { group: "inbox", method: "*", path: "/inbox/*", response: "not-implemented" },
   { group: "insight", method: "*", path: "/insight/*", response: "not-implemented" },
   { group: "publications", method: "*", path: "/publications/*", response: "not-implemented" },
@@ -328,6 +336,7 @@ const HASHED = {
   RenameInput, RenameResult, ContentTrashInput,
   PreviewLinkInput, PreviewLink, PreviewLinkListQuery, PreviewLinkList, PreviewLinkRevokeQuery, PreviewLinkRevokeResult,
   NotFoundQuery, NotFoundReport,
+  MediaFileSuggestQuery, MediaFileSuggestions,
 };
 
 /** JSON with sorted keys, so the hash depends on the contract and not on property order. */

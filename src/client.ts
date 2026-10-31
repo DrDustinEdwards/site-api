@@ -12,6 +12,7 @@ import {
   MediaBulkResult,
   MediaDeleteResult,
   MediaDetail,
+  MediaFileSuggestions,
   MediaHistory,
   MediaList,
   MediaReplaceResult,
@@ -171,14 +172,32 @@ export function createSiteClient(config: SiteClientConfig) {
       /**
        * v0.13.0: answers MediaUploadResult, the item with `duplicateOf` where the site already held these bytes (nothing new
        * was stored), `embedded` and `resizedFrom`. `resize: "no"` keeps this file's size on a site that shrinks uploads.
+       * v0.19.0: `alt`, or `decorative: true`, is required; a site refuses an upload with neither (400).
        */
-      upload: async (input: { bytes: Uint8Array; contentType: string; filename: string; alt?: string; changeId: string; resize?: "no" }) =>
+      upload: async (input: { bytes: Uint8Array; contentType: string; filename: string; alt?: string; decorative?: boolean; changeId: string; resize?: "no" }) =>
         MediaUploadResult.parse(
           await (
-            await call("POST", `/media${query({ filename: input.filename, alt: input.alt, changeId: input.changeId, resize: input.resize })}`, undefined, {
-              bytes: input.bytes,
-              contentType: input.contentType,
-            })
+            await call(
+              "POST",
+              `/media${query({ filename: input.filename, alt: input.alt, decorative: input.decorative ? "yes" : undefined, changeId: input.changeId, resize: input.resize })}`,
+              undefined,
+              {
+                bytes: input.bytes,
+                contentType: input.contentType,
+              },
+            )
+          ).json(),
+        ),
+      /**
+       * v0.19.0 (`mediaUploadSuggestions`): the site's model's alt text and tags for a file before it is stored, from its
+       * bytes, or from an import's `url`. Nothing is stored: the form shows the alt for the person to keep or change.
+       */
+      suggestFile: async (input: { bytes: Uint8Array; contentType: string } | { url: string }) =>
+        MediaFileSuggestions.parse(
+          await (
+            "url" in input
+              ? await call("POST", `/media/suggestions${query({ url: input.url })}`)
+              : await call("POST", "/media/suggestions", undefined, { bytes: input.bytes, contentType: input.contentType })
           ).json(),
         ),
       /** Takes `{ changeId }` (v0.6.0), like every other write; the change id alone still works. */
@@ -215,7 +234,7 @@ export function createSiteClient(config: SiteClientConfig) {
        * v0.13.0, each optional per site (501 without; see meta().capabilities). `importUrl` has the site fetch an https
        * address into its own storage (`mediaImport`), answering as an upload does.
        */
-      importUrl: (input: Omit<MediaImportInput, "alt"> & { alt?: string }) => get(MediaUploadResult, "POST", "/media/import", input),
+      importUrl: (input: MediaImportInput) => get(MediaUploadResult, "POST", "/media/import", input),
       /** Credit, license, source and license end as one write (`mediaCredit`). */
       setCredit: (id: string, input: MediaCreditInput) => get(MediaWriteResult, "PUT", `/media/${enc(id)}/credit`, input),
       /** Turns or mirrors a picture (`mediaTransform`); `asNewFile` says the answer is a new file and the old one is as it was. */
