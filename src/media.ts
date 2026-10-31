@@ -4,6 +4,7 @@
 // (measuring an image, its storage) come after these, never instead of them.
 
 import type { MediaKind, MediaOrientation, MediaTransformOp, MediaUploadLimits } from "./contract.js";
+import { guardedFetch, OutboundRefusal } from "./outbound.js";
 
 /** The media type without parameters, lower case: "image/png; x=1" is "image/png". */
 export function essence(contentType: string | null): string {
@@ -144,59 +145,27 @@ export function transformFocus(focus: string | null, op: MediaTransformOp): stri
   return `${spell(moved[op][0])}x${spell(moved[op][1])}`;
 }
 
-/**
- * Why an import may not fetch this address, or null when it may: https on the default port, no user name or password, and a
- * host name that is neither an IP address nor a local name, so an import never reaches into a private network.
- */
-export function importRefusal(raw: string): string | null {
-  let url: URL;
-  try {
-    url = new URL(raw);
-  } catch {
-    return "That is not a web address.";
-  }
-  if (url.protocol !== "https:") return "Only https addresses are imported.";
-  if (url.username || url.password) return "An address carrying a user name or password is not imported.";
-  if (url.port !== "") return "Only the default https port is imported.";
-  const host = url.hostname.toLowerCase().replace(/\.$/, "");
-  if (host.startsWith("[") || /^[\d.]+$/.test(host) || /^0x/i.test(host)) return "An address by IP number is not imported; use its host name.";
-  if (!host.includes(".") || /(^|\.)(localhost|local|internal|lan|home|arpa)$/.test(host)) return "A local address is not imported.";
-  return null;
-}
-
 /** How long an import waits for the other site, and how many redirects it follows. */
 const IMPORT_TIMEOUT_MS = 15_000;
 const IMPORT_REDIRECTS = 3;
 
 /**
- * Fetches an import with the given fetch, following at most three redirects by hand so each hop is checked as the first
- * was. Throws ImportRefusal with words for the person; the response is the final one, unread, with its address.
+ * Fetches an import through the package's one outbound guard (./outbound.ts, v0.19.0): https on the default port, never a
+ * local name or a private address, DNS answers included, each of at most three redirects checked as the first was.
+ * Throws OutboundRefusal with words for the person; the response is the final one, unread, with its address.
  */
 export async function fetchImport(doFetch: typeof fetch, raw: string): Promise<{ response: Response; address: string }> {
-  let address = raw;
-  for (let hop = 0; hop <= IMPORT_REDIRECTS; hop++) {
-    const refusal = importRefusal(address);
-    if (refusal) throw new ImportRefusal(refusal);
-    let response: Response;
-    try {
-      response = await doFetch(address, { redirect: "manual", signal: AbortSignal.timeout(IMPORT_TIMEOUT_MS), headers: { accept: "*/*" } });
-    } catch {
-      throw new ImportRefusal("The other site did not answer.");
-    }
-    const location = response.headers.get("location");
-    if (response.status >= 300 && response.status < 400 && location) {
-      await response.body?.cancel().catch(() => {});
-      address = new URL(location, address).toString();
-      continue;
-    }
-    if (!response.ok) {
-      await response.body?.cancel().catch(() => {});
-      throw new ImportRefusal(`The other site answered ${response.status}.`);
-    }
-    return { response, address };
+  let found: { response: Response; url: string };
+  try {
+    found = await guardedFetch(doFetch, raw, { signal: AbortSignal.timeout(IMPORT_TIMEOUT_MS), headers: { accept: "*/*" } }, { maxRedirects: IMPORT_REDIRECTS });
+  } catch (error) {
+    if (error instanceof OutboundRefusal) throw error;
+    throw new OutboundRefusal("The other site did not answer.");
   }
-  throw new ImportRefusal("The address redirects too many times.");
+  const { response, url } = found;
+  if (!response.ok) {
+    await response.body?.cancel().catch(() => {});
+    throw new OutboundRefusal(`The other site answered ${response.status}.`);
+  }
+  return { response, address: url };
 }
-
-/** An import the package would not fetch, or that the other site did not answer. */
-export class ImportRefusal extends Error {}

@@ -3,6 +3,12 @@
 
 import type { z } from "zod";
 import {
+  BacklinkList,
+  CONTENT_FILTERS,
+  HookRunList,
+  MEDIA_LENSES,
+  POST_FIELDS,
+  SEARCH_FIELDS,
   ContentDeleteResult,
   ContentDoc,
   ContentList,
@@ -121,7 +127,11 @@ export function createSiteClient(config: SiteClientConfig) {
   }
 
   return {
-    meta: () => get(Meta, "GET", "/meta"),
+    /**
+     * v0.19.0: a list in capabilities that names a value this package does not know (a later site's new post field, say)
+     * keeps the ones it knows, so a newer site never breaks an older reader's meta.
+     */
+    meta: async () => Meta.parse(knownCapabilities(await (await call("GET", "/meta")).json())),
     /** A list. A filter the answer does not name in `filtered` was not applied (a v0.14.0 site), so it is refused as 501. */
     list: async (q: Partial<ListQuery> = {}) => {
       const list = await get(ContentList, "GET", `/content${query(q)}`);
@@ -140,15 +150,19 @@ export function createSiteClient(config: SiteClientConfig) {
     /** Optional per site (v0.10.0): the update waiting on a live item, with its source. 404 when none, 501 without the capability. */
     scheduledUpdate: (id: string) => get(ScheduledUpdate, "GET", `/content/${enc(id)}/schedule`),
     /** Optional per site (v0.10.0): cancels a schedule. A live item stays live; a scheduled one returns to draft. */
-    cancelSchedule: (id: string, input: { expectedVersion: string; changeId: string }) =>
+    cancelSchedule: (id: string, input: { expectedVersion: string; changeId: string; actorName?: string }) =>
       get(WriteResult, "DELETE", `/content/${enc(id)}/schedule${query(input)}`),
     unpublish: (id: string, input: UnpublishInput) => get(WriteResult, "POST", `/content/${enc(id)}/unpublish`, input),
     revisions: (id: string) => get(RevisionList, "GET", `/content/${enc(id)}/revisions`),
     /** One revision's source (v0.3.0), so each revision in the list opens. */
     revision: (id: string, version: string) => get(RevisionSource, "GET", `/content/${enc(id)}/revisions/${enc(version)}`),
     /** Optional per site (v0.3.0): a site with no delete answers SiteApiError with status 501. */
-    delete: (id: string, input: { expectedVersion: string; changeId: string }) =>
+    delete: (id: string, input: { expectedVersion: string; changeId: string; actorName?: string }) =>
       get(ContentDeleteResult, "DELETE", `/content/${enc(id)}${query(input)}`),
+    /** Optional per site (v0.19.0, `backlinks`): every post that links to this one, to warn with before a delete or a trash. */
+    backlinks: (id: string) => get(BacklinkList, "GET", `/content/${enc(id)}/backlinks`),
+    /** v0.19.0, on a site with `hooks`: the publish hooks that ran for a change, and whether each worked. */
+    hookRuns: (changeId: string) => get(HookRunList, "GET", `/hooks/recent${query({ changeId })}`),
     /** Optional per site (v0.6.0): sets a post's whole tag set. A site without it answers SiteApiError with status 501. */
     setTags: (id: string, input: ContentTagsInput) => get(WriteResult, "PUT", `/content/${enc(id)}/tags`, input),
     /** Optional per site (v0.17.0, `contentRename`): moves an item to `newId`; its old path redirects to the new one. */
@@ -162,7 +176,7 @@ export function createSiteClient(config: SiteClientConfig) {
     previewLinks: {
       create: (input: PreviewLinkInput) => get(PreviewLink, "POST", "/preview-links", input),
       list: (id: string) => get(PreviewLinkList, "GET", `/preview-links${query({ id })}`),
-      revoke: (linkId: string, input: { changeId: string }) => get(PreviewLinkRevokeResult, "DELETE", `/preview-links/${enc(linkId)}${query(input)}`),
+      revoke: (linkId: string, input: { changeId: string; actorName?: string }) => get(PreviewLinkRevokeResult, "DELETE", `/preview-links/${enc(linkId)}${query(input)}`),
     },
     /** The media group (v0.2.0). A refused delete throws SiteApiError whose body carries `usedBy`. */
     media: {
@@ -254,6 +268,20 @@ export function createSiteClient(config: SiteClientConfig) {
 }
 
 export type SiteClient = ReturnType<typeof createSiteClient>;
+
+/** The capability lists whose values are an enum this package knows, each with what it knows. */
+const KNOWN_LISTS: Record<string, readonly string[]> = { postFields: POST_FIELDS, searchFields: SEARCH_FIELDS, contentFilters: CONTENT_FILTERS, mediaLenses: MEDIA_LENSES };
+
+function knownCapabilities(raw: unknown): unknown {
+  const capabilities = (raw as { capabilities?: Record<string, unknown> } | null)?.capabilities;
+  if (!capabilities || typeof capabilities !== "object") return raw;
+  const kept = { ...capabilities };
+  for (const [key, known] of Object.entries(KNOWN_LISTS)) {
+    const list = kept[key];
+    if (Array.isArray(list)) kept[key] = list.filter((v) => typeof v === "string" && known.includes(v));
+  }
+  return { ...(raw as object), capabilities: kept };
+}
 
 // A site's own admin: the same client, answered in process by its own adapter (./local.ts).
 export { localClient, type LocalClientOptions } from "./local.js";

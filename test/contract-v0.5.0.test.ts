@@ -9,7 +9,7 @@ import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import * as contract from "../src/contract.js";
 import { additiveOnly, added, now, widened, type JsonSchema } from "./additive.js";
-import { V0170_CODES, V0170_ROUTES, V0170_SCHEMAS, V0170_WIDEN, withV0170 } from "./v0.17.0.js";
+import { V0170_CODES, V0170_ROUTES, V0170_SCHEMAS, V0170_WIDEN, V0190_ROUTES, withV0170 } from "./v0.17.0.js";
 
 const V050 = JSON.parse(readFileSync(new URL("./fixtures/contract-v0.5.0.json", import.meta.url), "utf8")) as {
   version: string;
@@ -41,10 +41,12 @@ const ADDED: Record<string, string[]> = withV0170({
   MediaList: ["changeCursor", "moreChanges", "removed", "sorted", "total"],
   MentionListQuery: ["q", "targetId"],
   MentionList: ["filtered"],
-});
+}, V050.schemas);
 
 /** The one v0.5.0 schema v0.6.0 widens rather than extends: a decision may also be reset. */
 const WIDENED = "MentionDecideInput";
+// Its v0.19.0 actor is checked with the widening, below.
+delete ADDED[WIDENED];
 
 const exported = Object.entries(contract)
   .filter(([, value]) => value instanceof z.ZodType)
@@ -79,6 +81,7 @@ describe("the v0.5.0 contract", () => {
       "POST /media/resize-pass",
       ...V0170_ROUTES,
       "GET /insight/not-found",
+      ...V0190_ROUTES,
     ]);
   });
 
@@ -95,7 +98,7 @@ describe("the v0.5.0 contract", () => {
     });
   }
 
-  it("widens the error codes by in-progress, and nothing else", () => {
+  it("widens the error codes by in-progress (v0.17.0) and unknown-field (v0.19.0), and nothing else", () => {
     widened(V050.schemas.ErrorCode!, now("ErrorCode"), V0170_CODES, "ErrorCode");
   });
 
@@ -104,7 +107,8 @@ describe("the v0.5.0 contract", () => {
     const after = now(WIDENED);
     const decision = (s: JsonSchema) => (s.properties!.decision as { enum: string[] }).enum;
     expect(decision(after)).toEqual([...decision(before), "reset"]);
-    const strip = (s: JsonSchema) => ({ ...s, properties: { ...s.properties, decision: undefined } });
+    const strip = (s: JsonSchema) => ({ ...s, properties: { ...s.properties, decision: undefined, actor: undefined } });
+    expect(added(before, after)).toEqual(["actor"]);
     expect(strip(after)).toEqual(strip(before));
   });
 

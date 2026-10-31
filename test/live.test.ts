@@ -21,24 +21,30 @@ async function serve(handle: (request: Request) => Promise<Response>) {
   return { origin: `http://127.0.0.1:${(server.address() as AddressInfo).port}`, close: () => server.close() };
 }
 
-function live(origin: string): Promise<{ code: number; out: string }> {
+function live(origin: string, from = "test"): Promise<{ code: number; out: string }> {
   return new Promise((done) => {
-    execFile(process.execPath, ["bin/site-api-live.mjs", "--origin", origin, "--from", "test"], (error, stdout) => done({ code: error ? Number(error.code) : 0, out: stdout }));
+    execFile(process.execPath, ["bin/site-api-live.mjs", "--origin", origin, "--from", from], (error, stdout) => done({ code: error ? Number(error.code) : 0, out: stdout }));
   });
 }
 
 describe("site-api-live", () => {
   it("is clean on a site that mounts the package and its preview links, and names each finding on one that does not", async () => {
     const api = createSiteApi({ adapter: memoryAdapter(), key: KEY, limiter: allow, log: () => {}, store: d1SiteApiStore(d1(SITE_API_STORE_SQL)) });
-    const good = await serve(async (request) =>
-      api.matchesPreviewLink(request) ? api.servePreviewLink(request) : api.matches(request) ? api.handle(request) : new Response("page"),
-    );
+    // v0.19.0: a header layer that adds `private` still passes K4.
+    const good = await serve(async (request) => {
+      const answer = api.matchesPreviewLink(request) ? await api.servePreviewLink(request) : api.matches(request) ? await api.handle(request) : new Response("page");
+      const headers = new Headers(answer.headers);
+      headers.set("cache-control", "private, no-store");
+      return new Response(answer.body, { status: answer.status, headers });
+    });
     // A site that answers unknown routes before the key and has no preview links mounted yet.
     const leaky = await serve(async (request) =>
       new URL(request.url).pathname.endsWith("/meta") ? api.handle(request) : new Response("Not found", { status: 404 }),
     );
     try {
       expect(await live(good.origin)).toEqual({ code: 0, out: "" });
+      // v0.19.0: --from is where the site is served now, as devkit runs it, so the probes go there and not to --origin.
+      expect(await live("https://site.invalid", good.origin)).toEqual({ code: 0, out: "" });
       const found = await live(leaky.origin);
       expect(found.code).toBe(1);
       expect(found.out).toMatch(/^::error title=K4::http:\/\/127\.0\.0\.1:\d+\/api\/carrel\/v1\/site-api-live-[0-9a-f]+ an unknown route answered 404 without the key, expected 401$/m);

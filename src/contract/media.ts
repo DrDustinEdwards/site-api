@@ -3,7 +3,7 @@
 
 import { focusOf } from "@dustinedwards/site-runtime/image";
 import { z } from "zod";
-import { ChangeId, SortDir, Timestamp, Version } from "./base.js";
+import { Actor, ActorName, ChangeId, SortDir, Timestamp, Version } from "./base.js";
 
 /** The largest upload any site may declare: well under a Worker's request body limit. */
 export const MAX_MEDIA_BYTES = 25 * 1024 * 1024;
@@ -213,6 +213,7 @@ export const MediaUploadQuery = z.object({
   changeId: ChangeId,
   /** "no" keeps this file at its own size on a site that shrinks large pictures at upload (v0.13.0, capabilities.mediaResize). */
   resize: z.enum(["no"]).optional(),
+  actorName: ActorName.optional(),
 });
 
 /**
@@ -230,6 +231,7 @@ export const MediaUploadResult = MediaItem.extend({
 
 export const MediaDeleteQuery = z.object({
   changeId: ChangeId,
+  actorName: ActorName.optional(),
 });
 
 export const MediaDeleteResult = z.object({
@@ -245,6 +247,7 @@ export const MediaAltInput = z.object({
   alt: z.string().max(2000),
   expectedVersion: Version,
   changeId: ChangeId,
+  actor: Actor.optional(),
 });
 
 /** The file's whole tag set after the write. */
@@ -252,12 +255,14 @@ export const MediaTagsInput = z.object({
   tags: MediaTags,
   expectedVersion: Version,
   changeId: ChangeId,
+  actor: Actor.optional(),
 });
 
 /** The body of a trash and of a restore. */
 export const MediaTrashInput = z.object({
   expectedVersion: Version,
   changeId: ChangeId,
+  actor: Actor.optional(),
 });
 
 export const MediaWriteResult = z.object({
@@ -274,19 +279,21 @@ export const MediaFocusInput = z.object({
   focus: MediaFocus.nullable(),
   expectedVersion: Version,
   changeId: ChangeId,
+  actor: Actor.optional(),
 });
 
 export const MediaCaptionInput = z.object({
   caption: MediaCaption,
   expectedVersion: Version,
   changeId: ChangeId,
+  actor: Actor.optional(),
 });
 
 /**
  * A replace is the new bytes as the body, their type as Content-Type (the file's own type: the address names it), and
  * these as the query, like an upload.
  */
-export const MediaReplaceQuery = MediaUploadQuery.pick({ filename: true, changeId: true }).extend({
+export const MediaReplaceQuery = MediaUploadQuery.pick({ filename: true, changeId: true, actorName: true }).extend({
   expectedVersion: Version,
 });
 
@@ -321,6 +328,7 @@ export const MediaBulkInput = z.object({
   /** For add-tags and remove-tags only: the tags to add to, or take from, each file. */
   tags: MediaTags.optional(),
   items: z.array(MediaBulkItem).min(1).max(MAX_MEDIA_BULK),
+  actor: Actor.optional(),
 });
 
 /** The outcome of one file. A refusal for one file never stops the others. */
@@ -355,6 +363,7 @@ export const MediaBulkResult = z.object({
 export const MediaTrashEmptyInput = z.object({
   /** The base of each file's own change id: file n is recorded as `<changeId>-<n>`, so each has its own authorship record. */
   changeId: ChangeId,
+  actor: Actor.optional(),
 });
 
 /** The most files one empty-trash request deletes. When more remain, `more` is true and the caller sends it again. */
@@ -387,6 +396,7 @@ export const MediaImportInput = z.object({
   alt: z.string().max(2000).default(""),
   resize: z.enum(["no"]).optional(),
   changeId: ChangeId,
+  actor: Actor.optional(),
 });
 
 /** The file's credit, license, source and license end, as one write: each is the whole value after it. */
@@ -397,6 +407,7 @@ export const MediaCreditInput = z.object({
   licenseExpires: z.iso.date().nullable(),
   expectedVersion: Version,
   changeId: ChangeId,
+  actor: Actor.optional(),
 });
 
 export const MEDIA_TRANSFORMS = ["rotate-90", "rotate-180", "rotate-270", "flip-h", "flip-v"] as const;
@@ -407,6 +418,7 @@ export const MediaTransformInput = z.object({
   op: MediaTransformOp,
   expectedVersion: Version,
   changeId: ChangeId,
+  actor: Actor.optional(),
 });
 
 /**
@@ -447,6 +459,7 @@ export const MediaRevertInput = z.object({
   to: z.string().min(1).max(200),
   expectedVersion: Version,
   changeId: ChangeId,
+  actor: Actor.optional(),
 });
 
 /** The most files one resize pass request shrinks: image work is slow, so the caller sends the rest in further requests. */
@@ -458,6 +471,7 @@ export const MediaResizePassInput = z.object({
     .array(z.object({ id: MediaId, expectedVersion: Version, changeId: ChangeId }))
     .min(1)
     .max(MAX_RESIZE_PASS),
+  actor: Actor.optional(),
 });
 
 export const MediaResizeOutcome = z.discriminatedUnion("ok", [

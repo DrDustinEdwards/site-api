@@ -15,10 +15,13 @@ export type PublishAction = "publish" | "update" | "unpublish" | "delete" | "tra
 export interface PublishEvent {
   action: PublishAction;
   id: string;
-  /** The item's public path, such as /blog/some-post. */
-  path: string;
-  /** The site's origin and the path: the page that changed. */
-  url: string;
+  /**
+   * The item's public path, such as /blog/some-post. v0.19.0: null for a schedule or an unschedule of an item never
+   * published, which has no page yet; a hook that needs a live page skips such an event itself.
+   */
+  path: string | null;
+  /** The site's origin and the path: the page that changed. null when `path` is. */
+  url: string | null;
   /** request: a Carrel write (or the site's own admin through localClient). schedule: `runSchedules`. */
   trigger: "request" | "schedule";
   changeId: string | null;
@@ -50,6 +53,8 @@ export const PAGE_ACTIONS: readonly PublishAction[] = ["publish", "update", "unp
 /** Whether a hook hears the event: one it names, or with no `on`, a page action that changed a public page. */
 export function hears(hook: PublishHook, event: PublishEvent): boolean {
   if (hook.on) return hook.on.includes(event.action);
+  // No page, no page change (v0.19.0): only a hook that names schedule or unschedule hears one without a path.
+  if (event.path === null) return false;
   if (!PAGE_ACTIONS.includes(event.action)) return false;
   const live = event.action === "publish" || event.action === "update" ? event.status : event.previousStatus;
   // An event that does not say (a site's own runHooks call before v0.17.0) is taken as a page change, as it was then.
@@ -65,6 +70,7 @@ export async function runHooks(
   event: PublishEvent,
   log: (entry: Record<string, unknown>) => void,
   failed?: (hook: PublishHook, error: string) => Promise<void>,
+  ran?: (hook: PublishHook, ok: boolean) => Promise<void>,
 ): Promise<void> {
   const { request: _r, ...logged } = event;
   await Promise.all(
@@ -75,6 +81,7 @@ export async function runHooks(
       } catch (thrown) {
         error = thrown instanceof Error ? thrown.message : String(thrown);
       }
+      await ran?.(hook, error === null).catch((e) => log({ siteApi: "hook-run-not-kept", hook: hook.name, error: String(e) }));
       if (error === null) return;
       log({ siteApi: "hook-failed", hook: hook.name, ...logged, error });
       await failed?.(hook, error).catch((e) => log({ siteApi: "hook-retry-failed", hook: hook.name, error: String(e) }));
@@ -95,6 +102,8 @@ export function indexNowHook(options: { submit: SubmitIndexNow; key: string; ori
   return {
     name: "indexnow",
     run: (event) => {
+      // No page yet (v0.19.0: a schedule of a draft, heard only by a hook that names it): nothing to tell, and not a failure.
+      if (!event.url) return true;
       // A preview is not a failure: it has nothing to tell.
       if (event.request && new URL(event.request.url).origin !== options.origin) return true;
       return options.submit({

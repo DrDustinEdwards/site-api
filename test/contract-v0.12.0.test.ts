@@ -9,7 +9,7 @@ import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import * as contract from "../src/contract.js";
 import { additiveOnly, added, now, widened, type JsonSchema } from "./additive.js";
-import { V0170_CODES, V0170_ROUTES, V0170_SCHEMAS, V0170_WIDEN, withV0170 } from "./v0.17.0.js";
+import { V0170_CODES, V0170_ROUTES, V0170_SCHEMAS, V0170_WIDEN, V0190_ROUTES, withV0170 } from "./v0.17.0.js";
 
 const V0120 = JSON.parse(readFileSync(new URL("./fixtures/contract-v0.12.0.json", import.meta.url), "utf8")) as {
   version: string;
@@ -34,7 +34,7 @@ const ADDED: Record<string, string[]> = withV0170({
   MediaList: ["changeCursor", "moreChanges", "removed"],
   MediaListQuery: ["changedSince", "kind", "orientation"],
   MediaUploadQuery: ["resize"],
-});
+}, V0120.schemas);
 
 const NEW_LENSES = ["duplicates", "license-expired", "oversized"];
 
@@ -82,6 +82,7 @@ describe("the v0.12.0 contract", () => {
       "POST /media/resize-pass",
       ...V0170_ROUTES,
       "GET /insight/not-found",
+      ...V0190_ROUTES,
     ]);
   });
 
@@ -107,7 +108,7 @@ describe("the v0.12.0 contract", () => {
     widened(V0120.schemas.MediaLens!, now("MediaLens"), NEW_LENSES, "MediaLens");
   });
 
-  it("widens the error codes by in-progress (v0.17.0), and nothing else", () => {
+  it("widens the error codes by in-progress (v0.17.0) and unknown-field (v0.19.0), and nothing else", () => {
     widened(V0120.schemas.ErrorCode!, now("ErrorCode"), V0170_CODES, "ErrorCode");
   });
 

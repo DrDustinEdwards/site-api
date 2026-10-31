@@ -24,6 +24,7 @@ describe("onPageChange (v0.9.0)", () => {
     await Promise.all(pending);
 
     expect(heard).toEqual([["/blog/a"], ["/blog/a"], ["/blog/a"], ["/blog/a"], ["/blog/a"]]);
-    expect(pending).toHaveLength(6);
+    // The first save, to a draft never published, has no page to tell anyone of, so nothing waits on it.
+    expect(pending).toHaveLength(5);
   });
 });

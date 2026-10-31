@@ -41,7 +41,8 @@ import {
   type MediaResizeOutcome,
   type MediaUse,
 } from "../contract.js";
-import { ImportRefusal, checkUpload, essence, fetchImport, importRefusal, kindOf, readUpload, sha256Hex, turnsSize } from "../media.js";
+import { checkUpload, essence, fetchImport, kindOf, readUpload, sha256Hex, turnsSize } from "../media.js";
+import { addressRefusal, OutboundRefusal } from "../outbound.js";
 import { BadRequest, ContractBreach, ID, checked, describeFailure, fail, json, pathParam, readBody, readQuery, type Log, type Route } from "./http.js";
 
 /** How many trashed files one page of the empty-trash gather asks the site for. */
@@ -53,6 +54,7 @@ export function mediaRoutes(media: MediaAdapter, log: Log): Route[] {
   return [
     {
       method: "GET",
+      query: true,
       pattern: /^\/media$/,
       run: async (_m, url) => {
         const query = readQuery(url, MediaListQuery);
@@ -68,6 +70,7 @@ export function mediaRoutes(media: MediaAdapter, log: Log): Route[] {
     },
     {
       method: "POST",
+      query: true,
       pattern: /^\/media$/,
       run: async (_m, url, request) => {
         const query = readQuery(url, MediaUploadQuery);
@@ -89,14 +92,15 @@ export function mediaRoutes(media: MediaAdapter, log: Log): Route[] {
       run: async (_m, _u, request) => {
         if (!media.importFetch) return fail("not-implemented", "This site does not import files from the web.");
         const input = await readBody(request, MediaImportInput);
-        const refusal = importRefusal(input.url);
+        // The address alone first (no fetch, no DNS), so an http or a private address is a 400 before anything is asked.
+        const refusal = addressRefusal(input.url);
         if (refusal) throw new BadRequest("invalid", refusal);
         let response: Response;
         let address: string;
         try {
           ({ response, address } = await fetchImport(media.importFetch, input.url));
         } catch (error) {
-          if (error instanceof ImportRefusal) throw new RefusedError(error.message);
+          if (error instanceof OutboundRefusal) throw new RefusedError(error.message);
           throw error;
         }
         const contentType = essence(response.headers.get("content-type"));
@@ -123,6 +127,7 @@ export function mediaRoutes(media: MediaAdapter, log: Log): Route[] {
     },
     {
       method: "DELETE",
+      query: true,
       pattern: new RegExp(`^/media/${ID}$`),
       run: async (m, url) => {
         const id = mediaId(m);
@@ -181,6 +186,7 @@ export function mediaRoutes(media: MediaAdapter, log: Log): Route[] {
     },
     {
       method: "PUT",
+      query: true,
       pattern: new RegExp(`^/media/${ID}/file$`),
       run: async (m, url, request) => {
         const id = mediaId(m);

@@ -2,8 +2,10 @@
 // every body; the adapter owns the site's storage, its rules and its render.
 
 import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
-import { CONTENT_FILTERS } from "./contract.js";
+import { CONTENT_FILTERS, PREVIEW_LINK_MAX_HOURS } from "./contract.js";
 import type {
+  Actor,
+  Backlink,
   Capabilities,
   ContentDoc,
   ContentFilter,
@@ -80,13 +82,13 @@ export interface ContentAdapter {
    * refuse. A site without it answers `DELETE /content/:id` with 501. The write and whatever the
    * site must do afterward (its cache purge, say) are one unit, so the site runs them together here.
    */
-  delete?(id: string, input: { expectedVersion: string; changeId: string }): Promise<void>;
+  delete?(id: string, input: { expectedVersion: string; changeId: string; actor?: Actor }): Promise<void>;
   /**
    * Optional (v0.6.0): sets the item's whole tag set, already unique, and returns the write like a
    * save does. Throws VersionConflictError, NotFoundError (checked first, for a missing id) or
    * RefusedError like the writes. A site without it answers `PUT /content/:id/tags` with 501.
    */
-  setTags?(id: string, input: { tags: string[]; expectedVersion: string; changeId: string }): Promise<WriteResult>;
+  setTags?(id: string, input: { tags: string[]; expectedVersion: string; changeId: string; actor?: Actor }): Promise<WriteResult>;
   /**
    * Optional (v0.17.0): moves the item to `newId`, its history with it, and, when it was ever published, keeps a permanent
    * (301) redirect from its old path to the new one; answers that old path as `previousPath` (null when never published).
@@ -100,8 +102,13 @@ export interface ContentAdapter {
    * item. Each throws like the writes. `list` then never lists a trashed item unless `trashed` is true, and then only
    * those. The package's `runSchedules` deletes items trashed more than TRASH_DAYS ago, through `delete`.
    */
-  trash?(id: string, input: { expectedVersion: string; changeId: string }): Promise<WriteResult>;
-  restore?(id: string, input: { expectedVersion: string; changeId: string }): Promise<WriteResult>;
+  trash?(id: string, input: { expectedVersion: string; changeId: string; actor?: Actor }): Promise<WriteResult>;
+  restore?(id: string, input: { expectedVersion: string; changeId: string; actor?: Actor }): Promise<WriteResult>;
+  /**
+   * Optional (v0.19.0, capabilities.backlinks): every other post that links to this one, so a delete or a trash warns with
+   * the list first. The package checks the id exists before it asks. Absent: `GET /content/:id/backlinks` answers 501.
+   */
+  backlinks?(id: string): Promise<Backlink[]>;
 }
 
 export interface PreviewAdapter {
@@ -338,13 +345,13 @@ export interface SchedulesAdapter {
    * Stores the update on a live item, replacing any update already waiting (a reschedule). The item stays live and
    * unchanged. Refuse (RefusedError) an item that is not live: the package sends only live items here.
    */
-  update(id: string, input: { source: string; publishAt: string; expectedVersion: string; changeId: string }): Promise<WriteResult>;
+  update(id: string, input: { source: string; publishAt: string; expectedVersion: string; changeId: string; actor?: Actor }): Promise<WriteResult>;
   /**
    * Cancels the schedule. A live item drops its waiting update and stays live; a scheduled item that was never live
    * returns to draft. Throws NotFoundError for a missing id (checked first), and RefusedError for an item with nothing
    * scheduled.
    */
-  cancel(id: string, input: { expectedVersion: string; changeId: string }): Promise<WriteResult>;
+  cancel(id: string, input: { expectedVersion: string; changeId: string; actor?: Actor }): Promise<WriteResult>;
   /** Every schedule due at `now`, scheduled items and live items' updates alike, oldest first, at most `limit`. */
   due(input: { now: Date; limit: number }): Promise<DueSchedule[]>;
   /**
@@ -399,7 +406,7 @@ export interface SiteAdapter {
  * Stage 2 implemented content and preview; v0.2.0 adds media for a site whose adapter has it. The
  * other groups answer 501 until their stage. `store` (v0.17.0): the site gave createSiteApi a store.
  */
-export function capabilitiesOf(adapter: SiteAdapter, options: { store?: boolean } = {}): Capabilities {
+export function capabilitiesOf(adapter: SiteAdapter, options: { store?: boolean; hooks?: readonly string[] } = {}): Capabilities {
   return {
     content: true,
     preview: true,
@@ -439,7 +446,9 @@ export function capabilitiesOf(adapter: SiteAdapter, options: { store?: boolean 
     ...(adapter.mentions ? { mentions: true } : {}),
     ...(adapter.mentions?.reset ? { mentionReset: true } : {}),
     ...(adapter.schedules ? { scheduledUpdates: true } : {}),
-    ...(options.store ? { replay: true, previewLinks: true } : {}),
+    ...(options.store ? { replay: true, previewLinks: true, previewLinkHours: { max: PREVIEW_LINK_MAX_HOURS } } : {}),
+    ...(options.store && options.hooks?.length ? { hooks: [...options.hooks] } : {}),
+    ...(adapter.content.backlinks ? { backlinks: true } : {}),
     ...(adapter.renderVersion ? { render: { version: adapter.renderVersion } } : {}),
     ...(adapter.insight ? { insightNotFound: true } : {}),
   };

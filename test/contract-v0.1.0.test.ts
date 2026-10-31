@@ -9,7 +9,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import * as contract from "../src/contract.js";
 import { additiveOnly, now, widened, type JsonSchema } from "./additive.js";
-import { V0170_ADDED, V0170_CODES, V0170_WIDEN } from "./v0.17.0.js";
+import { V0170_ADDED, V0170_CODES, V0170_WIDEN, V0190_ADDED } from "./v0.17.0.js";
 const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as { version: string };
 
 const V010 = JSON.parse(readFileSync(new URL("./fixtures/contract-v0.1.0.json", import.meta.url), "utf8")) as {
@@ -20,7 +20,7 @@ const V010 = JSON.parse(readFileSync(new URL("./fixtures/contract-v0.1.0.json", 
 };
 
 /** The schemas later versions extend, by optional properties only: v0.2.0 the first three, v0.6.0 the content list, v0.10.0 the write result, v0.17.0 those test/v0.17.0.ts names. Every other one must be identical. */
-const EXTENDED = new Set(["Meta", "Capabilities", "ErrorBody", "ContentSummary", "ContentDoc", "ListQuery", "ContentList", "WriteResult", ...Object.keys(V0170_ADDED)]);
+const EXTENDED = new Set(["Meta", "Capabilities", "ErrorBody", "ContentSummary", "ContentDoc", "ListQuery", "ContentList", "WriteResult", ...Object.keys(V0170_ADDED), ...Object.keys(V0190_ADDED).filter((n) => n in V010.schemas)]);
 
 
 describe("the v0.1.0 contract", () => {
@@ -73,7 +73,7 @@ describe("the v0.1.0 contract", () => {
     });
   }
 
-  it("widens the error codes by in-progress, and nothing else", () => {
+  it("widens the error codes by in-progress (v0.17.0) and unknown-field (v0.19.0), and nothing else", () => {
     widened(V010.schemas.ErrorCode!, now("ErrorCode"), V0170_CODES, "ErrorCode");
   });
 

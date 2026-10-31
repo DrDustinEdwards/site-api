@@ -44,6 +44,51 @@ export interface SiteApiStore {
   webmentionTargets(source: string): Promise<string[]>;
   /** Replaces a source's targets with the ones it links to now, and drops the row when there are none. */
   putWebmentionTargets(source: string, targets: string[], sentAt: string): Promise<void>;
+  // ---------- v0.19.0, optional so a site's own store from v0.17.0 still fits; d1SiteApiStore has them all
+  /** Keeps a tombstone for a path whose live item was deleted or trashed, so the site answers it 410 (goneResponse). */
+  markGone?(path: string, at: string): Promise<void>;
+  /** Drops the tombstone: something is live at the path again. */
+  clearGone?(path: string): Promise<void>;
+  /** True when the path holds a tombstone. A site calls it from its not-found handler. */
+  isGone?(path: string): Promise<boolean>;
+  /** Keeps one publish hook's run under its change id, for `GET /hooks/recent`. */
+  putHookRun?(run: { changeId: string; hook: string; ok: boolean; at: string }): Promise<void>;
+  /** The hook runs kept under a change id, the oldest first. */
+  hookRuns?(changeId: string): Promise<Array<{ hook: string; ok: boolean; at: string }>>;
+  /** Drops every hook run kept before `before`. */
+  pruneHookRuns?(before: string): Promise<void>;
+}
+
+/** The D1 store, with every method of v0.19.0. */
+export type D1SiteApiStore = Required<SiteApiStore>;
+
+/**
+ * A path as a tombstone keys it: no query or fragment, and no trailing slash but the root's, so /blog/a/ and /blog/a are
+ * one page.
+ */
+export function gonePath(path: string): string {
+  const bare = path.split(/[?#]/)[0] || "/";
+  return bare.length > 1 ? bare.replace(/\/+$/, "") || "/" : bare;
+}
+
+/**
+ * The answer for a path that holds a tombstone (v0.19.0, F5): 410 Gone, never cached, never indexed. problem+json when
+ * the request asks for JSON over HTML, a small HTML page otherwise. A site's not-found handler answers it when
+ * `store.isGone(url.pathname)`:
+ *
+ *     if (await store.isGone(url.pathname)) return goneResponse(request);
+ */
+export function goneResponse(request?: Request): Response {
+  const headers = { "cache-control": "no-store", "x-robots-tag": "noindex", "x-content-type-options": "nosniff" };
+  const accept = request?.headers.get("accept") ?? "";
+  const wantsJson = /application\/(problem\+)?json/i.test(accept) && !/text\/html/i.test(accept);
+  if (request?.method === "HEAD") return new Response(null, { status: 410, headers: { ...headers, "content-type": wantsJson ? "application/problem+json; charset=utf-8" : "text/html; charset=utf-8" } });
+  if (wantsJson) {
+    const body = { type: "https://github.com/DrDustinEdwards/site-api/blob/main/README.md#gone", title: "Gone", status: 410, detail: "This page was removed." };
+    return new Response(JSON.stringify(body), { status: 410, headers: { ...headers, "content-type": "application/problem+json; charset=utf-8" } });
+  }
+  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="robots" content="noindex"><title>Gone</title></head><body><h1>Gone</h1><p>This page was removed.</p></body></html>`;
+  return new Response(html, { status: 410, headers: { ...headers, "content-type": "text/html; charset=utf-8" } });
 }
 
 /** One shareable preview link (v0.17.0). Times are UTC ISO text; `revokedAt` null while it works. */
@@ -65,6 +110,24 @@ export interface HookRetry {
   nextAt: string;
   lastError: string;
 }
+
+/**
+ * v0.19.0's tables, additive: a site that applied SITE_API_STORE_SQL before v0.19.0 adds this as its next migration
+ * (SITE_API_STORE_SQL holds it too, for a new site). `gone_paths` keeps the tombstones, `hook_runs` each hook's run.
+ */
+export const SITE_API_STORE_SQL_V0_19 = `CREATE TABLE IF NOT EXISTS gone_paths (
+  path TEXT PRIMARY KEY,
+  gone_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS hook_runs (
+  change_id TEXT NOT NULL,
+  hook TEXT NOT NULL,
+  ok INTEGER NOT NULL,
+  at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS hook_runs_change ON hook_runs (change_id);
+CREATE INDEX IF NOT EXISTS hook_runs_at ON hook_runs (at);
+`;
 
 /** The migration: a D1 site adds it as its next file under `migrations/`. Every time is UTC ISO text. */
 export const SITE_API_STORE_SQL = `CREATE TABLE IF NOT EXISTS site_api_writes (
@@ -100,7 +163,7 @@ CREATE TABLE IF NOT EXISTS webmention_targets (
   targets TEXT NOT NULL,
   sent_at TEXT NOT NULL
 );
-`;
+${SITE_API_STORE_SQL_V0_19}`;
 
 interface WriteRow {
   route: string;
@@ -128,7 +191,7 @@ const toLink = (r: LinkRow): PreviewLinkRow => ({
   changeId: r.change_id,
 });
 
-export function d1SiteApiStore(db: D1Like): SiteApiStore {
+export function d1SiteApiStore(db: D1Like): D1SiteApiStore {
   const claimWrite: SiteApiStore["claimWrite"] = async (changeId, claim) => {
     // One statement, so two requests racing for an id cannot both win: the insert, or the takeover of the same
     // request's stale claim, returns the row only when it was this request's.
@@ -215,6 +278,31 @@ export function d1SiteApiStore(db: D1Like): SiteApiStore {
             .prepare("INSERT INTO webmention_targets (source, targets, sent_at) VALUES (?, ?, ?) ON CONFLICT (source) DO UPDATE SET targets = excluded.targets, sent_at = excluded.sent_at")
             .bind(source, JSON.stringify(targets), sentAt)
       ).run();
+    },
+    async markGone(path, at) {
+      await db.prepare("INSERT INTO gone_paths (path, gone_at) VALUES (?, ?) ON CONFLICT (path) DO UPDATE SET gone_at = excluded.gone_at").bind(gonePath(path), at).run();
+    },
+    async clearGone(path) {
+      await db.prepare("DELETE FROM gone_paths WHERE path = ?").bind(gonePath(path)).run();
+    },
+    async isGone(path) {
+      // A not-found page must never fail on the store: a site that has not run the v0.19.0 migration yet answers 404.
+      try {
+        return (await db.prepare("SELECT 1 AS gone FROM gone_paths WHERE path = ?").bind(gonePath(path)).first()) !== null;
+      } catch (error) {
+        console.warn(JSON.stringify({ siteApi: "gone-check-failed", error: String(error) }));
+        return false;
+      }
+    },
+    async putHookRun(r) {
+      await db.prepare("INSERT INTO hook_runs (change_id, hook, ok, at) VALUES (?, ?, ?, ?)").bind(r.changeId, r.hook, r.ok ? 1 : 0, r.at).run();
+    },
+    async hookRuns(changeId) {
+      const { results } = await db.prepare("SELECT hook, ok, at FROM hook_runs WHERE change_id = ? ORDER BY at, hook").bind(changeId).all<{ hook: string; ok: number; at: string }>();
+      return results.map((r) => ({ hook: r.hook, ok: r.ok === 1, at: r.at }));
+    },
+    async pruneHookRuns(before) {
+      await db.prepare("DELETE FROM hook_runs WHERE at < ?").bind(before).run();
     },
   };
 }

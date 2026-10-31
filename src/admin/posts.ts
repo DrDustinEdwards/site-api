@@ -40,6 +40,7 @@ import {
   Conflict,
   eachItem,
   absolute,
+  actingClient,
 } from "./kit.js";
 
 
@@ -115,6 +116,8 @@ export interface PostsData {
     trash: boolean;
     rename: boolean;
     previewLinks: boolean;
+    /** v0.19.0: the site lists the posts that link to one, so a delete or a trash warns with them first. */
+    backlinks: boolean;
     filters: ContentFilter[];
     authors: string[];
   };
@@ -243,6 +246,7 @@ export async function loadPosts(source: ContentSource, query: PostQuery = {}): P
       trash,
       rename: capabilities.contentRename === true,
       previewLinks: capabilities.previewLinks === true,
+      backlinks: capabilities.backlinks === true,
       filters,
       authors,
     },
@@ -366,19 +370,45 @@ export async function runPostsIntent(source: ContentSource, input: IntentInput):
   if ((intent === "trash" || intent === "restore") && !hasTrash(capabilities)) return refused("This site has no trash for posts.");
   if (intent === "rename" && capabilities?.contentRename !== true) return refused("This site does not rename posts through the site API.");
   if (intent === "preview-link" && capabilities?.previewLinks !== true) return refused("This site does not make preview links.");
+  // v0.19.0: where the site lists backlinks, the posts that link to each one about to go, for the confirm to warn with.
+  const linked = async () => {
+    if (capabilities?.backlinks !== true || text(input, "confirm") !== "") return [];
+    const found = await Promise.all(targets.map(async (t) => ({ id: t.id, linkedFrom: (await orNull(source.client.backlinks(t.id)))?.items ?? [] })));
+    return found.filter((b) => b.linkedFrom.length > 0);
+  };
+  const warning = (backlinks: Array<{ linkedFrom: unknown[] }>) => {
+    const linking = backlinks.reduce((n, b) => n + b.linkedFrom.length, 0);
+    return linking > 0 ? ` ${plural(linking, "link")} from other posts will break: the list is below.` : "";
+  };
   if (intent === "delete" && targets.length > 0) {
+    const backlinks = await linked();
     const ask = askFirst(input, {
       intent,
       title: `Delete ${plural(targets.length, "post")} for good?`,
-      lead: "Each post leaves the site, and nothing here can bring it back.",
+      lead: "Each post leaves the site, and nothing here can bring it back." + warning(backlinks),
       action: "Delete for good",
       items: targets.map((t) => t.id),
       fields: { ids: targets.map((t) => t.id), versions: targets.map((t) => t.version ?? "") },
     });
-    if (ask) return ask;
+    if (ask) return backlinks.length > 0 ? { ...ask, confirm: { ...ask.confirm!, backlinks } } : ask;
+  }
+  // A trash can be undone, so it asks only when other posts link to one of them.
+  if (intent === "trash" && targets.length > 0) {
+    const backlinks = await linked();
+    if (backlinks.length > 0) {
+      const ask = askFirst(input, {
+        intent,
+        title: `Move ${plural(targets.length, "post")} to the Trash?`,
+        lead: `A live post leaves the site.${warning(backlinks)}`,
+        action: "Move to the Trash",
+        items: targets.map((t) => t.id),
+        fields: { ids: targets.map((t) => t.id), versions: targets.map((t) => t.version ?? "") },
+      });
+      if (ask) return { ...ask, confirm: { ...ask.confirm!, backlinks } };
+    }
   }
 
-  const client = source.client;
+  const client = actingClient(source.client, source.actor);
   const read = async (id: string, version: string | null): Promise<ContentDoc> => {
     const doc = await client.get(id);
     if (version !== null && doc.version !== version) throw new Conflict(doc.version);
@@ -552,7 +582,11 @@ export async function runPostsIntent(source: ContentSource, input: IntentInput):
       }
       case "preview-link": {
         await read(id, version);
-        const link = await client.previewLinks.create({ id, changeId: changeId() });
+        // v0.19.0: how long it lives, where the form says and the site takes it; else the site's 48 hours.
+        const hours = Number(text(input, "expiresInHours"));
+        const max = capabilities?.previewLinkHours?.max;
+        const expiresInHours = max && Number.isInteger(hours) && hours >= 1 && hours <= max ? hours : undefined;
+        const link = await client.previewLinks.create({ id, changeId: changeId(), ...(expiresInHours ? { expiresInHours } : {}) });
         previewLink = { url: link.url, expiresAt: link.expiresAt };
         return { id, ok: true, message: `Made a preview link that works until ${scheduleLabel(link.expiresAt)}.` };
       }
