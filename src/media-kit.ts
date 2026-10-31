@@ -101,9 +101,9 @@ export interface SuggestUsage {
 }
 
 export interface MediaSuggesterOptions<E extends SuggestEnv> {
-  /** The site's name on each AI Gateway log entry, as site-runtime's anthropicRoute names it ("dustinedwards"). */
+  /** The site's name on each AI Gateway log entry, as site-runtime's anthropicRoute names it ("example"). */
   app: string;
-  /** Where the picture is, finishing "...one picture ": "on a scientist's personal website", "in a blog about billing". */
+  /** Where the picture is, finishing "...one picture ": "on a personal website", "in a travel blog". */
   describe: string;
   /** More sentences for the prompt, the site's own rules ("Do not use em dashes."). */
   rules?: string[];

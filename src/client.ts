@@ -64,7 +64,7 @@ import {
 } from "./contract.js";
 
 export interface SiteClientConfig {
-  /** The site's origin, such as https://dustinedwards.info. */
+  /** The site's origin, such as https://example.com. */
   baseUrl: string;
   key: string;
   fetch?: typeof fetch;

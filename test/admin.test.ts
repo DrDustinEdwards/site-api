@@ -107,7 +107,7 @@ describe("posts", () => {
     expect(sorted.counts).toEqual({ all: 2, draft: 1, scheduled: 0, published: 1 });
     expect(sorted.rows[0]).toMatchObject({ version: (await client.get("b")).version, tags: [] });
     expect((await loadPosts(source, { sort: "title", dir: "desc" })).rows.map((r) => r.id)).toEqual(["a", "b"]);
-    expect((await loadPosts(source, { kind: "episode" })).rows).toEqual([]);
+    expect((await loadPosts(source, { kind: "note" })).rows).toEqual([]);
   });
 
   it("sorts the page itself, and says so, when the list it reads did not sort; and reads a host index in place of the site's list", async () => {

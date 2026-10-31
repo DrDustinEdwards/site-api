@@ -31,7 +31,7 @@ export interface MemoryAdapterOptions {
   mediaWrites?: boolean;
   /** false for a media manager with no lenses and no sort (a v0.5.0 site): a lens then answers 501. On by default. */
   mediaLenses?: boolean;
-  /** true for a site whose replace refuses a picture of another size, as dustinedwards.info's does (v0.11.0). Off by default. */
+  /** true for a site whose replace refuses a picture of another size, as some sites do (v0.11.0). Off by default. */
   mediaReplaceKeepsSize?: boolean;
   /**
    * false for a v0.12.0 media manager (v0.13.0): no duplicates, usage counts, filters, credit, transforms, history, changes,
