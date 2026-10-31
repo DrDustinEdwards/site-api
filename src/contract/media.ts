@@ -91,6 +91,12 @@ export const MediaLicense = z.string().max(300);
 /** Where a file came from (v0.13.0): the page or file it was taken from, http or https. */
 export const MediaSourceUrl = z.url({ protocol: /^https?$/ }).max(2000);
 
+/**
+ * The longest alt text a write takes (v0.19.0): a description beyond it belongs in the caption or a long description. A
+ * file stored before keeps a longer one.
+ */
+export const MAX_ALT_CHARS = 250;
+
 /** What a file is, from its type (v0.13.0): kindOf in the package says which. */
 export const MEDIA_KINDS = ["image", "document", "video", "audio"] as const;
 export const MediaKind = z.enum(MEDIA_KINDS);
@@ -99,8 +105,11 @@ export const MediaKind = z.enum(MEDIA_KINDS);
 export const MEDIA_ORIENTATIONS = ["landscape", "portrait", "square"] as const;
 export const MediaOrientation = z.enum(MEDIA_ORIENTATIONS);
 
-/** The fields a site may fill from a file's own embedded metadata (IPTC, EXIF) at upload (v0.13.0). */
-export const MEDIA_EMBEDDED_FIELDS = ["credit", "license", "caption", "takenAt"] as const;
+/**
+ * The fields a site may fill from a file's own embedded metadata (XMP, IPTC, EXIF) at upload (v0.13.0; the copyright notice
+ * and the two license addresses v0.19.0).
+ */
+export const MEDIA_EMBEDDED_FIELDS = ["credit", "license", "caption", "takenAt", "copyright", "licenseUrl", "acquireLicenseUrl"] as const;
 
 export const MediaItem = z.object({
   id: MediaId,
@@ -145,6 +154,18 @@ export const MediaItem = z.object({
   takenAt: z.iso.datetime({ offset: true, local: true }).nullable().optional(),
   /** Where the original file downloads from, where the site offers it. It may be `url` itself. */
   downloadUrl: MediaAddress.optional(),
+  // ---------- v0.19.0, each on a site that keeps it
+  /**
+   * True when the person who placed the file said it is decorative, so its empty alt is a choice and not a gap (the no-alt
+   * lens leaves it out). Absent on a file stored before, whose empty alt is a gap.
+   */
+  decorative: z.boolean().optional(),
+  /** The copyright notice, apart from the credit (capabilities.mediaCredit): "" for none. ImageObject's copyrightNotice. */
+  copyright: MediaCredit.optional(),
+  /** The page that states the license (ImageObject's `license`, XMP's WebStatement); null for none. */
+  licenseUrl: MediaSourceUrl.nullable().optional(),
+  /** The page where a license can be had (ImageObject's `acquireLicensePage`, PLUS's LicensorURL); null for none. */
+  acquireLicenseUrl: MediaSourceUrl.nullable().optional(),
 });
 
 /** Another file whose bytes are exactly this one's (v0.13.0). */
@@ -209,7 +230,13 @@ export const MediaUploadQuery = z.object({
   // A file name may not hold control characters, on purpose.
   // oxlint-disable-next-line no-control-regex
   filename: z.string().min(1).max(200).regex(/^[^/\\\u0000-\u001f]+$/, "A file name, with no path"),
-  alt: z.string().max(2000).default(""),
+  /**
+   * Required (v0.19.0) unless `decorative=yes`: what the picture shows, at most MAX_ALT_CHARS, never its file name, a bare
+   * "image" or an address. Before v0.19.0 it defaulted to "", which stored a picture with no alt and no one's choice.
+   */
+  alt: z.string().max(2000).optional(),
+  /** v0.19.0: "yes" says the picture is decorative, so it is stored with alt "" on purpose. Not with an alt. */
+  decorative: z.enum(["yes"]).optional(),
   changeId: ChangeId,
   /** "no" keeps this file at its own size on a site that shrinks large pictures at upload (v0.13.0, capabilities.mediaResize). */
   resize: z.enum(["no"]).optional(),
@@ -242,7 +269,9 @@ export const MediaDeleteResult = z.object({
 
 /** Every media metadata write names the version the caller last saw and Carrel's change id. */
 export const MediaAltInput = z.object({
+  /** v0.19.0: as an upload's, and "" only with `decorative: true`. */
   alt: z.string().max(2000),
+  decorative: z.literal(true).optional(),
   expectedVersion: Version,
   changeId: ChangeId,
 });
@@ -384,17 +413,25 @@ export const MediaImportInput = z.object({
   /** The name to keep; the last segment of the address when left out. */
   // oxlint-disable-next-line no-control-regex
   filename: z.string().min(1).max(200).regex(/^[^/\\\u0000-\u001f]+$/, "A file name, with no path").optional(),
-  alt: z.string().max(2000).default(""),
+  /** Required, or `decorative: true` (v0.19.0), as an upload's. */
+  alt: z.string().max(2000).optional(),
+  decorative: z.literal(true).optional(),
   resize: z.enum(["no"]).optional(),
   changeId: ChangeId,
 });
 
-/** The file's credit, license, source and license end, as one write: each is the whole value after it. */
+/**
+ * The file's credit, license, source and license end, as one write: each is the whole value after it. v0.19.0 adds the
+ * copyright notice and the two license addresses, each kept as it was where the write leaves it out.
+ */
 export const MediaCreditInput = z.object({
   credit: MediaCredit,
   license: MediaLicense,
   sourceUrl: MediaSourceUrl.nullable(),
   licenseExpires: z.iso.date().nullable(),
+  copyright: MediaCredit.optional(),
+  licenseUrl: MediaSourceUrl.nullable().optional(),
+  acquireLicenseUrl: MediaSourceUrl.nullable().optional(),
   expectedVersion: Version,
   changeId: ChangeId,
 });
@@ -495,6 +532,18 @@ export const MediaSuggestions = z.object({
   model: z.string().min(1).max(200),
 });
 
+/**
+ * What the site's model suggests for a file before it is stored (v0.19.0, capabilities.mediaUploadSuggestions): the body
+ * is the file's bytes, typed by Content-Type, as an upload's; or, for an import, no body and the address as `url`, fetched
+ * and checked as an import is. Nothing is stored.
+ */
+export const MediaFileSuggestQuery = z.object({
+  url: MediaImportInput.shape.url.optional(),
+});
+
+/** The suggestion an upload form shows in its alt field for the person to keep, change or replace: never stored as it is. */
+export const MediaFileSuggestions = MediaSuggestions.omit({ id: true });
+
 export type MediaUploadLimits = z.infer<typeof MediaUploadLimits>;
 export type MediaUse = z.infer<typeof MediaUse>;
 export type MediaItem = z.infer<typeof MediaItem>;
@@ -538,3 +587,5 @@ export type MediaResizePassInput = z.infer<typeof MediaResizePassInput>;
 export type MediaResizeOutcome = z.infer<typeof MediaResizeOutcome>;
 export type MediaResizePassResult = z.infer<typeof MediaResizePassResult>;
 export type MediaSuggestions = z.infer<typeof MediaSuggestions>;
+export type MediaFileSuggestQuery = z.infer<typeof MediaFileSuggestQuery>;
+export type MediaFileSuggestions = z.infer<typeof MediaFileSuggestions>;

@@ -19,7 +19,8 @@ describe("media lenses and sort (v0.6.0)", () => {
   it("answers each lens with the files it names, the total across pages, and the order it applied", async () => {
     const { adapter, client: c } = client();
     const used = await c.media.upload({ bytes: PNG, contentType: "image/png", filename: "used.png", alt: "In a post", changeId: "u1" });
-    const bare = await c.media.upload({ bytes: PNG, contentType: "image/png", filename: "bare.png", changeId: "u2" });
+    // Stored before v0.19.0, with no alt and no one's choice.
+    const bare = await adapter.media!.upload({ bytes: PNG, contentType: "image/png", filename: "bare.png", alt: "", changeId: "u2" });
     await c.saveDraft("p", { source: `# P\n![x](/media/${used.id})\n`, expectedVersion: null, changeId: "c1" });
     adapter.mediaStore.get(used.id)!.item.bytes = 2 * 1024 * 1024;
     expect((await c.media.list({ lens: "unattached" })).items.map((i) => i.id)).toEqual([bare.id]);

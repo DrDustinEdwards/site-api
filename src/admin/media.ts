@@ -3,7 +3,7 @@
 import { focusOf } from "@dustinedwards/site-runtime/image";
 
 import { SiteApiError } from "../client.js";
-import { orientationOf } from "../media.js";
+import { altRefusal, orientationOf } from "../media.js";
 import {
   MAX_RESIZE_PASS,
   MEDIA_SORTS,
@@ -148,6 +148,8 @@ export interface MediaData {
     embedded: boolean;
     /** The query's `suggest`. */
     suggestions: boolean;
+    /** v0.19.0: the `suggest` intent, the model's alt text and tags for a file before it is uploaded or imported. */
+    uploadSuggestions: boolean;
   };
   can: Permissions;
 }
@@ -203,6 +205,7 @@ function mediaOffers(capabilities: Capabilities): MediaData["offers"] {
     resizePass: media && capabilities.mediaResize !== undefined && capabilities.mediaResizePass === true,
     embedded: media && capabilities.mediaEmbedded === true,
     suggestions: media && capabilities.mediaSuggestions === true,
+    uploadSuggestions: media && capabilities.mediaUploadSuggestions === true,
   };
 }
 
@@ -306,7 +309,7 @@ export async function loadMediaChanges(source: ContentSource, cursor: string): P
 
 const MEDIA_INTENTS = [
   "upload", "alt", "tags", "tag-add", "tag-remove", "trash", "restore", "delete", "empty-trash", "focus", "caption", "replace",
-  "import", "credit", "transform", "revert", "resize",
+  "import", "credit", "transform", "revert", "resize", "suggest",
 ] as const;
 export type MediaIntent = (typeof MEDIA_INTENTS)[number];
 
@@ -357,10 +360,12 @@ export async function runMediaIntent(source: ContentSource, input: IntentInput):
     (intent === "credit" && !offers.credit) ||
     (intent === "transform" && !offers.transform) ||
     (intent === "revert" && !offers.history) ||
-    (intent === "resize" && !offers.resizePass);
+    (intent === "resize" && !offers.resizePass) ||
+    (intent === "suggest" && !offers.uploadSuggestions);
   if (lacking) return refused("This site does not offer that.");
 
   if (intent === "upload") return uploadOne(source, input, offers.upload!);
+  if (intent === "suggest") return suggestFor(source, input);
   if (intent === "import") return importOne(source, input);
   if (intent === "empty-trash") {
     const trash = await source.client.media.list({ trashed: "only", limit: 200 });
@@ -389,7 +394,7 @@ export async function runMediaIntent(source: ContentSource, input: IntentInput):
   if (intent === "alt" || intent === "tags" || intent === "focus" || intent === "caption" || intent === "replace" || intent === "credit" || intent === "transform" || intent === "revert") {
     if (sendable.length !== 1 || targets.length !== 1) return result(early, "Choose one file.");
     const file = { id: sendable[0]!.id, version: sendable[0]!.version! };
-    if (intent === "alt") return setAlt(source, file, text(input, "alt"));
+    if (intent === "alt") return setAlt(source, file, text(input, "alt"), decorativeOf(input));
     if (intent === "tags") return setFileTags(source, file, texts(input, "tags"));
     if (intent === "focus") return setFocus(source, file, focusField(input));
     if (intent === "caption") return setCaption(source, file, text(input, "caption"));
@@ -511,6 +516,7 @@ const MEDIA_DONE: Record<MediaIntent, string> = {
   transform: "Turned",
   revert: "Reverted",
   resize: "Shrank",
+  suggest: "Suggested alt text for",
 };
 
 const MEDIA_DONE_ONE: Record<MediaIntent, string> = {
@@ -531,6 +537,7 @@ const MEDIA_DONE_ONE: Record<MediaIntent, string> = {
   transform: "Turned.",
   revert: "Reverted.",
   resize: "Shrunk.",
+  suggest: "Suggested.",
 };
 
 /**
@@ -547,13 +554,15 @@ async function uploadOne(source: ContentSource, input: IntentInput, limits: Medi
   }
   if (file.size > limits.maxBytes) return refused(`${name} is ${megabytes(file.size)}; this site accepts files up to ${megabytes(limits.maxBytes)}.`);
   if (file.size === 0) return refused(`${name} is empty.`);
+  const alt = altOf(input, name);
+  if (!alt.ok) return refused(`${name}: ${alt.message}`);
   const change = changeId();
   try {
     const item = await source.client.media.upload({
       bytes: new Uint8Array(await file.arrayBuffer()),
       contentType: type,
       filename: name.replace(/[/\\]/g, "-").slice(0, 200),
-      alt: text(input, "alt").trim().slice(0, 2000),
+      ...alt.fields,
       changeId: change,
       ...(text(input, "resize") === "no" ? { resize: "no" as const } : {}),
     });
@@ -565,7 +574,46 @@ async function uploadOne(source: ContentSource, input: IntentInput, limits: Medi
   }
 }
 
-const EMBEDDED_WORDS: Record<string, string> = { credit: "credit", license: "license", caption: "caption", takenAt: "date taken" };
+const EMBEDDED_WORDS: Record<string, string> = {
+  credit: "credit",
+  license: "license",
+  caption: "caption",
+  takenAt: "date taken",
+  copyright: "copyright",
+  licenseUrl: "license page",
+  acquireLicenseUrl: "licensing page",
+};
+
+/** A form's "decorative" box (v0.19.0), checked. */
+const decorativeOf = (input: IntentInput) => ["yes", "on", "1", "true"].includes(text(input, "decorative"));
+
+/** The alt an upload or an import sends, or decorative (v0.19.0): one of them, checked as the site checks it. */
+function altOf(input: IntentInput, filename: string | null): { ok: true; fields: { alt: string } | { decorative: true } } | { ok: false; message: string } {
+  const alt = text(input, "alt").trim();
+  const decorative = decorativeOf(input);
+  const wrong = altRefusal(alt, decorative, filename);
+  return wrong ? { ok: false, message: wrong } : { ok: true, fields: decorative ? { decorative: true } : { alt } };
+}
+
+/**
+ * The site's model's alt text and tags for a file the form holds, or an address to import (v0.19.0): what the upload form
+ * puts in its alt field, marked as a suggestion, for the person to keep, change or replace. Nothing is stored.
+ */
+async function suggestFor(source: ContentSource, input: IntentInput): Promise<IntentResult> {
+  const file = fieldOf(input, "file").find((v): v is Blob => typeof v !== "string");
+  const url = text(input, "url").trim();
+  if (!file && !/^https:\/\//i.test(url)) return refused("Choose a file, or give its https address.");
+  try {
+    const found = await source.client.media.suggestFile(
+      file ? { bytes: new Uint8Array(await file.arrayBuffer()), contentType: file.type.split(";")[0]!.trim().toLowerCase() } : { url },
+    );
+    const message = found.alt ? "Suggested alt text. Check it says what matters here, then upload." : "The model had no alt text to suggest. Say what the picture shows.";
+    return { ok: true, message, suggestion: found };
+  } catch (error) {
+    if (error instanceof SiteApiError && error.body) return refused(`The site did not suggest alt text: ${error.body.message}`);
+    throw error;
+  }
+}
 
 /**
  * What an upload or an import did, said in one sentence: a duplicate names the file it already was (nothing is recorded,
@@ -596,12 +644,14 @@ async function importOne(source: ContentSource, input: IntentInput): Promise<Int
   const url = text(input, "url").trim();
   if (!/^https:\/\//i.test(url)) return refused("Give the file's https address.");
   const filename = text(input, "filename").trim().replace(/[/\\]/g, "-").slice(0, 200);
+  const alt = altOf(input, filename || null);
+  if (!alt.ok) return refused(alt.message);
   const change = changeId();
   try {
     const item = await source.client.media.importUrl({
       url,
       ...(filename ? { filename } : {}),
-      alt: text(input, "alt").trim().slice(0, 2000),
+      ...alt.fields,
       changeId: change,
       ...(text(input, "resize") === "no" ? { resize: "no" as const } : {}),
     });
@@ -716,10 +766,12 @@ async function resizeFiles(source: ContentSource, input: IntentInput, files: Arr
   return result(all, summarize(all, MEDIA_DONE.resize, "file"), conflict ? { conflict } : {});
 }
 
-async function setAlt(source: ContentSource, file: { id: string; version: string }, alt: string): Promise<IntentResult> {
+async function setAlt(source: ContentSource, file: { id: string; version: string }, alt: string, decorative: boolean): Promise<IntentResult> {
+  const wrong = altRefusal(alt, decorative, null);
+  if (wrong) return refused(wrong);
   const { outcomes, conflict } = await eachItem(source, [file], "file", async ({ id, version }) => {
     const change = changeId();
-    const written = await source.client.media.setAlt(id, { alt: alt.trim().slice(0, 2000), expectedVersion: version, changeId: change });
+    const written = await source.client.media.setAlt(id, { alt: decorative ? "" : alt.trim(), ...(decorative ? { decorative: true as const } : {}), expectedVersion: version, changeId: change });
     return { id, ok: true, version: written.version, message: "Alt text saved." + (await recordDone(source, "media-alt", id, change)) };
   });
   return result(outcomes, outcomes[0]!.message, conflict ? { conflict } : {});

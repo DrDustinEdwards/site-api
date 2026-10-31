@@ -52,7 +52,7 @@ async function post(client: SiteClient, id: string, front: string, publish = fal
 }
 
 async function upload(client: SiteClient, name: string) {
-  return client.media.upload({ bytes: PNG, contentType: "image/png", filename: name, alt: "", changeId: `u-${name.replace(/\W/g, "")}` });
+  return client.media.upload({ bytes: PNG, contentType: "image/png", filename: name, decorative: true, changeId: `u-${name.replace(/\W/g, "")}` });
 }
 
 describe("localClient", () => {
@@ -352,10 +352,12 @@ describe("media", () => {
   });
 
   it("sends a lens and a sort the site answers (v0.6.0), drops a lens it does not, and sorts the page itself where the site did not", async () => {
-    const { client, source } = setup();
+    const { adapter, client, source } = setup();
     const small = await upload(client, "b.png");
     await client.media.setAlt(small.id, { alt: "Described", expectedVersion: small.version!, changeId: "s1" });
-    await upload(client, "a.png");
+    // A file stored before v0.19.0, with no alt and no one's choice: the lens names it, and leaves the decorative b.png out.
+    await adapter.media!.upload({ bytes: PNG, contentType: "image/png", filename: "a.png", alt: "", changeId: "u-a" });
+    await client.media.setAlt(small.id, { alt: "", decorative: true, expectedVersion: adapter.mediaStore.get(small.id)!.item.version!, changeId: "s2" });
     const lensed = await loadMedia(source, { lens: "no-alt", sort: "name" });
     expect(lensed.rows.map((r) => r.filename)).toEqual(["a.png"]);
     expect(lensed.page).toEqual({ nextCursor: null, total: 1, changeCursor: expect.any(String) });
@@ -494,10 +496,10 @@ describe("media", () => {
     const { adapter, source, records } = setup({ mediaDuplicates: true, mediaImportFetch: remote });
     expect((await loadMedia(source)).offers).toMatchObject({ import: true, credit: true, duplicates: true, transform: true, history: true, live: true, resize: { maxEdge: 2048 }, resizePass: true });
     const file = () => new File([png(10, 10) as Uint8Array<ArrayBuffer>], "a.png", { type: "image/png" });
-    expect(await runMediaIntent(source, { intent: "upload", file: file() })).toMatchObject({ ok: true, message: "Uploaded a.png." });
-    expect(await runMediaIntent(source, { intent: "upload", file: file() })).toMatchObject({ ok: true, message: "a.png is already in the library as a.png, so no second copy was stored.", outcomes: [{ duplicate: true }] });
+    expect(await runMediaIntent(source, { intent: "upload", alt: "A test picture", file: file() })).toMatchObject({ ok: true, message: "Uploaded a.png." });
+    expect(await runMediaIntent(source, { intent: "upload", alt: "A test picture", file: file() })).toMatchObject({ ok: true, message: "a.png is already in the library as a.png, so no second copy was stored.", outcomes: [{ duplicate: true }] });
     expect(await runMediaIntent(source, { intent: "import", url: "http://photos.example.com/b.png" })).toEqual({ ok: false, message: "Give the file's https address." });
-    expect(await runMediaIntent(source, { intent: "import", url: "https://photos.example.com/b.png", alt: "B" })).toMatchObject({ ok: true, message: "Imported b.png." });
+    expect(await runMediaIntent(source, { intent: "import", url: "https://photos.example.com/b.png", alt: "A test picture" })).toMatchObject({ ok: true, message: "Imported b.png." });
     expect(records.map((r) => r.kind)).toEqual(["media-upload", "media-import"]);
 
     const [id] = [...adapter.mediaStore.keys()];
@@ -510,7 +512,7 @@ describe("media", () => {
 
   it("turns a picture as the Owner, and Undo puts its old bytes back; shrinks stored pictures after asking (v0.13.0)", async () => {
     const { adapter, source } = setup();
-    const form = { intent: "upload", resize: "no", file: new File([png(4000, 3000) as Uint8Array<ArrayBuffer>], "big.png", { type: "image/png" }) };
+    const form = { intent: "upload", resize: "no", alt: "A test picture", file: new File([png(4000, 3000) as Uint8Array<ArrayBuffer>], "big.png", { type: "image/png" }) };
     await runMediaIntent(source, form);
     const [id] = [...adapter.mediaStore.keys()];
     const at = () => adapter.mediaStore.get(id!)!.item;
@@ -531,7 +533,7 @@ describe("media", () => {
 
   it("shows the model's suggestions only when asked, less what the file has, and polls for what others changed (v0.13.0)", async () => {
     const { adapter, client, source } = setup();
-    const a = await client.media.upload({ bytes: png(10, 10), contentType: "image/png", filename: "river-dusk.png", changeId: "u1" });
+    const a = await client.media.upload({ bytes: png(10, 10), contentType: "image/png", filename: "river-dusk.png", alt: "A test picture", changeId: "u1" });
     await client.media.setTags(a.id, { tags: ["river"], expectedVersion: a.version!, changeId: "t1" });
     expect(readMediaQuery(new URLSearchParams(`inspect=${a.id}&suggest=1&orientation=square&kind=image`))).toEqual({ inspect: a.id, suggest: true, orientation: "square", kind: "image" });
     const plain = await loadMedia(source, { inspect: a.id });
@@ -640,7 +642,9 @@ describe("summary", () => {
   it("counts what waits on one site, and null for what it cannot say", async () => {
     const { adapter, client, source } = setup({}, { waiting: async () => 3 });
     adapter.receiveMention({ sourceUrl: "https://a.example/1", targetId: "p" });
-    await upload(client, "a.png");
+    // A file stored before v0.19.0 with no alt counts; a decorative one does not.
+    await adapter.media!.upload({ bytes: PNG, contentType: "image/png", filename: "a.png", alt: "", changeId: "u-a" });
+    await upload(client, "b.png");
     expect(await summary(source)).toEqual({ site: { id: "memory", name: "Memory site" }, mentionsWaiting: 1, postsWaiting: 3, mediaWithoutAlt: 1, mediaLicenseExpired: 0 });
     expect(await summary(setup({ mentions: false, mediaLenses: false }).source)).toMatchObject({ mentionsWaiting: null, postsWaiting: null, mediaWithoutAlt: null, mediaLicenseExpired: null });
   });

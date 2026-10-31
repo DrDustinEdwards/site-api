@@ -275,7 +275,7 @@ export function memoryAdapter(
   /** The lenses, as the site would answer them: nothing uses it, it has no alt text, it is over the size line. */
   const LENS: Record<MediaLens, (i: MediaItem) => boolean> = {
     unattached: (i) => usesOf(i.id).length === 0,
-    "no-alt": (i) => i.alt.trim() === "",
+    "no-alt": (i) => i.alt.trim() === "" && !i.decorative,
     large: (i) => i.bytes > LARGE_MEDIA_BYTES,
     duplicates: (i) => twinsOf(i.id).length > 0,
     "license-expired": (i) => Boolean(i.licenseExpires && i.licenseExpires < now().toISOString().slice(0, 10)),
@@ -376,6 +376,7 @@ export function memoryAdapter(
               width: small?.width ?? size.width,
               height: small?.height ?? size.height,
               alt: input.alt,
+              ...(input.decorative ? { decorative: true } : {}),
               uploadedAt: now().toISOString(),
               deletable: true,
               ...(mediaWrites ? { version: nextMediaVersion(), tags: [], trashedAt: null, focus: null, caption: text.Description?.slice(0, 2000) ?? "" } : {}),
@@ -412,8 +413,8 @@ export function memoryAdapter(
           },
           ...(mediaWrites
             ? {
-                async setAlt(id: string, input: { alt: string; expectedVersion: string; changeId: string }) {
-                  return touchMedia(heldMedia(id, input.expectedVersion), { alt: input.alt });
+                async setAlt(id: string, input: { alt: string; decorative?: boolean; expectedVersion: string; changeId: string }) {
+                  return touchMedia(heldMedia(id, input.expectedVersion), { alt: input.alt, decorative: input.decorative === true });
                 },
                 async setTags(id: string, input: { tags: string[]; expectedVersion: string; changeId: string }) {
                   return touchMedia(heldMedia(id, input.expectedVersion), { tags: input.tags });
@@ -460,8 +461,9 @@ export function memoryAdapter(
           }
         : {}),
       async setCredit(id, input) {
-        const { credit, license, sourceUrl, licenseExpires } = input;
-        return touchMedia(heldMedia(id, input.expectedVersion), { credit, license, sourceUrl, licenseExpires });
+        const { credit, license, sourceUrl, licenseExpires, copyright, licenseUrl, acquireLicenseUrl } = input;
+        const named = Object.entries({ copyright, licenseUrl, acquireLicenseUrl }).filter(([, v]) => v !== undefined);
+        return touchMedia(heldMedia(id, input.expectedVersion), { credit, license, sourceUrl, licenseExpires, ...Object.fromEntries(named) });
       },
       // The reference adapter does not decode pictures, so a turn moves the size and the focal point and keeps the bytes.
       async transform(id, input: { op: MediaTransformOp; asNewFile: boolean; expectedVersion: string; changeId: string }) {
@@ -529,6 +531,10 @@ export function memoryAdapter(
         if (!item) return null;
         const words = (item.filename ?? id).replace(/\.[^.]*$/, "").split(/[^A-Za-z]+/).filter((w) => w.length >= 3);
         return { tags: words.map((w) => w.toLowerCase()), alt: words.length > 0 ? `A picture of ${words.join(" ").toLowerCase()}.` : null, model: "memory-suggester" };
+      },
+      // Before an upload there is no name to go on: the model's answer is the file's size.
+      async suggestFile({ bytes }) {
+        return { tags: ["upload"], alt: `A picture of ${bytes.byteLength} bytes.`, model: "memory-suggester" };
       },
     };
   }

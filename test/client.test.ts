@@ -48,6 +48,7 @@ describe("client round trip", () => {
       mediaResizePass: true,
       mediaEmbedded: true,
       mediaSuggestions: true,
+      mediaUploadSuggestions: true,
       mentions: true,
       mentionReset: true,
       scheduledUpdates: true,

@@ -10,6 +10,7 @@ import { z } from "zod";
 import * as contract from "../src/contract.js";
 import { additiveOnly, added, now, widened, type JsonSchema } from "./additive.js";
 import { V0170_CODES, V0170_ROUTES, V0170_SCHEMAS, V0170_WIDEN, withV0170 } from "./v0.17.0.js";
+import { V0190_ROUTES, V0190_SCHEMAS, asOfV0190, withV0190 } from "./v0.19.0.js";
 
 const V0120 = JSON.parse(readFileSync(new URL("./fixtures/contract-v0.12.0.json", import.meta.url), "utf8")) as {
   version: string;
@@ -17,12 +18,13 @@ const V0120 = JSON.parse(readFileSync(new URL("./fixtures/contract-v0.12.0.json"
   routes: Array<Record<string, string>>;
   schemas: Record<string, JsonSchema>;
 };
+asOfV0190(V0120.schemas);
 
 /** What every file may carry from v0.13.0. */
 const ITEM = ["color", "credit", "downloadUrl", "license", "licenseExpires", "placeholder", "sourceUrl", "takenAt", "usedCount"];
 
 /** Every v0.12.0 schema v0.13.0 and v0.17.0 extend, and exactly the optional properties each adds. */
-const ADDED: Record<string, string[]> = withV0170({
+const ADDED: Record<string, string[]> = withV0190(withV0170({
   Capabilities: [
     "mediaChanges", "mediaCredit", "mediaDuplicates", "mediaEmbedded", "mediaFilters", "mediaHistory", "mediaImport",
     "mediaResize", "mediaResizePass", "mediaSuggestions", "mediaTransform", "mediaUsage", "insightNotFound",
@@ -34,7 +36,7 @@ const ADDED: Record<string, string[]> = withV0170({
   MediaList: ["changeCursor", "moreChanges", "removed"],
   MediaListQuery: ["changedSince", "kind", "orientation"],
   MediaUploadQuery: ["resize"],
-});
+}), V0120.schemas);
 
 const NEW_LENSES = ["duplicates", "license-expired", "oversized"];
 
@@ -82,12 +84,13 @@ describe("the v0.12.0 contract", () => {
       "POST /media/resize-pass",
       ...V0170_ROUTES,
       "GET /insight/not-found",
+      ...V0190_ROUTES,
     ]);
   });
 
   it("answers an upload with MediaItem and three optional properties more, so a v0.12.0 reader's MediaItem still parses it", () => {
     additiveOnly(V0120.schemas.MediaItem!, now("MediaUploadResult"), "MediaUploadResult");
-    expect(added(V0120.schemas.MediaItem!, now("MediaUploadResult")).sort()).toEqual([...ITEM, "duplicateOf", "embedded", "resizedFrom"].sort());
+    expect(added(V0120.schemas.MediaItem!, now("MediaUploadResult")).sort()).toEqual([...ITEM, ...ADDED.MediaItem!.filter((p) => !ITEM.includes(p)), "duplicateOf", "embedded", "resizedFrom"].sort());
   });
 
   for (const name of Object.keys(V0120.schemas).filter((n) => !(n in ADDED) && n !== "MediaLens" && n !== "ErrorCode")) {
@@ -112,7 +115,7 @@ describe("the v0.12.0 contract", () => {
   });
 
   it("adds only the new schemas v0.13.0, v0.17.0 and v0.17.0 name", () => {
-    expect(exported.filter((n) => !(n in V0120.schemas)).sort()).toEqual([...NEW_SCHEMAS, "NotFoundQuery", "NotFoundReport", "NotFoundRow", ...V0170_SCHEMAS].sort());
+    expect(exported.filter((n) => !(n in V0120.schemas)).sort()).toEqual([...NEW_SCHEMAS, "NotFoundQuery", "NotFoundReport", "NotFoundRow", ...V0170_SCHEMAS, ...V0190_SCHEMAS].sort());
   });
 
   it("parses v0.12.0 bodies with the v0.13.0 schemas", () => {

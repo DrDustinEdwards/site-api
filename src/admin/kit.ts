@@ -79,6 +79,8 @@ export interface IntentResult {
   confirm?: ConfirmRequest;
   /** Set by the posts list's `preview-link` (v0.17.0): the link to show once, and when it stops working. */
   previewLink?: { url: string; expiresAt: string };
+  /** Set by the media library's `suggest` (v0.19.0): the model's alt text and tags for the upload form, never stored as they are. */
+  suggestion?: { alt: string | null; tags: string[]; model: string };
 }
 
 /** What a one-way intent asks before it runs (Capsomer's confirm dialog with script, its confirm page without). */

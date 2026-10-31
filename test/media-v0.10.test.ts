@@ -26,7 +26,7 @@ async function status(promise: Promise<unknown>) {
 describe("focal point and caption", () => {
   it("stores the point in focusOf's spelling, clears it, keeps a caption, and refuses a point off the picture", async () => {
     const { client, adapter, fetch } = setup();
-    const file = await client.media.upload({ bytes: PNG, contentType: "image/png", filename: "a.png", changeId: "u" });
+    const file = await client.media.upload({ bytes: PNG, contentType: "image/png", filename: "a.png", alt: "A test picture", changeId: "u" });
     expect(file).toMatchObject({ focus: null, caption: "" });
 
     const set = await client.media.setFocus(file.id, { focus: "0.250x0.4", expectedVersion: file.version!, changeId: "f1" });
@@ -54,7 +54,7 @@ describe("replace", () => {
     expect(replaced.version).not.toBe(focused.version);
     expect(adapter.mediaStore.get(file.id)?.bytes).toEqual(PNG2);
 
-    const again = { bytes: PNG, filename: "a.png", changeId: "r2" };
+    const again = { bytes: PNG, filename: "a.png", alt: "A test picture", changeId: "r2" };
     expect(await status(client.media.replace(file.id, { ...again, contentType: "image/png", expectedVersion: focused.version }))).toBe(409);
     expect(await status(client.media.replace(file.id, { ...again, bytes: JPEG, contentType: "image/jpeg", expectedVersion: replaced.version! }))).toBe(400);
     expect(await status(client.media.replace("uploads/none.png", { ...again, contentType: "image/png", expectedVersion: replaced.version! }))).toBe(404);
