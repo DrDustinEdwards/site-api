@@ -6,7 +6,7 @@ import { anthropicRoute } from "@dustinedwards/site-runtime/ai-gateway";
 import { toBase64 } from "@dustinedwards/site-runtime/encoding";
 import { escapeHtml } from "@dustinedwards/site-runtime/html";
 import { editImage, type ImagesLike } from "@dustinedwards/site-runtime/image";
-import { checkProse } from "@dustinedwards/site-runtime/prose";
+import { checkProse, PATTERNS } from "@dustinedwards/site-runtime/prose";
 
 import { NotFoundError, RefusedError, VersionConflictError } from "./adapter.js";
 
@@ -65,6 +65,9 @@ export const SUGGEST_MODEL = "@cf/meta/llama-4-scout-17b-16e-instruct";
 
 /** The longest edge the model is shown: enough to name what is in a picture, and a small request. */
 const VIEW_EDGE = 768;
+
+/** The feature on each AI Gateway log entry, beside the site's `app`, so the suggester's cost splits from the site's other calls. */
+export const SUGGEST_FEATURE = "media-suggest";
 
 /** How long a suggestion may take before the call is abandoned; a person is waiting on it. */
 const SUGGEST_TIMEOUT_MS = 30_000;
@@ -138,14 +141,14 @@ function promptFor(describe: string, rules: string[]): string {
 
 /**
  * The gateway Workers AI runs through: its id as site-runtime's anthropicRoute reads it (from the standard URL, else
- * AI_GATEWAY_ID), with the policy that module sets on Anthropic calls: bodies not logged, and the site named on each log
- * entry. Undefined when the site has no gateway; a gateway set up wrong is warned about and skipped, so a suggestion
- * still runs.
+ * AI_GATEWAY_ID), with the policy that module sets on Anthropic calls: bodies not logged, and the site and the feature
+ * named on each log entry. Undefined when the site has no gateway; a gateway set up wrong (a custom domain with no
+ * AI_GATEWAY_ID, a malformed URL) is warned about and skipped, never thrown, so a suggestion still runs.
  */
-function gatewayOf(env: SuggestEnv, app: string): { id: string; collectLog: false; metadata: { app: string } } | undefined {
+function gatewayOf(env: SuggestEnv, app: string): { id: string; collectLog: false; metadata: { app: string; feature: string } } | undefined {
   let id: string | null;
   try {
-    const route = anthropicRoute({ AI_GATEWAY_BASE_URL: env.AI_GATEWAY_BASE_URL, AI_GATEWAY_ID: env.AI_GATEWAY_ID }, app);
+    const route = anthropicRoute({ AI_GATEWAY_BASE_URL: env.AI_GATEWAY_BASE_URL, AI_GATEWAY_ID: env.AI_GATEWAY_ID }, app, SUGGEST_FEATURE);
     if (!route.gateway) return undefined;
     id = route.gatewayId;
   } catch (error) {
@@ -156,17 +159,19 @@ function gatewayOf(env: SuggestEnv, app: string): { id: string; collectLog: fals
     console.warn(`${app} media suggester: AI_GATEWAY_BASE_URL names no gateway id and AI_GATEWAY_ID is unset; calling Workers AI without the gateway`);
     return undefined;
   }
-  return { id, collectLog: false, metadata: { app } };
+  return { id, collectLog: false, metadata: { app, feature: SUGGEST_FEATURE } };
 }
 
-/** The model's answer as tags and alt, from its JSON wherever in the text it put it. */
+/**
+ * The model's answer as tags and alt. JSON mode answers an object, or the same object as a JSON string; anything else
+ * (prose around it included) is not the asked shape and reads as no suggestion, never as JSON cut out of free text.
+ */
 export function readSuggestion(answer: unknown): { tags: string[]; alt: string | null } {
   const body = typeof answer === "object" && answer !== null && "response" in answer ? (answer as { response: unknown }).response : answer;
   let parsed: unknown = body;
   if (typeof body === "string") {
-    const json = /\{[\s\S]*\}/.exec(body)?.[0];
     try {
-      parsed = json ? JSON.parse(json) : null;
+      parsed = JSON.parse(body);
     } catch {
       parsed = null;
     }
@@ -176,6 +181,9 @@ export function readSuggestion(answer: unknown): { tags: string[]; alt: string |
   const tags = Array.isArray(record.tags) ? record.tags.filter((t): t is string => typeof t === "string") : [];
   return { tags, alt };
 }
+
+/** The prose checks that hold for any model's text: site-runtime's PATTERNS, not its lists of Claude's tells. */
+const CHATBOT_LEFTOVERS = new Set(PATTERNS.map((pattern) => pattern.check));
 
 /**
  * The AI tag and alt-text suggester every site wrote behind its adapter's `suggest`: a 768px JPEG of the picture (through
@@ -215,8 +223,10 @@ export function mediaSuggester<E extends SuggestEnv>(options: MediaSuggesterOpti
       await options.afterCall(env, { model: SUGGEST_MODEL, promptTokens: usage?.prompt_tokens ?? 0, completionTokens: usage?.completion_tokens ?? 0 }, id);
     }
     const { tags, alt } = readSuggestion(answer);
-    // Alt text with a chatbot's leftovers or a high-severity tell in it is not offered (site-runtime's prose check).
-    const flagged = alt !== null && checkProse(alt).some((issue) => issue.severity === "high" || issue.severity === "critical");
+    // Alt text with what a chatbot leaves in text (a refusal, a cutoff note, a blank, citation markup) is not offered.
+    // Only those checks: they are errors whoever wrote the text, while checkProse's word lists are tells seen in Claude's
+    // output, and this is Llama's (W4).
+    const flagged = alt !== null && checkProse(alt).some((issue) => CHATBOT_LEFTOVERS.has(issue.check));
     return { tags, alt: flagged ? null : alt, model: SUGGEST_MODEL };
   };
 }
