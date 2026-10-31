@@ -7,7 +7,7 @@ import type { ErrorBody, ErrorCode, MediaUse } from "../contract.js";
 import { readCapped } from "@dustinedwards/site-runtime/body";
 
 /** Four million bytes: two million characters of source can take that much as UTF-8 JSON. */
-const MAX_BODY_BYTES = 4_000_000;
+export const MAX_BODY_BYTES = 4_000_000;
 
 const STATUS: Record<ErrorCode, number> = {
   unauthorized: 401,
@@ -19,10 +19,31 @@ const STATUS: Record<ErrorCode, number> = {
   invalid: 400,
   "too-large": 413,
   "version-conflict": 409,
+  "in-progress": 409,
   refused: 422,
   "not-implemented": 501,
   internal: 500,
 };
+
+/** Each code's fixed title (v0.17.0), the `title` of its problem details; the README's Errors table says what each means. */
+const TITLE: Record<ErrorCode, string> = {
+  unauthorized: "Unauthorized",
+  "rate-limited": "Too many requests",
+  "not-configured": "Not configured",
+  unavailable: "Unavailable",
+  "not-found": "Not found",
+  "method-not-allowed": "Method not allowed",
+  invalid: "Invalid request",
+  "too-large": "Too large",
+  "version-conflict": "Version conflict",
+  "in-progress": "In progress",
+  refused: "Refused",
+  "not-implemented": "Not implemented",
+  internal: "Internal error",
+};
+
+/** Where each code is explained: the README's Errors table, one anchor per code. */
+export const ERROR_TYPE_BASE = "https://github.com/DrDustinEdwards/site-api/blob/main/README.md#error-";
 
 export const BASE_HEADERS = {
   "cache-control": "no-store",
@@ -36,8 +57,17 @@ export function json(status: number, body: unknown): Response {
   });
 }
 
+/**
+ * An error answer as RFC 9457 problem details (v0.17.0). `error` and `message` stay as every earlier reader expects;
+ * `type`, `title`, `status` and `detail` are the standard's names for the same answer.
+ */
 export function fail(code: ErrorCode, message: string, extra: Partial<ErrorBody> = {}): Response {
-  return json(STATUS[code], { error: code, message, ...extra });
+  const status = STATUS[code];
+  const body = { error: code, message, type: `${ERROR_TYPE_BASE}${code}`, title: TITLE[code], status, detail: message, ...extra };
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...BASE_HEADERS, "content-type": "application/problem+json; charset=utf-8" },
+  });
 }
 
 export class BadRequest extends Error {

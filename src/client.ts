@@ -6,6 +6,7 @@ import {
   ContentDeleteResult,
   ContentDoc,
   ContentList,
+  filtersAsked,
   Diff,
   ErrorBody,
   MediaBulkResult,
@@ -28,11 +29,16 @@ import {
   Meta,
   NotFoundReport,
   PREFIX,
+  PreviewLink,
+  PreviewLinkList,
+  PreviewLinkRevokeResult,
+  RenameResult,
   RevisionList,
   RevisionSource,
   ScheduledUpdate,
   WriteResult,
   type ContentTagsInput,
+  type ContentTrashInput,
   type ListQuery,
   type MediaAltInput,
   type MediaBulkInput,
@@ -49,7 +55,9 @@ import {
   type MediaTrashInput,
   type MentionListQuery,
   type PreviewInput,
+  type PreviewLinkInput,
   type PublishInput,
+  type RenameInput,
   type SaveDraftInput,
   type ScheduleInput,
   type UnpublishInput,
@@ -114,7 +122,13 @@ export function createSiteClient(config: SiteClientConfig) {
 
   return {
     meta: () => get(Meta, "GET", "/meta"),
-    list: (q: Partial<ListQuery> = {}) => get(ContentList, "GET", `/content${query(q)}`),
+    /** A list. A filter the answer does not name in `filtered` was not applied (a v0.14.0 site), so it is refused as 501. */
+    list: async (q: Partial<ListQuery> = {}) => {
+      const list = await get(ContentList, "GET", `/content${query(q)}`);
+      const missing = filtersAsked(q).find((f) => !list.filtered?.includes(f));
+      if (missing) throw new SiteApiError(501, { error: "not-implemented", message: `This site does not filter its content list by ${missing}.` });
+      return list;
+    },
     get: (id: string) => get(ContentDoc, "GET", `/content/${enc(id)}`),
     saveDraft: (id: string, input: SaveDraftInput) => get(WriteResult, "PUT", `/content/${enc(id)}/draft`, input),
     publish: (id: string, input: PublishInput) => get(WriteResult, "POST", `/content/${enc(id)}/publish`, input),
@@ -137,8 +151,19 @@ export function createSiteClient(config: SiteClientConfig) {
       get(ContentDeleteResult, "DELETE", `/content/${enc(id)}${query(input)}`),
     /** Optional per site (v0.6.0): sets a post's whole tag set. A site without it answers SiteApiError with status 501. */
     setTags: (id: string, input: ContentTagsInput) => get(WriteResult, "PUT", `/content/${enc(id)}/tags`, input),
+    /** Optional per site (v0.17.0, `contentRename`): moves an item to `newId`; its old path redirects to the new one. */
+    rename: (id: string, input: RenameInput) => get(RenameResult, "POST", `/content/${enc(id)}/rename`, input),
+    /** Optional per site (v0.17.0, `contentTrash`): to the trash (a live item leaves the site first) and back, as a draft. */
+    trash: (id: string, input: ContentTrashInput) => get(WriteResult, "POST", `/content/${enc(id)}/trash`, input),
+    restore: (id: string, input: ContentTrashInput) => get(WriteResult, "POST", `/content/${enc(id)}/restore`, input),
     diff: (id: string, from: string, to?: string) => get(Diff, "GET", `/content/${enc(id)}/diff${query({ from, to })}`),
     preview: async (input: PreviewInput) => (await call("POST", "/preview", input)).text(),
+    /** Optional per site (v0.17.0, `previewLinks`): a link anyone can open to see an item's current source, without the key. */
+    previewLinks: {
+      create: (input: PreviewLinkInput) => get(PreviewLink, "POST", "/preview-links", input),
+      list: (id: string) => get(PreviewLinkList, "GET", `/preview-links${query({ id })}`),
+      revoke: (linkId: string, input: { changeId: string }) => get(PreviewLinkRevokeResult, "DELETE", `/preview-links/${enc(linkId)}${query(input)}`),
+    },
     /** The media group (v0.2.0). A refused delete throws SiteApiError whose body carries `usedBy`. */
     media: {
       list: (q: Partial<MediaListQuery> = {}) => get(MediaList, "GET", `/media${query(q)}`),

@@ -9,6 +9,7 @@ import {
   loadMentions,
   liveSaveWarning,
   loadPosts,
+  readPostQuery,
   loadScheduledUpdate,
   readMediaQuery,
   runMediaIntent,
@@ -97,7 +98,7 @@ describe("posts", () => {
   });
 
   it("asks the site to sort and count (v0.6.0), and counts each status tab for the same search", async () => {
-    const { client, source } = setup();
+    const { client, source } = setup({ contentExtras: false });
     await post(client, "a", "title: Zed", true);
     await post(client, "b", "title: Ant");
     const sorted = await loadPosts(source, { sort: "title" });
@@ -206,7 +207,7 @@ describe("posts", () => {
   });
 
   it("duplicates as a draft with a free id, and Undo deletes the copy at the version the duplicate made", async () => {
-    const { adapter, client, source } = setup({}, { taken: async (id) => id === "a-copy" });
+    const { adapter, client, source } = setup({ contentExtras: false }, { taken: async (id) => id === "a-copy" });
     await post(client, "a", "title: Alpha\nslug: a", true);
     const copied = await runPostsIntent(source, { intent: "duplicate", ids: ["a"] });
     expect(copied.outcomes).toEqual([{ id: "a", ok: true, message: 'Copied as a draft with the id "a-copy-2".', copyId: "a-copy-2" }]);
@@ -220,12 +221,12 @@ describe("posts", () => {
   });
 
   it("offers no Undo for a duplicate where the site has no delete, or the person may not delete, and says how to remove it", async () => {
-    const plain = setup({ contentDelete: false });
+    const plain = setup({ contentDelete: false, contentExtras: false });
     await post(plain.client, "a", "title: A");
     const noDelete = await runPostsIntent(plain.source, { intent: "duplicate", ids: ["a"] });
     expect(noDelete.undo).toBeUndefined();
     expect(noDelete.message).toContain("remove a copy you do not want in the site's own admin");
-    const owned = setup();
+    const owned = setup({ contentExtras: false });
     await post(owned.client, "a", "title: A");
     const editor = await runPostsIntent({ ...owned.source, can: EDITOR }, { intent: "duplicate", ids: ["a"] });
     expect(editor.undo).toBeUndefined();
@@ -284,7 +285,7 @@ describe("posts", () => {
   });
 
   it("deletes where the site offers it, and refuses on a site that does not, before asking", async () => {
-    const { adapter, client, source } = setup();
+    const { adapter, client, source } = setup({ contentExtras: false });
     await post(client, "a", "title: A");
     // Nothing goes before the person types the count.
     expect((await runPostsIntent(source, { intent: "delete", ids: ["a"] })).confirm).toMatchObject({ typeToConfirm: "1", items: ["a"] });
@@ -294,6 +295,28 @@ describe("posts", () => {
     const none = setup({ contentDelete: false });
     await post(none.client, "a", "title: A");
     expect(await runPostsIntent(none.source, { intent: "delete", ids: ["a"] })).toEqual({ ok: false, message: "This site does not delete posts through the site API." });
+  });
+
+  it("trashes and restores with Undo, deletes for good only from the Trash, lists and counts the Trash, and renames with Undo (v0.17.0)", async () => {
+    const { adapter, client, source } = setup();
+    await post(client, "a", "title: A", true);
+    await post(client, "b", "title: B");
+    const binned = await runPostsIntent(source, { intent: "trash", ids: ["a"] });
+    expect(binned).toMatchObject({ ok: true, undo: { intent: "restore", fields: { ids: ["a"] } } });
+    expect((await client.get("a")).status).toBe("draft");
+    const trash = await loadPosts(source, readPostQuery(new URLSearchParams("trashed=1")));
+    expect(trash.rows.map((r) => r.id)).toEqual(["a"]);
+    expect(trash.counts?.trash).toBe(1);
+    expect(trash.offers).toMatchObject({ trash: true, rename: true });
+    expect((await runPostsIntent(source, { intent: "delete", ids: ["b"], confirm: "1" })).outcomes![0]).toMatchObject({ ok: false });
+    expect(await runPostsIntent(source, { intent: binned.undo!.intent, ...binned.undo!.fields })).toMatchObject({ ok: true, undo: { intent: "trash" } });
+    expect((await client.get("a")).trashedAt).toBeNull();
+
+    const renamed = await runPostsIntent(source, { intent: "rename", ids: ["b"], newId: "b2" });
+    expect(renamed).toMatchObject({ ok: true, undo: { intent: "rename", fields: { ids: ["b2"], newId: "b" } } });
+    await runPostsIntent(source, { intent: renamed.undo!.intent, ...renamed.undo!.fields });
+    expect((await client.get("b")).id).toBe("b");
+    expect(adapter.deletedContent).toEqual([]);
   });
 
   it("says when the record of a done write could not be saved", async () => {

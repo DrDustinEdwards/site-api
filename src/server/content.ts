@@ -1,7 +1,7 @@
 // The meta route, the content routes and the preview: what every site serves.
 
 import { createTwoFilesPatch } from "diff";
-import { capabilitiesOf, NotFoundError, RefusedError, VersionConflictError, type SiteAdapter } from "../adapter.js";
+import { capabilitiesOf, contentFiltersOf, hasContentTrash, NotFoundError, RefusedError, VersionConflictError, type SiteAdapter } from "../adapter.js";
 import {
   ContentDeleteQuery,
   ContentDeleteResult,
@@ -9,6 +9,7 @@ import {
   ContentId,
   ContentList,
   ContentTagsInput,
+  ContentTrashInput,
   Diff,
   DiffQuery,
   ListQuery,
@@ -16,6 +17,8 @@ import {
   PACKAGE_VERSION,
   PreviewInput,
   PublishInput,
+  RenameInput,
+  RenameResult,
   RevisionList,
   RevisionSource,
   SaveDraftInput,
@@ -26,10 +29,11 @@ import {
   Version,
   WriteResult,
   schemaHash,
+  filtersAsked,
 } from "../contract.js";
-import { BASE_HEADERS, ContractBreach, ID, checked, fail, json, pathParam, readBody, readQuery, type Route } from "./http.js";
+import { BadRequest, BASE_HEADERS, ContractBreach, ID, checked, fail, json, pathParam, readBody, readQuery, type Route } from "./http.js";
 
-export function contentRoutes(adapter: SiteAdapter): Route[] {
+export function contentRoutes(adapter: SiteAdapter, options: { store: boolean }): Route[] {
   const id = (m: RegExpMatchArray) => pathParam(m[1], ContentId, "content id");
 
   const write = async (
@@ -48,13 +52,21 @@ export function contentRoutes(adapter: SiteAdapter): Route[] {
           packageVersion: PACKAGE_VERSION,
           schemaHash: await schemaHash(),
           site: adapter.site,
-          capabilities: capabilitiesOf(adapter),
+          capabilities: capabilitiesOf(adapter, options),
         }, "meta")),
     },
     {
       method: "GET",
       pattern: /^\/content$/,
-      run: async (_m, url) => json(200, checked(ContentList, await adapter.content.list(readQuery(url, ListQuery)), "content list")),
+      run: async (_m, url) => {
+        const query = readQuery(url, ListQuery);
+        const offered = contentFiltersOf(adapter);
+        const asked = filtersAsked(query);
+        const missing = asked.find((f) => !offered.includes(f));
+        if (missing) return fail("not-implemented", `This site does not filter its content list by ${missing}.`);
+        const list = checked(ContentList, await adapter.content.list(query), "content list");
+        return json(200, asked.length ? { ...list, filtered: asked } : list);
+      },
     },
     {
       method: "GET",
@@ -73,7 +85,16 @@ export function contentRoutes(adapter: SiteAdapter): Route[] {
     {
       method: "POST",
       pattern: new RegExp(`^/content/${ID}/publish$`),
-      run: (m, _u, r) => write(m, r, async (i, req) => adapter.content.publish(i, await readBody(req, PublishInput))),
+      run: (m, _u, r) =>
+        write(m, r, async (i, req) => {
+          const input = await readBody(req, PublishInput);
+          if (input.publishedAt !== undefined) {
+            if (!adapter.content.publishedAtSettable) throw new BadRequest("not-implemented", "This site does not set the date a post is published under.");
+            // A minute's grace for the caller's clock; a later date is a schedule, which says when the post goes live.
+            if (Date.parse(input.publishedAt) > Date.now() + 60_000) throw new BadRequest("invalid", "publishedAt is in the future. To publish later, schedule it.");
+          }
+          return adapter.content.publish(i, input);
+        }),
     },
     {
       method: "POST",
@@ -163,6 +184,27 @@ export function contentRoutes(adapter: SiteAdapter): Route[] {
       },
     },
     {
+      method: "POST",
+      pattern: new RegExp(`^/content/${ID}/rename$`),
+      run: async (m, _u, request) => {
+        const contentId = id(m);
+        if (!adapter.content.rename) return fail("not-implemented", "This site does not rename content through the API.");
+        const input = await readBody(request, RenameInput);
+        if (input.newId === contentId) throw new BadRequest("invalid", "newId is the item's own id.");
+        return json(200, checked(RenameResult, await adapter.content.rename(contentId, input), "content rename"));
+      },
+    },
+    ...(["trash", "restore"] as const).map((op) => ({
+      method: "POST",
+      pattern: new RegExp(`^/content/${ID}/${op}$`),
+      run: async (m: RegExpMatchArray, _u: URL, request: Request) => {
+        const contentId = id(m);
+        if (!hasContentTrash(adapter)) return fail("not-implemented", "This site has no content trash.");
+        const input = await readBody(request, ContentTrashInput);
+        return json(200, checked(WriteResult, await adapter.content[op]!(contentId, input), `content ${op}`));
+      },
+    })),
+    {
       method: "GET",
       pattern: new RegExp(`^/content/${ID}/diff$`),
       run: async (m, url) => {
@@ -188,7 +230,8 @@ export function contentRoutes(adapter: SiteAdapter): Route[] {
         if (typeof html !== "string") throw new ContractBreach("preview: not a string");
         return new Response(html, {
           status: 200,
-          headers: { ...BASE_HEADERS, "content-type": "text/html; charset=utf-8" },
+          // v0.17.0: a preview is never a page to index, whatever the site's own render says.
+          headers: { ...BASE_HEADERS, "content-type": "text/html; charset=utf-8", "x-robots-tag": "noindex, nofollow" },
         });
       },
     },

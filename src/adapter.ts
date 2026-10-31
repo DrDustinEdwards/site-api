@@ -2,10 +2,11 @@
 // every body; the adapter owns the site's storage, its rules and its render.
 
 import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
-
+import { CONTENT_FILTERS } from "./contract.js";
 import type {
   Capabilities,
   ContentDoc,
+  ContentFilter,
   ContentList,
   ListQuery,
   MediaDetail,
@@ -22,19 +23,40 @@ import type {
   MentionList,
   MentionListQuery,
   MentionStatus,
+  PostField,
   NotFoundRow,
   PreviewInput,
   PublishInput,
+  RenameInput,
+  RenameResult,
   Revision,
   SaveDraftInput,
   ScheduleInput,
   ScheduledUpdate,
+  SearchField,
   SiteInfo,
   UnpublishInput,
   WriteResult,
 } from "./contract.js";
 
 export interface ContentAdapter {
+  /**
+   * Optional (v0.17.0): true when `publish` takes `publishedAt` and publishes under that date, a first publish backdated
+   * or a live item re-dated (capabilities.contentPublishedAt). Absent: a publish carrying it answers 501.
+   */
+  publishedAtSettable?: boolean;
+  /**
+   * Optional (v0.17.0): the search and post fields the site renders from a post's frontmatter (capabilities.searchFields,
+   * capabilities.postFields), each under its shared name in `@dustinedwards/site-api/frontmatter`. Absent: none.
+   */
+  searchFields?: readonly SearchField[];
+  /**
+   * Optional (v0.17.0): the list filters `list` applies (capabilities.contentFilters): `kind`, `tag`, `author` (one of
+   * the item's authors), `published` (publishedAfter and publishedBefore, either or both). The package answers any other
+   * with 501. `trashed` is offered with the trash, not here.
+   */
+  filters?: readonly Exclude<ContentFilter, "trashed">[];
+  postFields?: readonly PostField[];
   list(query: ListQuery): Promise<ContentList>;
   /** null when the id does not exist. */
   get(id: string): Promise<ContentDoc | null>;
@@ -65,6 +87,21 @@ export interface ContentAdapter {
    * RefusedError like the writes. A site without it answers `PUT /content/:id/tags` with 501.
    */
   setTags?(id: string, input: { tags: string[]; expectedVersion: string; changeId: string }): Promise<WriteResult>;
+  /**
+   * Optional (v0.17.0): moves the item to `newId`, its history with it, and, when it was ever published, keeps a permanent
+   * (301) redirect from its old path to the new one; answers that old path as `previousPath` (null when never published).
+   * Throws NotFoundError (checked first), VersionConflictError, or RefusedError for a `newId` already taken. The move and
+   * the redirect are one unit. A site without it answers `POST /content/:id/rename` with 501.
+   */
+  rename?(id: string, input: RenameInput): Promise<RenameResult>;
+  /**
+   * Optional (v0.17.0), both or neither, and only beside `delete` (capabilities.contentTrash): `trash` sets `trashedAt`
+   * and takes a live item off the site first, as one unit; `restore` clears it and always answers a draft, never a live
+   * item. Each throws like the writes. `list` then never lists a trashed item unless `trashed` is true, and then only
+   * those. The package's `runSchedules` deletes items trashed more than TRASH_DAYS ago, through `delete`.
+   */
+  trash?(id: string, input: { expectedVersion: string; changeId: string }): Promise<WriteResult>;
+  restore?(id: string, input: { expectedVersion: string; changeId: string }): Promise<WriteResult>;
 }
 
 export interface PreviewAdapter {
@@ -315,6 +352,10 @@ export interface SchedulesAdapter {
    * update. Only when what the site holds still matches (the same kind, time and change id, and the time has come);
    * otherwise it changes nothing and returns null, since a cancel, a reschedule or an unpublish got there first. A
    * scheduled item's first publication records `publishAt` as its `publishedAt`, not the time the cron ran.
+   *
+   * v0.17.0: a site whose scheduled item goes live by time alone, with no write (its pages compare `publishAt` with the
+   * clock), still lists it in `due` as kind "publish", and `apply` answers its WriteResult without writing anything, so
+   * the publish hooks hear it go live. Once applied it must leave `due`, or the hooks would hear it on every pass.
    */
   apply(id: string, input: DueSchedule & { now: Date }): Promise<WriteResult | null>;
 }
@@ -337,6 +378,8 @@ export interface InsightAdapter {
 
 export interface SiteAdapter {
   site: SiteInfo;
+  /** Optional (v0.17.0): the Prelum `RENDER_VERSION` the site's stored HTML was rendered with (capabilities.render). */
+  renderVersion?: string;
   content: ContentAdapter;
   preview: PreviewAdapter;
   /** Absent on a site with no media manager: the media routes then answer 501, as in v0.1.0. */
@@ -354,9 +397,9 @@ export interface SiteAdapter {
 
 /**
  * Stage 2 implemented content and preview; v0.2.0 adds media for a site whose adapter has it. The
- * other groups answer 501 until their stage.
+ * other groups answer 501 until their stage. `store` (v0.17.0): the site gave createSiteApi a store.
  */
-export function capabilitiesOf(adapter: SiteAdapter): Capabilities {
+export function capabilitiesOf(adapter: SiteAdapter, options: { store?: boolean } = {}): Capabilities {
   return {
     content: true,
     preview: true,
@@ -367,6 +410,12 @@ export function capabilitiesOf(adapter: SiteAdapter): Capabilities {
     ...(adapter.media ? { mediaUpload: adapter.media.limits } : {}),
     ...(adapter.content.delete ? { contentDelete: true } : {}),
     ...(adapter.content.setTags ? { contentTags: true } : {}),
+    ...(adapter.content.publishedAtSettable ? { contentPublishedAt: true } : {}),
+    ...(adapter.content.rename ? { contentRename: true } : {}),
+    ...(hasContentTrash(adapter) ? { contentTrash: true } : {}),
+    ...(contentFiltersOf(adapter).length ? { contentFilters: contentFiltersOf(adapter) } : {}),
+    ...(adapter.content.searchFields?.length ? { searchFields: [...adapter.content.searchFields] } : {}),
+    ...(adapter.content.postFields?.length ? { postFields: [...adapter.content.postFields] } : {}),
     ...(adapter.media?.setAlt ? { mediaAlt: true } : {}),
     ...(adapter.media?.lenses?.length ? { mediaLenses: [...adapter.media.lenses] } : {}),
     ...(adapter.media?.setTags ? { mediaTags: true } : {}),
@@ -390,8 +439,23 @@ export function capabilitiesOf(adapter: SiteAdapter): Capabilities {
     ...(adapter.mentions ? { mentions: true } : {}),
     ...(adapter.mentions?.reset ? { mentionReset: true } : {}),
     ...(adapter.schedules ? { scheduledUpdates: true } : {}),
+    ...(options.store ? { replay: true, previewLinks: true } : {}),
+    ...(adapter.renderVersion ? { render: { version: adapter.renderVersion } } : {}),
     ...(adapter.insight ? { insightNotFound: true } : {}),
   };
+}
+
+/** Trash and restore, and the delete that empties the trash (v0.17.0). */
+export function hasContentTrash(adapter: SiteAdapter): boolean {
+  const { content } = adapter;
+  return content.trash !== undefined && content.restore !== undefined && content.delete !== undefined;
+}
+
+/** The list filters the site applies (v0.17.0), in the contract's order. */
+export function contentFiltersOf(adapter: SiteAdapter): ContentFilter[] {
+  const offered = new Set<ContentFilter>(adapter.content.filters ?? []);
+  if (hasContentTrash(adapter)) offered.add("trashed");
+  return CONTENT_FILTERS.filter((f) => offered.has(f));
 }
 
 /** @deprecated Since v0.2.0 capabilities depend on the adapter: use capabilitiesOf(adapter). */

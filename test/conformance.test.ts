@@ -4,6 +4,8 @@ import { describe, expect, it } from "vitest";
 import { createSiteApi } from "../src/index.js";
 import { runConformance } from "../src/conformance.js";
 import { memoryAdapter } from "../src/testing.js";
+import { d1SiteApiStore, SITE_API_STORE_SQL } from "../src/store.js";
+import { d1 } from "./d1.js";
 import { KEY, ORIGIN, allow, site } from "./helpers.js";
 
 function failing(report: Awaited<ReturnType<typeof runConformance>>) {
@@ -50,13 +52,30 @@ describe("conformance", () => {
       "mention sweep with no change id: refused before anything is removed",
       "mentions list with an unknown status: refused",
       "not-found report: advertised in capabilities, or answered 501",
+      "errors: problem details with type, title and status",
+      "preview: a tiny source answers HTML that is never indexed",
+      "publish of an unknown id: refused",
+      "publish with a future publishedAt: refused, or not implemented where the site cannot set the date",
+      "content rename of an unknown id: refused, or not implemented where the site lacks it",
+      "content trash of an unknown id: refused, or not implemented where the site lacks it",
+      "content restore of an unknown id: refused, or not implemented where the site lacks it",
+      "preview link for an unknown id: refused, or not implemented where the site has none",
+      "content list filters: each one the site does not offer answers 501",
     ]);
+  });
+
+  it("passes a v0.14.0 content group, and a site with a store, whose stale write it sends twice and sees replayed", async () => {
+    expect(failing(await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: site(memoryAdapter({ contentExtras: false })).fetch }))).toEqual([]);
+    const api = createSiteApi({ adapter: memoryAdapter(), key: KEY, limiter: allow, log: () => {}, store: d1SiteApiStore(d1(SITE_API_STORE_SQL)) });
+    const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: (async (i: RequestInfo | URL, init?: RequestInit) => api.handle(new Request(i, init))) as typeof fetch });
+    expect(failing(report)).toEqual([]);
+    expect(report.checks.find((c) => c.name.startsWith("replay:"))?.ok).toBe(true);
   });
 
   it("runs only the content checks on a site with no media manager", async () => {
     const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: site(memoryAdapter({ media: false })).fetch });
     expect(failing(report)).toEqual([]);
-    expect(report.checks).toHaveLength(22);
+    expect(report.checks).toHaveLength(31);
   });
 
   it("expects 501 on a site with no content delete, and 404 where it has one", async () => {

@@ -1,6 +1,6 @@
 {
   "name": "@dustinedwards/site-api",
-  "version": "0.17.0",
+  "version": "0.18.0",
   "private": true,
   "description": "The standard site API every Dustin Edwards site includes so Carrel can list, edit and publish its content.",
   "license": "MIT",
@@ -29,6 +29,10 @@
       "types": "./dist/schedules.d.ts",
       "default": "./dist/schedules.js"
     },
+    "./store": {
+      "types": "./dist/store.d.ts",
+      "default": "./dist/store.js"
+    },
     "./r2": {
       "types": "./dist/r2.d.ts",
       "default": "./dist/r2.js"
@@ -42,8 +46,12 @@
       "default": "./dist/testing.js"
     }
   },
+  "bin": {
+    "site-api-live": "bin/site-api-live.mjs"
+  },
   "files": [
-    "dist"
+    "dist",
+    "bin"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
@@ -53,7 +61,7 @@
     "lint:promises": "oxlint --type-aware --tsconfig tsconfig.json src"
   },
   "dependencies": {
-    "@dustinedwards/site-runtime": "github:DrDustinEdwards/site-runtime#v0.45.1",
+    "@dustinedwards/site-runtime": "github:DrDustinEdwards/site-runtime#v0.46.0",
     "diff": "9.0.0",
     "zod": "4.6.7"
   },

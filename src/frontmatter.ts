@@ -127,6 +127,92 @@ export function setBlock(front: string, key: string, lines: string[]): string {
   return all.flatMap((b) => b.lines).join(crlf ? "\r\n" : "\n");
 }
 
+/**
+ * The search fields (v0.17.0): the same name on every site, kept in the frontmatter so each change is versioned
+ * with the post. A site lists the ones it renders in its capabilities' `searchFields`, and Carrel shows a box for each.
+ * An empty one falls back to the site's own default (the title, the opening text, the cover, the page's own address).
+ */
+export const SEARCH_FIELDS = ["searchTitle", "description", "image", "imageAlt", "canonical", "noindex"] as const;
+export type SearchField = (typeof SEARCH_FIELDS)[number];
+export type SearchValues = { searchTitle: string; description: string; image: string; imageAlt: string; canonical: string; noindex: boolean };
+
+export function searchFieldsOf(front: string | null): SearchValues {
+  return {
+    searchTitle: readKey(front, "searchTitle"),
+    description: readKey(front, "description"),
+    image: readKey(front, "image"),
+    imageAlt: readKey(front, "imageAlt"),
+    canonical: readKey(front, "canonical"),
+    noindex: readKey(front, "noindex") === "true",
+  };
+}
+
+/** The frontmatter with these search fields set, as JSON literals so a jsonSource site reads them too. A blank text or a false noindex removes the key. */
+export function setSearchFields(front: string, values: Partial<SearchValues>): string {
+  let out = front;
+  for (const field of SEARCH_FIELDS) {
+    const value = values[field];
+    if (value === undefined) continue;
+    const text = typeof value === "boolean" ? (value ? "true" : "") : value.trim();
+    out = setBlock(out, field, text === "" ? [] : [`${field}: ${typeof value === "boolean" ? text : JSON.stringify(text)}`]);
+  }
+  return out;
+}
+
+/**
+ * The post fields (v0.17.0), beside the search fields and kept the same way: `excerpt` (the summary a list shows),
+ * `authors` (display names in credit order, the first the primary author), `series` (its name) and `seriesPart` (a
+ * positive whole number). A site lists the ones it renders in its capabilities' `postFields`.
+ */
+export const POST_FIELDS = ["excerpt", "authors", "series", "seriesPart"] as const;
+export type PostField = (typeof POST_FIELDS)[number];
+export type PostValues = { excerpt: string; authors: string[]; series: string; seriesPart: number | null };
+
+export function postFieldsOf(front: string | null): PostValues {
+  const part = Number(readKey(front, "seriesPart"));
+  return {
+    excerpt: readKey(front, "excerpt"),
+    authors: authorsOf(front),
+    series: readKey(front, "series"),
+    seriesPart: Number.isInteger(part) && part > 0 ? part : null,
+  };
+}
+
+/** A JSON array first, since a name may hold a comma ("Smith, Jr."); a hand-written YAML list otherwise. */
+function authorsOf(front: string | null): string[] {
+  const raw = readKey(front, "authors");
+  let names: unknown = null;
+  if (raw.startsWith("[")) {
+    try {
+      names = JSON.parse(raw);
+    } catch {
+      // Not JSON: a YAML flow list, read below.
+    }
+  }
+  const list = Array.isArray(names) && names.every((n) => typeof n === "string") ? (names as string[]) : readList(front, "authors");
+  return list.map((n) => n.trim()).filter(Boolean);
+}
+
+/** The frontmatter with these post fields set, as JSON literals like the search fields. A blank text, no authors or a null part removes the key. */
+export function setPostFields(front: string, values: Partial<PostValues>): string {
+  let out = front;
+  for (const field of POST_FIELDS) {
+    const value = values[field];
+    if (value === undefined) continue;
+    let literal: string | null;
+    if (Array.isArray(value)) {
+      const names = value.map((n) => n.trim()).filter(Boolean);
+      literal = names.length > 0 ? JSON.stringify(names) : null;
+    } else if (typeof value === "number" || value === null) {
+      literal = value !== null && Number.isInteger(value) && value > 0 ? String(value) : null;
+    } else {
+      literal = value.trim() === "" ? null : JSON.stringify(value.trim());
+    }
+    out = setBlock(out, field, literal === null ? [] : [`${field}: ${literal}`]);
+  }
+  return out;
+}
+
 // The JSON source format: the front matter a site writes for Carrel when it stores its fields in columns,
 // one `key: <JSON literal>` line per field, so a round trip needs no YAML. A text field may also be written
 // unquoted by hand. `jsonSource` is the one reader and writer, given the site's own field list.

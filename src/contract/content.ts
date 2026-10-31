@@ -8,6 +8,9 @@ export const ContentStatus = z.enum(["draft", "scheduled", "published"]);
 /** A post tag (v0.6.0): one short piece of text, trimmed, with nothing that would break a frontmatter list. */
 export const ContentTag = z.string().min(1).max(40).regex(/^[^\s,[\]"'#:\\](?:[^\r\n,[\]"'#:\\]*[^\s,[\]"'#:\\])?$/);
 
+/** A display name credited on a post (v0.17.0), as its `authors` post field holds it. */
+export const AuthorName = z.string().min(1).max(200);
+
 /** A post's whole tag set (v0.6.0). */
 export const ContentTags = z.array(ContentTag).max(50);
 
@@ -39,6 +42,11 @@ export const ContentSummary = z.object({
   tags: ContentTags.optional(),
   /** On a live item, the update scheduled to replace it (v0.10.0); null when none. Absent: the site has no scheduled updates. */
   scheduledUpdate: ScheduledUpdateSummary.nullable().optional(),
+  /** v0.17.0, from the post fields where the site keeps them, for a list: everyone credited, the primary first, and the excerpt. */
+  authors: z.array(AuthorName).max(50).optional(),
+  excerpt: z.string().max(5000).optional(),
+  /** When the item went to the trash (v0.17.0), null when it is not there. Absent: the site has no content trash. */
+  trashedAt: Timestamp.nullable().optional(),
 });
 
 export const ContentDoc = ContentSummary.extend({
@@ -47,12 +55,24 @@ export const ContentDoc = ContentSummary.extend({
   version: Version,
 });
 
+/** The list filters a site may offer (v0.17.0), named in capabilities.contentFilters; `published` is the pair of dates. */
+export const CONTENT_FILTERS = ["kind", "tag", "author", "published", "trashed"] as const;
+
 export const ListQuery = z.object({
   status: ContentStatus.optional(),
+  /** Matches the title and the body. Without `sort`, the newest updated come first. */
   q: z.string().max(200).optional(),
+  /** v0.17.0 filters, each answering 501 on a site that does not name it in capabilities.contentFilters. */
+  kind: z.string().min(1).max(64).optional(),
+  tag: ContentTag.optional(),
+  author: AuthorName.optional(),
+  publishedAfter: Timestamp.optional(),
+  publishedBefore: Timestamp.optional(),
   /** v0.6.0. A site that sorts says so in the answer's `sorted`; one that does not leaves its own order. */
   sort: z.enum(CONTENT_SORTS).optional(),
   dir: SortDir.optional(),
+  /** v0.17.0, where `contentTrash`: true lists only the trash. Absent or false: trashed items are never listed. */
+  trashed: z.stringbool().optional(),
   cursor: z.string().max(500).optional(),
   limit: z.coerce.number().int().min(1).max(200).default(50),
 });
@@ -64,6 +84,11 @@ export const ContentList = z.object({
   total: z.number().int().min(0).optional(),
   /** The order the site applied (v0.6.0). Absent: the site did not sort as asked, so a caller sorts the page itself. */
   sorted: z.object({ sort: z.enum(CONTENT_SORTS), dir: SortDir }).optional(),
+  /**
+   * The v0.17.0 filters the site applied. A v0.14.0 site drops a filter it does not know and lists everything, so the
+   * client refuses an answer that leaves out one it asked for, rather than show live posts as the trash.
+   */
+  filtered: z.array(z.enum(CONTENT_FILTERS)).optional(),
 });
 
 /** A post's whole tag set after the write (v0.6.0, optional per site). */
@@ -80,14 +105,21 @@ export const SaveDraftInput = z.object({
   changeId: ChangeId,
 });
 
-/** source, when sent, is saved and published in one write. */
-export const PublishInput = z.object({
+const PublishFields = z.object({
   expectedVersion: Version,
   changeId: ChangeId,
   source: Source.optional(),
 });
 
-export const ScheduleInput = PublishInput.extend({
+/**
+ * source, when sent, is saved and published in one write. publishedAt (v0.17.0, where `contentPublishedAt`) is the
+ * date the item is published under: a backdate, or a new date for a live item. Never in the future: that is a schedule.
+ */
+export const PublishInput = PublishFields.extend({
+  publishedAt: Timestamp.optional(),
+});
+
+export const ScheduleInput = PublishFields.extend({
   publishAt: Timestamp,
 });
 
@@ -103,6 +135,27 @@ export const WriteResult = z.object({
   changeId: ChangeId,
   /** The update still waiting on the item after the write (v0.10.0), null when none, on a site with scheduled updates. */
   scheduledUpdate: ScheduledUpdateSummary.nullable().optional(),
+});
+
+/** Trashing or restoring an item (v0.17.0, optional per site). */
+export const ContentTrashInput = z.object({
+  expectedVersion: Version,
+  changeId: ChangeId,
+});
+
+/**
+ * Moving an item to a new id (v0.17.0, optional per site). Its old public path, where it was ever published, keeps a
+ * permanent redirect to the new one.
+ */
+export const RenameInput = z.object({
+  newId: ContentId,
+  expectedVersion: Version,
+  changeId: ChangeId,
+});
+
+/** The write under the new id, and the path that now redirects to it (null for an item never published). */
+export const RenameResult = WriteResult.extend({
+  previousPath: z.string().startsWith("/").nullable(),
 });
 
 /** The update waiting on a live item, with its source (v0.10.0): `GET /content/:id/schedule`. */
@@ -127,6 +180,8 @@ export const Revision = z.object({
   at: Timestamp,
   author: z.string().max(200),
   message: z.string().max(2000),
+  /** Everyone credited for this version (v0.17.0), where the site keeps more than the one `author`. */
+  authors: z.array(AuthorName).max(50).optional(),
 });
 
 export const RevisionList = z.object({ items: z.array(Revision) });
@@ -173,6 +228,38 @@ export const PreviewInput = z.object({
   source: Source,
 });
 
+/** A shareable preview link for one item (v0.17.0, where `previewLinks`): it lives `hours`, 48 by default, at most a week. */
+export const PreviewLinkInput = z.object({
+  id: ContentId,
+  hours: z.number().int().min(1).max(168).default(48),
+  changeId: ChangeId,
+});
+
+/** The link's whole token, answered once: the site keeps only its hash. `url` is the page anyone with it can open. */
+export const PreviewLink = z.object({
+  token: z.string().regex(/^[A-Za-z0-9_-]{43}$/),
+  url: z.url(),
+  expiresAt: Timestamp,
+});
+
+export const PreviewLinkListQuery = z.object({ id: ContentId });
+
+/** An item's working links, the newest first. `id` is the first 12 hex characters of the token's hash: it revokes the link, and cannot open it. */
+export const PreviewLinkList = z.object({
+  items: z.array(z.object({ id: z.string().regex(/^[0-9a-f]{12}$/), createdAt: Timestamp, expiresAt: Timestamp })),
+});
+
+export const PreviewLinkRevokeQuery = z.object({ changeId: ChangeId });
+
+export const PreviewLinkRevokeResult = z.object({
+  id: z.string().regex(/^[0-9a-f]{12}$/),
+  revoked: z.literal(true),
+  changeId: ChangeId,
+});
+
+export type PreviewLinkInput = z.input<typeof PreviewLinkInput>;
+export type PreviewLink = z.infer<typeof PreviewLink>;
+export type PreviewLinkList = z.infer<typeof PreviewLinkList>;
 export type ContentStatus = z.infer<typeof ContentStatus>;
 export type ContentSummary = z.infer<typeof ContentSummary>;
 export type ContentDoc = z.infer<typeof ContentDoc>;
@@ -180,11 +267,27 @@ export type ListQuery = z.infer<typeof ListQuery>;
 export type ContentList = z.infer<typeof ContentList>;
 export type ContentTagsInput = z.infer<typeof ContentTagsInput>;
 export type ContentSort = (typeof CONTENT_SORTS)[number];
+export type ContentFilter = (typeof CONTENT_FILTERS)[number];
+
+/** The v0.17.0 filters a list query asks for. */
+export function filtersAsked(query: Partial<z.infer<typeof ListQuery>>): ContentFilter[] {
+  const asked: Record<ContentFilter, boolean> = {
+    kind: query.kind !== undefined,
+    tag: query.tag !== undefined,
+    author: query.author !== undefined,
+    published: query.publishedAfter !== undefined || query.publishedBefore !== undefined,
+    trashed: query.trashed === true,
+  };
+  return CONTENT_FILTERS.filter((f) => asked[f]);
+}
 export type SaveDraftInput = z.infer<typeof SaveDraftInput>;
 export type PublishInput = z.infer<typeof PublishInput>;
 export type ScheduleInput = z.infer<typeof ScheduleInput>;
 export type UnpublishInput = z.infer<typeof UnpublishInput>;
 export type WriteResult = z.infer<typeof WriteResult>;
+export type RenameInput = z.infer<typeof RenameInput>;
+export type ContentTrashInput = z.infer<typeof ContentTrashInput>;
+export type RenameResult = z.infer<typeof RenameResult>;
 export type ScheduledUpdateSummary = z.infer<typeof ScheduledUpdateSummary>;
 export type ScheduledUpdate = z.infer<typeof ScheduledUpdate>;
 export type ScheduleCancelQuery = z.infer<typeof ScheduleCancelQuery>;
