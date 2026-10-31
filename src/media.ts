@@ -60,6 +60,9 @@ const SIGNATURES: Record<string, (b: Uint8Array) => boolean> = {
   "image/gif": (b) => ascii(b, 0, 6) === "GIF87a" || ascii(b, 0, 6) === "GIF89a",
   "image/webp": (b) => ascii(b, 0, 4) === "RIFF" && ascii(b, 8, 4) === "WEBP",
   "image/avif": (b) => ascii(b, 4, 4) === "ftyp" && /avi[fs]/.test(ascii(b, 8, 24)),
+  // v0.15.0: an ISO media file whose major or compatible brands name HEVC pictures (HEIC) or any HEIF picture (mif1, msf1).
+  "image/heic": (b) => ascii(b, 4, 4) === "ftyp" && /he(i[cxms]|v[cx])/.test(ascii(b, 8, 24)),
+  "image/heif": (b) => ascii(b, 4, 4) === "ftyp" && /he(i[cxms]|v[cx])|m[is]f1/.test(ascii(b, 8, 24)),
   "application/pdf": (b) => ascii(b, 0, 5) === "%PDF-",
   // Text, so no magic number: no NUL byte in the head, and an <svg element near the start.
   "image/svg+xml": (b) => {
