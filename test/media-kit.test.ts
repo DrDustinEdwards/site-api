@@ -40,7 +40,8 @@ describe("media kit", () => {
 
   it("stops before the model when beforeCall throws, and reads the model's JSON wherever it put it", async () => {
     const run = vi.fn(async () => ({ response: 'Sure: {"alt": " A dog. ", "tags": ["dog", 3]}', usage: { prompt_tokens: 5 } }));
-    const images = { input: () => ({ transform: () => ({ output: async () => ({ response: () => new Response("jpeg") }) }) }) };
+    const output = async () => ({ response: () => new Response("jpeg") });
+    const images = { input: () => ({ output, transform: () => ({ output }) }) };
     const env: SuggestEnv = { AI: { run }, IMAGES: images };
     const picture = () => new Response("png").body!;
 

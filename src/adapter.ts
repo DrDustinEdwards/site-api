@@ -1,6 +1,8 @@
 // What each site implements. The package owns the route, the key, the rate limit and the shape of
 // every body; the adapter owns the site's storage, its rules and its render.
 
+import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
+
 import type {
   Capabilities,
   ContentDoc,
@@ -388,8 +390,7 @@ export const CAPABILITIES: Capabilities = {
  * in the same order, on every read and write.
  */
 export async function contentVersion(parts: readonly unknown[]): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(JSON.stringify(parts)));
-  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("").slice(0, 32);
+  return (await sha256Hex(JSON.stringify(parts))).slice(0, 32);
 }
 
 /** The expectedVersion on a write is not what the site holds. currentVersion null: no such id. */
