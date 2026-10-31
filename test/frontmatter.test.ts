@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { JsonSourceError, joinSource, jsonSource, postFieldsOf, readKey, readList, searchFieldsOf, setBlock, setPostFields, setRawKey, setSearchFields, setTags, splitSource, tagsOf } from "../src/frontmatter.js";
+import { JsonSourceError, joinSource, jsonSource, postFieldsOf, searchFieldsOf, setPostFields, setSearchFields, setTags, splitSource, tagsOf } from "../src/frontmatter.js";
 
 const SOURCE = [
   "---",
@@ -28,21 +28,9 @@ const SOURCE = [
 
 const parts = splitSource(SOURCE);
 
-describe("splitSource and joinSource", () => {
-  it("round-trips every shape of source byte for byte", () => {
-    for (const source of [SOURCE, "no frontmatter\n", "---\ntitle: x\n---", "---\r\ntitle: x\r\n---\r\nBody\r\n", "---\n---\nBody", ""]) {
-      expect(joinSource(splitSource(source))).toBe(source);
-    }
-    expect(parts.body).toBe("The body.\n");
-  });
-});
-
+// The block reader and writer (splitSource, readKey, setBlock and the rest) are Prelum's and tested there.
 describe("reads", () => {
-  it("reads a key quoted or not, and a list in flow or block form", () => {
-    expect(readKey(parts.front, "title")).toBe("Every product");
-    expect(readKey(parts.front, "weird_key")).toBe("some value: with a colon");
-    expect(readKey(parts.front, "missing")).toBe("");
-    expect(readList(parts.front, "key_takeaways")).toEqual(["First.", "Second."]);
+  it("reads the tags in flow form, and none from no frontmatter", () => {
     expect(tagsOf(parts.front)).toEqual(["cloudflare", "workers"]);
     expect(tagsOf(null)).toEqual([]);
   });
@@ -63,26 +51,11 @@ describe("writes", () => {
   it("turns a block-form list into the flow form and touches nothing else", () => {
     expect(setTags("title: x\ntags:\n  - a\n  - b\nslug: y", ["a", "b", "c"])).toBe("title: x\ntags: [a, b, c]\nslug: y");
   });
-
-  it("sets one raw key in place or at the end, and never rewrites a line that already says it", () => {
-    expect(setRawKey(parts.front!, "draft", "true")).toBe(parts.front!.replace("draft: false", "draft: true"));
-    expect(setRawKey("title: x", "draft", "true")).toBe("title: x\ndraft: true");
-    expect(setRawKey(parts.front!, "draft", "false")).toBe(parts.front);
-  });
-
-  it("replaces a multi-line block, removes an emptied one, and leaves an identical one alone", () => {
-    expect(setBlock(parts.front!, "key_takeaways", ["key_takeaways:", '  - "One"'])).toBe(parts.front!.replace('key_takeaways:\n  - "First."\n  - "Second."', 'key_takeaways:\n  - "One"'));
-    expect(setBlock(parts.front!, "further_reading", [])).toBe(parts.front!.replace("further_reading:\n  - https://example.com/a\n", ""));
-    expect(setBlock(parts.front!, "key_takeaways", ["key_takeaways:", '  - "First."', '  - "Second."'])).toBe(parts.front);
-    expect(setBlock(parts.front!, "missing", [])).toBe(parts.front);
-  });
 });
 
 describe("edge sources", () => {
-  it("reads and writes a CRLF frontmatter as CRLF, without a second key", () => {
+  it("writes the tags of a CRLF frontmatter as CRLF", () => {
     const front = splitSource("---\r\ntitle: Hello\r\ntags: [old]\r\n---\r\nBody\r\n").front!;
-    expect(readKey(front, "title")).toBe("Hello");
-    expect(setRawKey(front, "title", '"Hi"')).toBe('title: "Hi"\r\ntags: [old]');
     expect(setTags(front, ["new"])).toBe("title: Hello\r\ntags: [new]");
   });
 
