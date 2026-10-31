@@ -25,7 +25,7 @@ export interface MemoryAdapterOptions {
   contentDelete?: boolean;
   /** false for a site that keeps no post tags through the API (a v0.5.0 site): the tags route then answers 501. On by default. */
   contentTags?: boolean;
-  /** false for a v0.14.0 content group (v0.15.0): no settable publish date, rename, trash, list filters or post fields. On by default. */
+  /** false for a v0.14.0 content group (v0.16.0): no settable publish date, rename, trash, list filters or post fields. On by default. */
   contentExtras?: boolean;
   /** false for a media manager with no alt, tag, trash, focal point, caption or replace writes (a v0.2.0 site): those routes then answer 501. On by default. */
   mediaWrites?: boolean;
@@ -124,7 +124,7 @@ function pngText(bytes: Uint8Array): Record<string, string> {
   return found;
 }
 
-/** The item with its tags (v0.6.0), where its frontmatter can hold them, and its authors and excerpt where it has them (v0.15.0). */
+/** The item with its tags (v0.6.0), where its frontmatter can hold them, and its authors and excerpt where it has them (v0.16.0). */
 function withTags(doc: ContentDoc): ContentDoc {
   const front = splitSource(doc.source).front;
   if (front === null) return doc;
@@ -157,7 +157,7 @@ export function memoryAdapter(
   purged: string[];
   /** Adds a mention as the site's endpoint would, and returns its id. */
   receiveMention(fields: ReceivedMention): string;
-  /** The permanent redirects a rename left (v0.15.0), old path to new. */
+  /** The permanent redirects a rename left (v0.16.0), old path to new. */
   redirects: Map<string, string>;
 } {
   const site = options.site ?? { id: "memory", name: "Memory site", origin: "https://memory.example" };
@@ -716,7 +716,7 @@ export function memoryAdapter(
           .filter((d) => !query.publishedBefore || (d.publishedAt !== null && at(d.publishedAt) < at(query.publishedBefore)))
           .filter((d) => !needle || d.title.toLowerCase().includes(needle) || d.source.toLowerCase().includes(needle))
           .sort((a, b) => a.id.localeCompare(b.id));
-        // A search without a sort answers the newest updated first (v0.15.0), as every site's does.
+        // A search without a sort answers the newest updated first (v0.16.0), as every site's does.
         if (needle && !query.sort) all.sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? "") || a.id.localeCompare(b.id));
         // v0.6.0: sorted as asked, newest first for the dates and A to Z for titles unless dir says otherwise.
         const sorted = query.sort ? { sort: query.sort, dir: query.dir ?? (query.sort === "title" ? "asc" : "desc") } : undefined;

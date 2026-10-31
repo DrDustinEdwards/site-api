@@ -93,7 +93,7 @@ import {
   MentionWriteResult,
 } from "./contract/mentions.js";
 
-export const PACKAGE_VERSION = "0.15.0";
+export const PACKAGE_VERSION = "0.16.0";
 export const PREFIX = "/api/carrel/v1";
 
 export const Capabilities = z.object({
@@ -127,7 +127,7 @@ export const Capabilities = z.object({
    * and a schedule on a live item is refused rather than hiding it.
    */
   scheduledUpdates: z.boolean().optional(),
-  /** The search fields the site renders from a post's frontmatter (v0.15.0), each under its shared name. Absent: none. */
+  /** The search fields the site renders from a post's frontmatter (v0.16.0), each under its shared name. Absent: none. */
   searchFields: z.array(z.enum(SEARCH_FIELDS)).optional(),
   /** True when the site keeps a focal point on files (v0.10.0), `PUT /media/:id/focus`. Absent or false: that route answers 501. */
   mediaFocus: z.boolean().optional(),
@@ -166,7 +166,7 @@ export const Capabilities = z.object({
   mediaEmbedded: z.boolean().optional(),
   /** True when the site's model suggests tags and alt text for a file, `GET /media/:id/suggestions`. */
   mediaSuggestions: z.boolean().optional(),
-  // ---------- v0.15.0, each optional per site
+  // ---------- v0.16.0, each optional per site
   /**
    * True when every write is safe to retry under its change id: the same request again answers what the first one did,
    * with `Idempotent-Replayed: true`, and never runs twice. Preview links are the exception: their answer holds the
@@ -188,7 +188,7 @@ export const Capabilities = z.object({
   contentPublishedAt: z.boolean().optional(),
   /** The post fields the site renders from a post's frontmatter, each under its shared name. Absent: none. */
   postFields: z.array(z.enum(POST_FIELDS)).optional(),
-  /** The Prelum RENDER_VERSION the site's stored HTML was rendered with (v0.15.0); a site re-renders when it is behind. Absent: the site does not say. */
+  /** The Prelum RENDER_VERSION the site's stored HTML was rendered with (v0.16.0); a site re-renders when it is behind. Absent: the site does not say. */
   render: z.object({ version: z.string() }).optional(),
 });
 
@@ -213,12 +213,12 @@ export const ErrorCode = z.enum([
   "refused",
   "not-implemented",
   "internal",
-  /** v0.15.0: a write under this change id is still running; send it again once that one has answered. */
+  /** v0.16.0: a write under this change id is still running; send it again once that one has answered. */
   "in-progress",
 ]);
 
 /**
- * Every error answer, sent as `application/problem+json` (RFC 9457) from v0.15.0: `type`, `title`, `status` and
+ * Every error answer, sent as `application/problem+json` (RFC 9457) from v0.16.0: `type`, `title`, `status` and
  * `detail` (the message again) are the standard's fields, optional so an earlier site's answer still parses.
  */
 export const ErrorBody = z.object({
@@ -250,7 +250,7 @@ export type ErrorBody = z.infer<typeof ErrorBody>;
  * adapter has no `mentions`. v0.10.0 adds reading and canceling a schedule, 501 for a site whose adapter
  * has no `schedules`, and a file's focal point, caption and replace, each 501 where the adapter lacks it. v0.13.0 adds
  * import, credit, transform, history, revert, suggestions and the resize pass, each 501 where the adapter lacks it, and
- * the upload answers MediaUploadResult, a MediaItem with three optional properties more. v0.15.0 adds rename, trash and
+ * the upload answers MediaUploadResult, a MediaItem with three optional properties more. v0.16.0 adds rename, trash and
  * restore of content and the preview links, each 501 where the adapter or the store is absent.
  */
 export const ROUTES = [
@@ -293,7 +293,7 @@ export const ROUTES = [
   { group: "mentions", method: "POST", path: "/mentions/sweep", request: "MentionSweepInput", response: "MentionSweepResult" },
   { group: "mentions", method: "POST", path: "/mentions/:id/decide", request: "MentionDecideInput", response: "MentionWriteResult" },
   { group: "mentions", method: "DELETE", path: "/mentions/:id", query: "MentionDeleteQuery", response: "MentionDeleteResult" },
-  // v0.15.0, each 501 where the adapter lacks it.
+  // v0.16.0, each 501 where the adapter lacks it.
   { group: "content", method: "POST", path: "/content/:id/rename", request: "RenameInput", response: "RenameResult" },
   { group: "content", method: "POST", path: "/content/:id/trash", request: "ContentTrashInput", response: "WriteResult" },
   { group: "content", method: "POST", path: "/content/:id/restore", request: "ContentTrashInput", response: "WriteResult" },

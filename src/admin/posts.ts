@@ -51,11 +51,11 @@ export interface PostQuery {
   status?: ContentStatus;
   kind?: string;
   tag?: string;
-  /** v0.15.0, where the site filters by them: one of the post's authors, and a published range in whole days (YYYY-MM-DD, both included). */
+  /** v0.16.0, where the site filters by them: one of the post's authors, and a published range in whole days (YYYY-MM-DD, both included). */
   author?: string;
   from?: string;
   to?: string;
-  /** v0.15.0, where the site has a trash: "1" lists only the trash. */
+  /** v0.16.0, where the site has a trash: "1" lists only the trash. */
   trashed?: "1";
   sort?: PostSort;
   dir?: SortDir;
@@ -81,10 +81,10 @@ export interface PostRow {
   /** Present when the site's list carries it. */
   version?: string;
   tags?: string[];
-  /** v0.15.0, where the site keeps them: everyone credited, the primary first, and the excerpt. */
+  /** v0.16.0, where the site keeps them: everyone credited, the primary first, and the excerpt. */
   authors?: string[];
   excerpt?: string;
-  /** v0.15.0, on a trashed post: when it went to the trash. */
+  /** v0.16.0, on a trashed post: when it went to the trash. */
   trashedAt?: string | null;
   notes?: RowNote[];
 }
@@ -103,7 +103,7 @@ export interface PostsData {
   kinds: string[];
   /**
    * `scheduledUpdates` (v0.10.0): the site keeps an update waiting on a live post, so reschedule and cancel work on it.
-   * v0.15.0: `trash`, `rename` and `previewLinks` as the site's capabilities say, the list `filters` it applies, and the
+   * v0.16.0: `trash`, `rename` and `previewLinks` as the site's capabilities say, the list `filters` it applies, and the
    * `authors` on this page for the Author select.
    */
   offers: {
@@ -185,7 +185,7 @@ export async function loadPosts(source: ContentSource, query: PostQuery = {}): P
   const meta = await source.client.meta();
   const filters = meta.capabilities.contentFilters ?? [];
   const trash = hasTrash(meta.capabilities);
-  // The filters the site applies (v0.15.0) go to it; kind and tag on a site without them still work on the page it sent.
+  // The filters the site applies (v0.16.0) go to it; kind and tag on a site without them still work on the page it sent.
   const onSite: Partial<ListQuery> = {
     ...(query.kind && filters.includes("kind") ? { kind: query.kind } : {}),
     ...(query.tag && filters.includes("tag") ? { tag: query.tag } : {}),
@@ -250,7 +250,7 @@ export async function loadPosts(source: ContentSource, query: PostQuery = {}): P
   };
 }
 
-/** True where the site has the content trash (v0.15.0): trash and restore, and delete for good from it. */
+/** True where the site has the content trash (v0.16.0): trash and restore, and delete for good from it. */
 const hasTrash = (capabilities: Capabilities | null) => capabilities?.contentTrash === true;
 
 /** A time as the kit's messages say it: "2030-01-01 15:00 UTC", the same wherever the host runs. */

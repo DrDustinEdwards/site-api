@@ -1,4 +1,4 @@
-// v0.15.0: safe retries by change id, on a site that gives the package its D1 store.
+// v0.16.0: safe retries by change id, on a site that gives the package its D1 store.
 
 import { describe, expect, it } from "vitest";
 import { createSiteApi, sha256Hex } from "../src/index.js";
@@ -18,7 +18,7 @@ function replaying() {
   return { adapter, store, api, send };
 }
 
-describe("replay (v0.15.0)", () => {
+describe("replay (v0.16.0)", () => {
   it("answers a retry with the first answer and runs the write once, refuses the id on another request, and frees it after a failure", async () => {
     const { adapter, api, send } = replaying();
     expect((await (await api.handle(req("/api/carrel/v1/meta"))).json()).capabilities.replay).toBe(true);

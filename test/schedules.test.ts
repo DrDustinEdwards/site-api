@@ -145,7 +145,7 @@ describe("publish hooks (v0.10.0)", () => {
   });
 });
 
-describe("publish hooks (v0.15.0)", () => {
+describe("publish hooks (v0.16.0)", () => {
   it("hears what a hook names, sends both addresses of a rename, and retries a failed hook from the store until it gives up", async () => {
     const heard: string[] = [];
     const sent: string[][] = [];

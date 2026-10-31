@@ -297,7 +297,7 @@ describe("posts", () => {
     expect(await runPostsIntent(none.source, { intent: "delete", ids: ["a"] })).toEqual({ ok: false, message: "This site does not delete posts through the site API." });
   });
 
-  it("trashes and restores with Undo, deletes for good only from the Trash, lists and counts the Trash, and renames with Undo (v0.15.0)", async () => {
+  it("trashes and restores with Undo, deletes for good only from the Trash, lists and counts the Trash, and renames with Undo (v0.16.0)", async () => {
     const { adapter, client, source } = setup();
     await post(client, "a", "title: A", true);
     await post(client, "b", "title: B");

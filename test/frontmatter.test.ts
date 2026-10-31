@@ -139,7 +139,7 @@ describe("search fields", () => {
   });
 });
 
-describe("post fields (v0.15.0)", () => {
+describe("post fields (v0.16.0)", () => {
   it("keeps authors in order with a comma in a name, reads a hand-written list, and a blank or a bad part removes the key", () => {
     const front = setPostFields(parts.front!, { authors: ["Smith, Jr.", " Ada "], excerpt: "Short.", series: "Notes", seriesPart: 2 });
     expect(postFieldsOf(front)).toEqual({ authors: ["Smith, Jr.", "Ada"], excerpt: "Short.", series: "Notes", seriesPart: 2 });

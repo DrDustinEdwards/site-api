@@ -1,4 +1,4 @@
-// v0.15.0: the keyless live check (bin/site-api-live.mjs), run as devkit runs it, against a local site.
+// v0.16.0: the keyless live check (bin/site-api-live.mjs), run as devkit runs it, against a local site.
 
 import { execFile } from "node:child_process";
 import { createServer } from "node:http";

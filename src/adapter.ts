@@ -40,17 +40,17 @@ import type {
 
 export interface ContentAdapter {
   /**
-   * Optional (v0.15.0): true when `publish` takes `publishedAt` and publishes under that date, a first publish backdated
+   * Optional (v0.16.0): true when `publish` takes `publishedAt` and publishes under that date, a first publish backdated
    * or a live item re-dated (capabilities.contentPublishedAt). Absent: a publish carrying it answers 501.
    */
   publishedAtSettable?: boolean;
   /**
-   * Optional (v0.15.0): the search and post fields the site renders from a post's frontmatter (capabilities.searchFields,
+   * Optional (v0.16.0): the search and post fields the site renders from a post's frontmatter (capabilities.searchFields,
    * capabilities.postFields), each under its shared name in `@dustinedwards/site-api/frontmatter`. Absent: none.
    */
   searchFields?: readonly SearchField[];
   /**
-   * Optional (v0.15.0): the list filters `list` applies (capabilities.contentFilters): `kind`, `tag`, `author` (one of
+   * Optional (v0.16.0): the list filters `list` applies (capabilities.contentFilters): `kind`, `tag`, `author` (one of
    * the item's authors), `published` (publishedAfter and publishedBefore, either or both). The package answers any other
    * with 501. `trashed` is offered with the trash, not here.
    */
@@ -87,14 +87,14 @@ export interface ContentAdapter {
    */
   setTags?(id: string, input: { tags: string[]; expectedVersion: string; changeId: string }): Promise<WriteResult>;
   /**
-   * Optional (v0.15.0): moves the item to `newId`, its history with it, and, when it was ever published, keeps a permanent
+   * Optional (v0.16.0): moves the item to `newId`, its history with it, and, when it was ever published, keeps a permanent
    * (301) redirect from its old path to the new one; answers that old path as `previousPath` (null when never published).
    * Throws NotFoundError (checked first), VersionConflictError, or RefusedError for a `newId` already taken. The move and
    * the redirect are one unit. A site without it answers `POST /content/:id/rename` with 501.
    */
   rename?(id: string, input: RenameInput): Promise<RenameResult>;
   /**
-   * Optional (v0.15.0), both or neither, and only beside `delete` (capabilities.contentTrash): `trash` sets `trashedAt`
+   * Optional (v0.16.0), both or neither, and only beside `delete` (capabilities.contentTrash): `trash` sets `trashedAt`
    * and takes a live item off the site first, as one unit; `restore` clears it and always answers a draft, never a live
    * item. Each throws like the writes. `list` then never lists a trashed item unless `trashed` is true, and then only
    * those. The package's `runSchedules` deletes items trashed more than TRASH_DAYS ago, through `delete`.
@@ -352,7 +352,7 @@ export interface SchedulesAdapter {
    * otherwise it changes nothing and returns null, since a cancel, a reschedule or an unpublish got there first. A
    * scheduled item's first publication records `publishAt` as its `publishedAt`, not the time the cron ran.
    *
-   * v0.15.0: a site whose scheduled item goes live by time alone, with no write (its pages compare `publishAt` with the
+   * v0.16.0: a site whose scheduled item goes live by time alone, with no write (its pages compare `publishAt` with the
    * clock), still lists it in `due` as kind "publish", and `apply` answers its WriteResult without writing anything, so
    * the publish hooks hear it go live. Once applied it must leave `due`, or the hooks would hear it on every pass.
    */
@@ -361,7 +361,7 @@ export interface SchedulesAdapter {
 
 export interface SiteAdapter {
   site: SiteInfo;
-  /** Optional (v0.15.0): the Prelum `RENDER_VERSION` the site's stored HTML was rendered with (capabilities.render). */
+  /** Optional (v0.16.0): the Prelum `RENDER_VERSION` the site's stored HTML was rendered with (capabilities.render). */
   renderVersion?: string;
   content: ContentAdapter;
   preview: PreviewAdapter;
@@ -378,7 +378,7 @@ export interface SiteAdapter {
 
 /**
  * Stage 2 implemented content and preview; v0.2.0 adds media for a site whose adapter has it. The
- * other groups answer 501 until their stage. `store` (v0.15.0): the site gave createSiteApi a store.
+ * other groups answer 501 until their stage. `store` (v0.16.0): the site gave createSiteApi a store.
  */
 export function capabilitiesOf(adapter: SiteAdapter, options: { store?: boolean } = {}): Capabilities {
   return {
@@ -425,13 +425,13 @@ export function capabilitiesOf(adapter: SiteAdapter, options: { store?: boolean 
   };
 }
 
-/** Trash and restore, and the delete that empties the trash (v0.15.0). */
+/** Trash and restore, and the delete that empties the trash (v0.16.0). */
 export function hasContentTrash(adapter: SiteAdapter): boolean {
   const { content } = adapter;
   return content.trash !== undefined && content.restore !== undefined && content.delete !== undefined;
 }
 
-/** The list filters the site applies (v0.15.0), in the contract's order. */
+/** The list filters the site applies (v0.16.0), in the contract's order. */
 export function contentFiltersOf(adapter: SiteAdapter): ContentFilter[] {
   const offered = new Set<ContentFilter>(adapter.content.filters ?? []);
   if (hasContentTrash(adapter)) offered.add("trashed");

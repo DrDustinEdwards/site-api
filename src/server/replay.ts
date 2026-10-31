@@ -1,4 +1,4 @@
-// Safe retries by change id (v0.15.0), on a site that gives the package a store. A write claims its change id before it
+// Safe retries by change id (v0.16.0), on a site that gives the package a store. A write claims its change id before it
 // runs; a retry of the same request is answered with the stored answer and never runs twice, and the same id on another
 // request is refused. Without a store nothing here runs, and a write is handled as in v0.14.0.
 

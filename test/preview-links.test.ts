@@ -1,4 +1,4 @@
-// v0.15.0: shareable preview links, made under the key and opened by anyone with the address, on a site with a store.
+// v0.16.0: shareable preview links, made under the key and opened by anyone with the address, on a site with a store.
 
 import { describe, expect, it } from "vitest";
 import { createSiteClient } from "../src/client.js";
@@ -19,7 +19,7 @@ function mounted(withStore = true) {
   return { fetch, c: createSiteClient({ baseUrl: ORIGIN, key: KEY, fetch }) };
 }
 
-describe("preview links (v0.15.0)", () => {
+describe("preview links (v0.16.0)", () => {
   it("serves the current source to anyone with the link, never indexed, until it is revoked; unknown and revoked links say so", async () => {
     const { fetch, c } = mounted();
     expect((await c.meta()).capabilities.previewLinks).toBe(true);

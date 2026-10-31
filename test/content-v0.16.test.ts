@@ -1,4 +1,4 @@
-// v0.15.0: the content group's new writes and list options, each optional per site, against the reference adapter.
+// v0.16.0: the content group's new writes and list options, each optional per site, against the reference adapter.
 
 import { describe, expect, it } from "vitest";
 import { createSiteClient } from "../src/client.js";
@@ -11,7 +11,7 @@ function client(adapter = memoryAdapter()) {
   return { ...s, c: createSiteClient({ baseUrl: ORIGIN, key: KEY, fetch: s.fetch }) };
 }
 
-describe("a settable publish date (v0.15.0)", () => {
+describe("a settable publish date (v0.16.0)", () => {
   it("publishes under a past date, re-dates a live post, refuses a future one, and answers 501 where the site cannot", async () => {
     const { c } = client();
     const draft = await c.saveDraft("a", { source: "# A\n", expectedVersion: null, changeId: "c1" });
@@ -32,7 +32,7 @@ describe("a settable publish date (v0.15.0)", () => {
   });
 });
 
-describe("rename (v0.15.0)", () => {
+describe("rename (v0.16.0)", () => {
   it("moves a published post with its history and a redirect, refuses a taken id, and answers 501 where the site cannot", async () => {
     const { c, adapter } = client();
     const a = await c.saveDraft("a", { source: "# A\n", expectedVersion: null, changeId: "c1" });
@@ -52,7 +52,7 @@ describe("rename (v0.15.0)", () => {
   });
 });
 
-describe("the content trash (v0.15.0)", () => {
+describe("the content trash (v0.16.0)", () => {
   it("takes a live post off the site, hides it from the list, restores a draft, and empties it after TRASH_DAYS", async () => {
     let time = new Date("2030-01-01T00:00:00Z");
     const adapter = memoryAdapter({ now: () => time });
@@ -107,7 +107,7 @@ describe("the content trash (v0.15.0)", () => {
   });
 });
 
-describe("list filters (v0.15.0)", () => {
+describe("list filters (v0.16.0)", () => {
   it("filters by tag, author and published dates where the site offers them, and answers 501 for one it does not", async () => {
     const { c } = client();
     const a = await c.saveDraft("a", { source: '---\ntitle: A\ntags: [news]\nauthors: ["Ada", "Grace"]\n---\nA\n', expectedVersion: null, changeId: "c1" });

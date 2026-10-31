@@ -128,7 +128,7 @@ export function setBlock(front: string, key: string, lines: string[]): string {
 }
 
 /**
- * The search fields (v0.15.0): the same name on every site, kept in the frontmatter so each change is versioned
+ * The search fields (v0.16.0): the same name on every site, kept in the frontmatter so each change is versioned
  * with the post. A site lists the ones it renders in its capabilities' `searchFields`, and Carrel shows a box for each.
  * An empty one falls back to the site's own default (the title, the opening text, the cover, the page's own address).
  */
@@ -160,7 +160,7 @@ export function setSearchFields(front: string, values: Partial<SearchValues>): s
 }
 
 /**
- * The post fields (v0.15.0), beside the search fields and kept the same way: `excerpt` (the summary a list shows),
+ * The post fields (v0.16.0), beside the search fields and kept the same way: `excerpt` (the summary a list shows),
  * `authors` (display names in credit order, the first the primary author), `series` (its name) and `seriesPart` (a
  * positive whole number). A site lists the ones it renders in its capabilities' `postFields`.
  */

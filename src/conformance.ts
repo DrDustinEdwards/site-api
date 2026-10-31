@@ -49,7 +49,7 @@ export async function runConformance(config: ConformanceConfig): Promise<Conform
   const origin = config.baseUrl.replace(/\/+$/, "");
   const auth = { authorization: `Bearer ${config.key}` };
   const checks: ConformanceCheck[] = [];
-  // v0.15.0: a fresh change id for every probe write, since a site with `replay` keeps a refused write's answer under its
+  // v0.16.0: a fresh change id for every probe write, since a site with `replay` keeps a refused write's answer under its
   // change id and would refuse the same id on another probe as a different request.
   const run = crypto.randomUUID().slice(0, 8);
   let probes = 0;
@@ -478,7 +478,7 @@ export async function runConformance(config: ConformanceConfig): Promise<Conform
     }
   }
 
-  // ---------- v0.15.0: each new route answers on the probe id, or 501 where the site lacks it
+  // ---------- v0.16.0: each new route answers on the probe id, or 501 where the site lacks it
 
   await check("errors: problem details with type, title and status", async () => {
     const response = await doFetch(`${origin}${PREFIX}/no-such-route`, { headers: auth });

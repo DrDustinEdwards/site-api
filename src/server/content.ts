@@ -230,7 +230,7 @@ export function contentRoutes(adapter: SiteAdapter, options: { store: boolean })
         if (typeof html !== "string") throw new ContractBreach("preview: not a string");
         return new Response(html, {
           status: 200,
-          // v0.15.0: a preview is never a page to index, whatever the site's own render says.
+          // v0.16.0: a preview is never a page to index, whatever the site's own render says.
           headers: { ...BASE_HEADERS, "content-type": "text/html; charset=utf-8", "x-robots-tag": "noindex, nofollow" },
         });
       },
