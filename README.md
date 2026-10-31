@@ -9,7 +9,7 @@ Each site mounts one handler at `/api/carrel/v1` and implements an adapter over 
 Installed by git tag, never from a registry:
 
 ```sh
-npm install github:DrDustinEdwards/site-api#v0.16.0
+npm install github:DrDustinEdwards/site-api#v0.17.0
 ```
 
 npm builds `dist/` on install through the `prepare` script.
@@ -115,6 +115,7 @@ All paths sit under `/api/carrel/v1`. Bodies are JSON, checked on the way in and
 | mentions | `POST /mentions/:id/decide` | `MentionDecideInput` | `MentionWriteResult` (v0.5.0) |
 | mentions | `DELETE /mentions/:id?expectedVersion&changeId` | | `MentionDeleteResult` (v0.5.0) |
 | mentions | `POST /mentions/sweep` | `MentionSweepInput` | `MentionSweepResult` (v0.5.0) |
+| insight | `GET /insight/not-found?days&limit&includeProbes` | | `NotFoundReport`: the site's most-hit missing paths and who linked to them (v0.16.0, optional per site) |
 | inbox, insight, publications | `/*` | | `501` until their stage |
 
 The media group arrived in v0.2.0. A site whose adapter has no `media` still answers it `501`, as in v0.1.0.
@@ -163,13 +164,26 @@ Additive: every v0.4.0 route and body is unchanged, and the schema hash and pack
 - **Versions.** A mention's `version` is opaque, like a content version, and must move whenever its status, its verification or its decision does, and not when another mention changes. A write with a version the site no longer holds is `409 version-conflict` with `currentVersion`; a missing mention is `404`. dustinedwards.info's table has no `updated_at` and no version column, so its adapter derives one: a hash of `status`, `received_at`, `verified_at` and `decided_at` (a re-send resets all three timestamps and the status, an approve or reject sets the status and `decided_at`). It checks the version and then writes with the same values in the `WHERE`, so a change between the check and the write matches no row and is reported as a conflict.
 - **Conformance** adds, for every site: the list in shape (or `501` where the site has no group), writes without the key or with a wrong one refused, a decide and a delete of an id no site holds refused (`404`, or `501` without the group), and, where the site has the group, a decide with a stale version refused on the first real mention, a sweep with no change id refused (`400`, before anything is removed), and an unknown status refused. It never decides, deletes or sweeps anything real.
 
-## Changes in v0.16.0
+## Changes in v0.17.0
 
-Additive: no route, body or schema changes. The media suggester (`mediaSuggester`) hardened, and site-runtime moves to v0.45.0.
+Additive: no route, body or schema changes. The media suggester (`mediaSuggester`) hardened, and site-runtime moves to v0.45.1.
 
 - **The gateway id** comes from site-runtime's `anthropicRoute`: read from a standard `AI_GATEWAY_BASE_URL`, else from the new `SuggestEnv.AI_GATEWAY_ID` (for a gateway on a custom domain). A gateway it cannot use (no id, or a malformed URL) is warned about and skipped: the call goes to Workers AI without it, and never fails the suggestion.
 - **JSON mode and a timeout.** The model is asked for `response_format` `json_schema` (the tags and alt text), and the call stops after 30 seconds (`AbortSignal.timeout`). `readSuggestion` still reads an object or a JSON string.
 - **The prose check.** Alt text with a high or critical finding from site-runtime's `checkProse` (a leftover "As an AI language model") comes back as `alt: null`; the tags are kept.
+
+## Changes in v0.16.0
+
+Additive: every v0.15.0 route and body is unchanged, and the schema hash and package version move on purpose. `Capabilities` gains `insightNotFound`, and `insight` is now true for a site that offers the group. `test/contract-v0.5.0.test.ts` and `test/contract-v0.12.0.test.ts` hold the rest identical.
+
+**The 404 report, the insight group's first route, optional per site.** `GET /insight/not-found?days&limit&includeProbes` answers `NotFoundReport` `{ rows }`, each row `{ path, kind, hits, referrers: [{ host, hits }] }`: the site's most-hit missing paths of the last `days` UTC days, today included, most hits first, at most `limit`, with the hosts that linked to each ("" for no referrer). `kind` is `probe` for a path an exploit scanner guesses and `page` otherwise; probes are left out unless `includeProbes=true`. `days` is 1 to 90 (default 30, and 90 is what site-runtime's `pruneNotFound` keeps), `limit` 1 to 200 (default 50); anything else is `400` before the adapter runs. The rows are site-runtime's `notFoundReport` (`./not-found`, v0.42.0), so a site that counts its 404s with `countNotFound` wires it in one line:
+
+```ts
+import { notFoundReport } from "@dustinedwards/site-runtime/not-found";
+const adapter = { ...rest, insight: { notFound: (options) => notFoundReport(env.DB, options) } };
+```
+
+A site whose adapter has no `insight` answers `501 not-implemented`, and `meta.capabilities.insightNotFound` is absent. The client's `insight.notFound({ days?, limit?, includeProbes? })` calls it. Conformance adds, for every site, the report in shape and within its limit (or `501` where the site has none) and, where it has one, `days=91` refused. The reference adapter takes `notFound: NotFoundRow[]`.
 
 ## Changes in v0.15.0
 
@@ -383,6 +397,9 @@ interface SiteAdapter {
     cancel(id: string, input: { expectedVersion: string; changeId: string }): Promise<WriteResult>;
     due(input: { now: Date; limit: number }): Promise<DueSchedule[]>;          // { id, kind: "publish" | "update", publishAt, changeId }
     apply(id: string, input: DueSchedule & { now: Date }): Promise<WriteResult | null>; // null: no longer matches, nothing changed
+  };
+  insight?: {                                      // v0.16.0; omit for a site that does not count its 404s
+    notFound(options: { days: number; limit: number; includeProbes: boolean }): Promise<NotFoundRow[]>; // site-runtime's notFoundReport
   };
   mentions?: {                                     // v0.5.0; omit for a site with no webmentions
     list(query: MentionListQuery): Promise<MentionList>; // items, nextCursor, counts, expiring

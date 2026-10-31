@@ -4,7 +4,7 @@
 import { MediaInUseError, NotFoundError, RefusedError, VersionConflictError, type DueSchedule, type MediaAdapter, type MediaReplace, type MentionsAdapter, type SchedulesAdapter, type SiteAdapter } from "./adapter.js";
 import { joinSource, setTags as writeTags, splitSource, tagsOf } from "./frontmatter.js";
 import { LARGE_MEDIA_BYTES, MEDIA_LENSES } from "./contract.js";
-import type { ContentDoc, ContentStatus, ContentSummary, MediaEmbeddedField, MediaLens, MediaItem, MediaResize, MediaRevision, MediaTransformOp, MediaUploadLimits, MediaUse, MentionItem, MentionStatus, Revision, ScheduledUpdate, SiteInfo, WriteResult } from "./contract.js";
+import type { ContentDoc, ContentStatus, ContentSummary, MediaEmbeddedField, MediaLens, MediaItem, MediaResize, MediaRevision, MediaTransformOp, MediaUploadLimits, MediaUse, MentionItem, MentionStatus, NotFoundRow, Revision, ScheduledUpdate, SiteInfo, WriteResult } from "./contract.js";
 import { kindOf, orientationOf, transformFocus, turnsSize } from "./media.js";
 
 interface Stored {
@@ -53,6 +53,8 @@ export interface MemoryAdapterOptions {
   mentionReset?: boolean;
   /** false for a site with no scheduled updates (a v0.9.0 site): reading and canceling a schedule answer 501. On by default. */
   schedules?: boolean;
+  /** The site's counted 404s (v0.16.0), as report rows most hits first. Absent: the site reports none, and the route answers 501. */
+  notFound?: NotFoundRow[];
 }
 
 /** What the reference adapter's sweep keeps, like dustinedwards.info: failed rows 30 days, rejected rows 90. */
@@ -686,6 +688,9 @@ export function memoryAdapter(
     purged,
     receiveMention,
     ...(mentionsAdapter ? { mentions: mentionsAdapter } : {}),
+    ...(options.notFound
+      ? { insight: { notFound: async (q) => options.notFound!.filter((row) => q.includeProbes || row.kind === "page").slice(0, q.limit) } }
+      : {}),
     store,
     mediaStore,
     deleted,
