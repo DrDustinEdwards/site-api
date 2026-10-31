@@ -57,7 +57,8 @@ describe("webmentionHook", () => {
     let post = `<article><a href="https://a.example/1">a</a><a href="https://b.example/2">b</a></article>`;
     const sent: string[] = [];
     const pages: Record<string, () => Response> = {
-      [PAGE]: () => new Response(post, { headers: { "content-type": "text/html" } }),
+      // The page is read under the change's own query, past a stale edge copy at the bare address.
+      [`${PAGE}?webmention=c1`]: () => new Response(post, { headers: { "content-type": "text/html" } }),
       "https://a.example/1": () => new Response("", { status: 301, headers: { location: "https://a.example/moved" } }),
       "https://a.example/moved": () => new Response('<link rel="webmention" href="/wm">', { headers: { "content-type": "text/html" } }),
       "https://b.example/2": () => new Response("", { headers: { link: '<http://10.0.0.1/wm>; rel="webmention"' } }),

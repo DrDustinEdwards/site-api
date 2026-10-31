@@ -238,8 +238,12 @@ export function webmentionHook(options: { store: TargetStore; fetch?: typeof fet
     }
   }
 
-  async function update(source: string, gone: boolean, deadline: AbortSignal): Promise<void> {
-    const links = gone ? [] : outboundLinks((await getPage(doFetch, source, userAgent, deadline)).html, source);
+  async function update(source: string, gone: boolean, deadline: AbortSignal, change: string): Promise<void> {
+    // Read past the edge cache: a page stored there before this write's purge lands still has the old links, and the
+    // cache keys on the query, so a query of this change's own is always a fresh render.
+    const fresh = new URL(source);
+    fresh.searchParams.set("webmention", change);
+    const links = gone ? [] : outboundLinks((await getPage(doFetch, fresh.href, userAgent, deadline)).html, source);
     const before = await options.store.webmentionTargets(source);
     const targets = [...new Set([...links, ...before])];
     if (targets.length > MAX_TARGETS) log({ siteApi: "webmention", source, result: `${targets.length} targets, the first ${MAX_TARGETS} told` });
@@ -252,9 +256,10 @@ export function webmentionHook(options: { store: TargetStore; fetch?: typeof fet
     on: ["publish", "update", "unpublish", "delete", "trash", "rename"],
     run: async (event) => {
       const deadline = AbortSignal.timeout(BUDGET_MS);
-      if (event.previousUrl) await update(event.previousUrl, true, deadline);
+      const change = event.changeId ?? String(Date.now());
+      if (event.previousUrl) await update(event.previousUrl, true, deadline, change);
       // A page that is not live (after an unpublish, a delete, a trash, or a save to a draft) links to nothing now.
-      await update(event.url, event.status !== "published", deadline);
+      await update(event.url, event.status !== "published", deadline, change);
     },
   };
 }
