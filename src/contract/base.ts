@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 
-/** Opaque to Carrel: each site decides what a version is. It should identify the item's own content (dustinedwards.info uses the git blob sha of the item's own file). */
+/** Opaque to Carrel: each site decides what a version is. It should identify the item's own content (a site that keeps files in git can use the git blob sha of the item's own file). */
 export const Version = z.string().min(1).max(200);
 
 /** Carrel's id for one change, carried into the site's commit or row so the two records join. */
