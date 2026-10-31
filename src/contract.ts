@@ -10,6 +10,7 @@ export { ChangeId, ContentId, SiteInfo, SortDir, Version } from "./contract/base
 export * from "./contract/content.js";
 export * from "./contract/media.js";
 export * from "./contract/mentions.js";
+export * from "./contract/insight.js";
 import { SiteInfo, Version } from "./contract/base.js";
 import {
   ContentDeleteQuery,
@@ -79,8 +80,9 @@ import {
   MentionSweepResult,
   MentionWriteResult,
 } from "./contract/mentions.js";
+import { NotFoundQuery, NotFoundReport } from "./contract/insight.js";
 
-export const PACKAGE_VERSION = "0.15.0";
+export const PACKAGE_VERSION = "0.16.0";
 export const PREFIX = "/api/carrel/v1";
 
 export const Capabilities = z.object({
@@ -151,6 +153,8 @@ export const Capabilities = z.object({
   mediaEmbedded: z.boolean().optional(),
   /** True when the site's model suggests tags and alt text for a file, `GET /media/:id/suggestions`. */
   mediaSuggestions: z.boolean().optional(),
+  /** True when the site counts its 404s and reports them (v0.16.0), `GET /insight/not-found`. Absent: that route answers 501. */
+  insightNotFound: z.boolean().optional(),
 });
 
 export const Meta = z.object({
@@ -201,7 +205,8 @@ export type ErrorBody = z.infer<typeof ErrorBody>;
  * adapter has no `mentions`. v0.10.0 adds reading and canceling a schedule, 501 for a site whose adapter
  * has no `schedules`, and a file's focal point, caption and replace, each 501 where the adapter lacks it. v0.13.0 adds
  * import, credit, transform, history, revert, suggestions and the resize pass, each 501 where the adapter lacks it, and
- * the upload answers MediaUploadResult, a MediaItem with three optional properties more.
+ * the upload answers MediaUploadResult, a MediaItem with three optional properties more. v0.16.0 adds the insight group's
+ * first route, the 404 report, 501 for a site whose adapter has no `insight`.
  */
 export const ROUTES = [
   { group: "meta", method: "GET", path: "/meta", response: "Meta" },
@@ -243,6 +248,7 @@ export const ROUTES = [
   { group: "mentions", method: "POST", path: "/mentions/sweep", request: "MentionSweepInput", response: "MentionSweepResult" },
   { group: "mentions", method: "POST", path: "/mentions/:id/decide", request: "MentionDecideInput", response: "MentionWriteResult" },
   { group: "mentions", method: "DELETE", path: "/mentions/:id", query: "MentionDeleteQuery", response: "MentionDeleteResult" },
+  { group: "insight", method: "GET", path: "/insight/not-found", query: "NotFoundQuery", response: "NotFoundReport" },
   { group: "inbox", method: "*", path: "/inbox/*", response: "not-implemented" },
   { group: "insight", method: "*", path: "/insight/*", response: "not-implemented" },
   { group: "publications", method: "*", path: "/publications/*", response: "not-implemented" },
@@ -262,6 +268,7 @@ const HASHED = {
   MediaFocusInput, MediaCaptionInput, MediaReplaceQuery, MediaReplaceResult,
   MediaUploadResult, MediaImportInput, MediaCreditInput, MediaTransformInput, MediaTransformResult, MediaHistory,
   MediaRevertInput, MediaResizePassInput, MediaResizePassResult, MediaSuggestions,
+  NotFoundQuery, NotFoundReport,
 };
 
 /** JSON with sorted keys, so the hash depends on the contract and not on property order. */
