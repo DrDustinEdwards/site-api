@@ -620,10 +620,8 @@ export async function prepareUpload(images: UploadImages, input: MediaUpload, op
   let filename = input.filename;
   const converted = CONVERTED.has(contentType);
   if (converted) {
-    // Not editImage, which asks for a turn, a mirror or a maxEdge: this is a change of format alone.
     try {
-      const result = await images.input(new Response(toArrayBuffer(bytes)).body!).transform({}).output({ format: "image/jpeg", quality });
-      bytes = new Uint8Array(await result.response().arrayBuffer());
+      bytes = new Uint8Array(await (await editImage(images, toArrayBuffer(bytes), { format: "image/jpeg", quality })).arrayBuffer());
     } catch (error) {
       throw new RefusedError(`Cloudflare Images could not convert the picture to JPEG, so nothing was stored (${error instanceof Error ? error.message : String(error)}).`);
     }
