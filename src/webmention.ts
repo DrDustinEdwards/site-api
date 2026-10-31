@@ -1,4 +1,4 @@
-// Sending webmentions (v0.16.0): the hook that tells every page a post links to that it did, and tells them again when
+// Sending webmentions (v0.17.0): the hook that tells every page a post links to that it did, and tells them again when
 // the post changes or leaves the site, so their copy of the mention follows. The receiving side is the mentions group.
 //
 // Every address it fetches comes from a stranger's page, so each one is checked before it is asked, and again at every

@@ -1,4 +1,4 @@
-// Shareable preview links (v0.16.0), on a site that gives the package a store. Carrel makes one for an item under the
+// Shareable preview links (v0.17.0), on a site that gives the package a store. Carrel makes one for an item under the
 // key; anyone holding its address sees the item's current source rendered, with no key, until it expires or is revoked.
 // The site keeps only the SHA-256 of each token, so its store cannot open a link.
 

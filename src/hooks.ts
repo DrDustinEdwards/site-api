@@ -7,7 +7,7 @@ import type { ContentStatus } from "./contract.js";
 /**
  * publish: the item went live (a first publish, a publish again, or a scheduled item at its time). update: a live
  * item's page changed (a save, a tag change, or its scheduled update at its time). unpublish: it left the site.
- * delete: it was deleted. v0.16.0: trash and restore (to and from the content trash), rename (a move to a new id, its
+ * delete: it was deleted. v0.17.0: trash and restore (to and from the content trash), rename (a move to a new id, its
  * old path redirecting), schedule and unschedule (a schedule made or canceled, nothing changed yet).
  */
 export type PublishAction = "publish" | "update" | "unpublish" | "delete" | "trash" | "restore" | "rename" | "schedule" | "unschedule";
@@ -24,10 +24,10 @@ export interface PublishEvent {
   changeId: string | null;
   /** The request that made the change; absent for a schedule, and for a hook's retry. */
   request?: Request;
-  /** v0.16.0: the item's status before the write and after it (after a delete, absent). */
+  /** v0.17.0: the item's status before the write and after it (after a delete, absent). */
   previousStatus?: ContentStatus;
   status?: ContentStatus;
-  /** v0.16.0, on a rename of an item that was ever published: its old path, which now redirects, and that page's address. */
+  /** v0.17.0, on a rename of an item that was ever published: its old path, which now redirects, and that page's address. */
   previousPath?: string;
   previousUrl?: string;
 }
@@ -36,7 +36,7 @@ export interface PublishHook {
   /** Names the hook in the log, and in the store's retries. */
   name: string;
   /**
-   * v0.16.0: the actions the hook hears. Absent: the ones that change a public page, as before (PAGE_ACTIONS): a publish,
+   * v0.17.0: the actions the hook hears. Absent: the ones that change a public page, as before (PAGE_ACTIONS): a publish,
    * a live item's update, an unpublish, and a delete, trash or rename of a live item.
    */
   on?: readonly PublishAction[];
@@ -52,12 +52,12 @@ export function hears(hook: PublishHook, event: PublishEvent): boolean {
   if (hook.on) return hook.on.includes(event.action);
   if (!PAGE_ACTIONS.includes(event.action)) return false;
   const live = event.action === "publish" || event.action === "update" ? event.status : event.previousStatus;
-  // An event that does not say (a site's own runHooks call before v0.16.0) is taken as a page change, as it was then.
+  // An event that does not say (a site's own runHooks call before v0.17.0) is taken as a page change, as it was then.
   return live === undefined || live === "published";
 }
 
 /**
- * Runs every hook that hears the event at once, and logs each one that fails. Never throws. `failed` (v0.16.0) is told
+ * Runs every hook that hears the event at once, and logs each one that fails. Never throws. `failed` (v0.17.0) is told
  * each failure, so the package keeps it for a retry where the site has a store.
  */
 export async function runHooks(

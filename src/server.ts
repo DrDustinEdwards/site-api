@@ -12,6 +12,7 @@ import type { ContentStatus } from "./contract.js";
 import { runHooks, type PublishAction, type PublishEvent, type PublishHook } from "./hooks.js";
 import { contentRoutes } from "./server/content.js";
 import { describeFailure, fail, MAX_BODY_BYTES, type Route } from "./server/http.js";
+import { insightRoutes } from "./server/insight.js";
 import { mediaRoutes } from "./server/media.js";
 import { mentionsRoutes } from "./server/mentions.js";
 import { page, PREVIEW_LINK_PATH, previewLinkRoutes, servePreviewLink } from "./server/preview-links.js";
@@ -45,7 +46,7 @@ export interface SiteApiConfig {
    * Run when a public page changes (v0.10.0): a publish, an unpublish, a delete of a live item, a save or tag change to
    * a live item, and each schedule `runSchedules` applies. The first is `indexNowHook`, over Prelum's `submitIndexNow`.
    * After a request they run under its `waitUntil` when `handle` is given one, so Carrel's answer never waits on them;
-   * a hook that fails is logged, never answered, and the write stands. v0.16.0: a hook may name the actions it hears
+   * a hook that fails is logged, never answered, and the write stands. v0.17.0: a hook may name the actions it hears
    * (`on`), and with a `store` a failed one is kept and `runSchedules` runs it again (HOOK_BACKOFF_MINUTES).
    */
   hooks?: PublishHook[];
@@ -55,7 +56,7 @@ export interface SiteApiConfig {
    */
   onPageChange?: (paths: string[], request: Request) => Promise<unknown> | void;
   /**
-   * Where the package keeps what it needs between requests (v0.16.0): on D1, `d1SiteApiStore(env.DB)` from
+   * Where the package keeps what it needs between requests (v0.17.0): on D1, `d1SiteApiStore(env.DB)` from
    * `@dustinedwards/site-api/store`, with `SITE_API_STORE_SQL` as a migration. With it, every write is safe to retry
    * under its change id (capabilities.replay). Absent: everything works as in v0.14.0.
    */
@@ -71,13 +72,13 @@ export interface ScheduleRun {
   failed: number;
   /** The pass hit its limit, so more may be due now. */
   more: boolean;
-  /** v0.16.0: items deleted for good from the content trash, TRASH_DAYS after they went there. */
+  /** v0.17.0: items deleted for good from the content trash, TRASH_DAYS after they went there. */
   emptied: number;
-  /** v0.16.0: failed publish hooks run again, where the site has a store. */
+  /** v0.17.0: failed publish hooks run again, where the site has a store. */
   retried: number;
 }
 
-/** How long an item stays in the content trash (v0.16.0) before `runSchedules` deletes it for good. */
+/** How long an item stays in the content trash (v0.17.0) before `runSchedules` deletes it for good. */
 export const TRASH_DAYS = 30;
 
 /** How many schedules one pass applies at most, so a backlog drains over several passes within a Worker's limits. */
@@ -98,10 +99,10 @@ export interface SiteApi {
    * pass finds nothing. A site whose adapter has no `schedules` applies nothing.
    */
   runSchedules(options?: { now?: Date; limit?: number }): Promise<ScheduleRun>;
-  /** v0.16.0: true for a GET under PREVIEW_LINK_PATH, outside the prefix. Mount `servePreviewLink` where this holds. */
+  /** v0.17.0: true for a GET under PREVIEW_LINK_PATH, outside the prefix. Mount `servePreviewLink` where this holds. */
   matchesPreviewLink(request: Request): boolean;
   /**
-   * Serves a shareable preview link with no key (v0.16.0): the item's current source through the site's preview, never
+   * Serves a shareable preview link with no key (v0.17.0): the item's current source through the site's preview, never
    * indexed, cached or sent on as a referrer. An expired or revoked link answers 410, any other 404, and a site with no
    * store answers every link 404. Rate limited like the API.
    */
@@ -131,7 +132,7 @@ const ACTION: Record<string, PublishAction> = {
   "DELETE schedule": "unschedule",
 };
 
-/** How long a failed hook waits before each retry (v0.16.0), in minutes; after the last it is given up and logged. */
+/** How long a failed hook waits before each retry (v0.17.0), in minutes; after the last it is given up and logged. */
 export const HOOK_BACKOFF_MINUTES = [1, 5, 30, 120, 720] as const;
 
 const MINUTE = 60 * 1000;
@@ -145,7 +146,7 @@ function bearer(request: Request): string | null {
 export function createSiteApi(config: SiteApiConfig): SiteApi {
   const { adapter, limiter } = config;
   const log = config.log ?? ((entry) => console.warn(JSON.stringify(entry)));
-  const { media, mentions } = adapter;
+  const { media, mentions, insight } = adapter;
   const { store } = config;
 
   const routes: Route[] = [
@@ -153,12 +154,13 @@ export function createSiteApi(config: SiteApiConfig): SiteApi {
     ...(media ? mediaRoutes(media, log) : []),
     ...(mentions ? mentionsRoutes(mentions) : []),
     ...(store ? previewLinkRoutes(adapter, store) : []),
+    ...(insight ? insightRoutes(insight) : []),
   ];
 
-  // Groups a site has not implemented. Media and mentions leave this list when the adapter has them, preview links when
-  // the site has a store.
+  // Groups a site has not implemented. Media, mentions and insight leave this list when the adapter has them, preview
+  // links when the site has a store.
   const LATER = new RegExp(
-    `^/(${[...(media ? [] : ["media"]), ...(mentions ? [] : ["mentions"]), ...(store ? [] : ["preview-links"]), "inbox", "insight", "publications"].join("|")})(/|$)`,
+    `^/(${[...(media ? [] : ["media"]), ...(mentions ? [] : ["mentions"]), ...(insight ? [] : ["insight"]), ...(store ? [] : ["preview-links"]), "inbox", "publications"].join("|")})(/|$)`,
   );
 
   const { onPageChange } = config;
@@ -199,7 +201,7 @@ export function createSiteApi(config: SiteApiConfig): SiteApi {
     });
   }
 
-  // v0.16.0: a hook that fails is kept for the cron to try again, where the site has a store.
+  // v0.17.0: a hook that fails is kept for the cron to try again, where the site has a store.
   const tell = (event: PublishEvent) =>
     runHooks(hooks, event, log, async (hook, error) => {
       if (!store) return;
@@ -238,7 +240,7 @@ export function createSiteApi(config: SiteApiConfig): SiteApi {
     return retried;
   }
 
-  // The content trash's own end (v0.16.0): items trashed more than TRASH_DAYS ago go for good, through the adapter's
+  // The content trash's own end (v0.17.0): items trashed more than TRASH_DAYS ago go for good, through the adapter's
   // delete with the version listed, so one changed since is refused and left. Each on its own, like a schedule.
   async function emptyTrash(now: Date, limit: number): Promise<number> {
     const { content } = adapter;

@@ -1,4 +1,4 @@
-// v0.16.0: sending webmentions. The link reader, the host check and the endpoint discovery read strangers' pages, so
+// v0.17.0: sending webmentions. The link reader, the host check and the endpoint discovery read strangers' pages, so
 // each is tested on the cases that would send to the wrong place; the hook once, end to end, against fake pages.
 
 import { describe, expect, it } from "vitest";

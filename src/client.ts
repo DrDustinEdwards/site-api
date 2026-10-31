@@ -27,6 +27,7 @@ import {
   MentionSweepResult,
   MentionWriteResult,
   Meta,
+  NotFoundReport,
   PREFIX,
   PreviewLink,
   PreviewLinkList,
@@ -150,14 +151,14 @@ export function createSiteClient(config: SiteClientConfig) {
       get(ContentDeleteResult, "DELETE", `/content/${enc(id)}${query(input)}`),
     /** Optional per site (v0.6.0): sets a post's whole tag set. A site without it answers SiteApiError with status 501. */
     setTags: (id: string, input: ContentTagsInput) => get(WriteResult, "PUT", `/content/${enc(id)}/tags`, input),
-    /** Optional per site (v0.16.0, `contentRename`): moves an item to `newId`; its old path redirects to the new one. */
+    /** Optional per site (v0.17.0, `contentRename`): moves an item to `newId`; its old path redirects to the new one. */
     rename: (id: string, input: RenameInput) => get(RenameResult, "POST", `/content/${enc(id)}/rename`, input),
-    /** Optional per site (v0.16.0, `contentTrash`): to the trash (a live item leaves the site first) and back, as a draft. */
+    /** Optional per site (v0.17.0, `contentTrash`): to the trash (a live item leaves the site first) and back, as a draft. */
     trash: (id: string, input: ContentTrashInput) => get(WriteResult, "POST", `/content/${enc(id)}/trash`, input),
     restore: (id: string, input: ContentTrashInput) => get(WriteResult, "POST", `/content/${enc(id)}/restore`, input),
     diff: (id: string, from: string, to?: string) => get(Diff, "GET", `/content/${enc(id)}/diff${query({ from, to })}`),
     preview: async (input: PreviewInput) => (await call("POST", "/preview", input)).text(),
-    /** Optional per site (v0.16.0, `previewLinks`): a link anyone can open to see an item's current source, without the key. */
+    /** Optional per site (v0.17.0, `previewLinks`): a link anyone can open to see an item's current source, without the key. */
     previewLinks: {
       create: (input: PreviewLinkInput) => get(PreviewLink, "POST", "/preview-links", input),
       list: (id: string) => get(PreviewLinkList, "GET", `/preview-links${query({ id })}`),
@@ -242,6 +243,12 @@ export function createSiteClient(config: SiteClientConfig) {
       /** Takes `{ changeId }` (v0.6.0), like every other write; the change id alone still works. */
       sweep: (input: { changeId: string } | string) =>
         get(MentionSweepResult, "POST", "/mentions/sweep", { changeId: typeof input === "string" ? input : input.changeId }),
+    },
+    /** The insight group (v0.16.0), optional per site (`insightNotFound`): a site without it answers SiteApiError with status 501. */
+    insight: {
+      /** The site's most-hit missing paths, with the hosts that linked to each: `days` 1 to 90 (30), `limit` 1 to 200 (50). */
+      notFound: (q: { days?: number; limit?: number; includeProbes?: boolean } = {}) =>
+        get(NotFoundReport, "GET", `/insight/not-found${query(q)}`),
     },
   };
 }

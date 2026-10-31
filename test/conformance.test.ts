@@ -51,6 +51,7 @@ describe("conformance", () => {
       "mention decide on a stale version: refused, whatever mention is first",
       "mention sweep with no change id: refused before anything is removed",
       "mentions list with an unknown status: refused",
+      "not-found report: advertised in capabilities, or answered 501",
       "errors: problem details with type, title and status",
       "preview: a tiny source answers HTML that is never indexed",
       "publish of an unknown id: refused",
@@ -74,7 +75,7 @@ describe("conformance", () => {
   it("runs only the content checks on a site with no media manager", async () => {
     const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: site(memoryAdapter({ media: false })).fetch });
     expect(failing(report)).toEqual([]);
-    expect(report.checks).toHaveLength(30);
+    expect(report.checks).toHaveLength(31);
   });
 
   it("expects 501 on a site with no content delete, and 404 where it has one", async () => {
@@ -143,6 +144,15 @@ describe("conformance", () => {
     adapter.content.setTags = async (id, input) => ({ id, version: "v9", status: "draft", changeId: input.changeId });
     const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: site(adapter).fetch });
     expect(failing(report)).toEqual(["content tags of an unknown id: refused, or not implemented where the site keeps no tags"]);
+  });
+
+  it("expects 501 from the 404 report on a site without it, and the report where it has one", async () => {
+    const without = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: site().fetch });
+    expect(without.checks.find((c) => c.name.startsWith("not-found report"))?.detail).toBe("501 not-implemented");
+    const rows = [{ path: "/old-post", kind: "page" as const, hits: 3, referrers: [{ host: "a.example", hits: 3 }] }];
+    const withReport = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: site(memoryAdapter({ notFound: rows })).fetch });
+    expect(failing(withReport)).toEqual([]);
+    expect(withReport.checks.filter((c) => c.name.startsWith("not-found report")).map((c) => c.detail)).toEqual(["1 missing path(s) in 7 days", "400 invalid"]);
   });
 
   it("expects 501 from a reset on a v0.5.0 mentions group, and 404 where the site has reset", async () => {

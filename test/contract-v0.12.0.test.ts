@@ -1,4 +1,4 @@
-// PLANT: the v0.12.0 contract, unchanged but for what v0.13.0 names. v0.13.0 is additive: every v0.12.0 route and body
+// PLANT: the v0.12.0 contract, unchanged but for what v0.13.0 and v0.16.0 name. Each is additive: every v0.12.0 route and body
 // stays as it was, so a site or a Carrel on v0.12.0 keeps working.
 //
 // test/fixtures/contract-v0.12.0.json was written from the v0.12.0 build (tag v0.12.0, 63b2b9c, which carries
@@ -9,7 +9,7 @@ import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import * as contract from "../src/contract.js";
 import { additiveOnly, added, now, widened, type JsonSchema } from "./additive.js";
-import { V0160_CODES, V0160_ROUTES, V0160_SCHEMAS, V0160_WIDEN, withV0160 } from "./v0.16.0.js";
+import { V0170_CODES, V0170_ROUTES, V0170_SCHEMAS, V0170_WIDEN, withV0170 } from "./v0.17.0.js";
 
 const V0120 = JSON.parse(readFileSync(new URL("./fixtures/contract-v0.12.0.json", import.meta.url), "utf8")) as {
   version: string;
@@ -21,12 +21,12 @@ const V0120 = JSON.parse(readFileSync(new URL("./fixtures/contract-v0.12.0.json"
 /** What every file may carry from v0.13.0. */
 const ITEM = ["color", "credit", "downloadUrl", "license", "licenseExpires", "placeholder", "sourceUrl", "takenAt", "usedCount"];
 
-/** Every v0.12.0 schema v0.13.0 and v0.16.0 extend, and exactly the optional properties each adds. */
-const ADDED: Record<string, string[]> = withV0160({
+/** Every v0.12.0 schema v0.13.0 and v0.17.0 extend, and exactly the optional properties each adds. */
+const ADDED: Record<string, string[]> = withV0170({
   Capabilities: [
     "mediaChanges", "mediaCredit", "mediaDuplicates", "mediaEmbedded", "mediaFilters", "mediaHistory", "mediaImport",
-    "mediaResize", "mediaResizePass", "mediaSuggestions", "mediaTransform", "mediaUsage",
-  ],
+    "mediaResize", "mediaResizePass", "mediaSuggestions", "mediaTransform", "mediaUsage", "insightNotFound",
+  ].sort(),
   Meta: [],
   MediaItem: ITEM,
   MediaDetail: [...ITEM, "twins"].sort(),
@@ -45,7 +45,7 @@ const WIDEN: Record<string, readonly string[]> = {
   "MediaListQuery.lens": NEW_LENSES,
   "MediaListQuery.sort": ["used"],
   "MediaList.sorted.sort": ["used"],
-  ...V0160_WIDEN,
+  ...V0170_WIDEN,
 };
 
 const NEW_SCHEMAS = [
@@ -66,7 +66,7 @@ describe("the v0.12.0 contract", () => {
     expect(V0120.routes.length).toBe(35);
   });
 
-  it("keeps every v0.12.0 route exactly, but the upload's answer named MediaUploadResult, and adds only the v0.13.0 media routes", () => {
+  it("keeps every v0.12.0 route exactly, but the upload's answer named MediaUploadResult, and adds only the v0.13.0 media routes and the v0.16.0 404 report", () => {
     for (const route of V0120.routes) {
       const expected = route.method === "POST" && route.path === "/media" ? { ...route, response: "MediaUploadResult" } : route;
       expect(contract.ROUTES, JSON.stringify(route)).toContainEqual(expected);
@@ -80,7 +80,8 @@ describe("the v0.12.0 contract", () => {
       "POST /media/:id/revert",
       "GET /media/:id/suggestions",
       "POST /media/resize-pass",
-      ...V0160_ROUTES,
+      ...V0170_ROUTES,
+      "GET /insight/not-found",
     ]);
   });
 
@@ -106,12 +107,12 @@ describe("the v0.12.0 contract", () => {
     widened(V0120.schemas.MediaLens!, now("MediaLens"), NEW_LENSES, "MediaLens");
   });
 
-  it("widens the error codes by in-progress (v0.16.0), and nothing else", () => {
-    widened(V0120.schemas.ErrorCode!, now("ErrorCode"), V0160_CODES, "ErrorCode");
+  it("widens the error codes by in-progress (v0.17.0), and nothing else", () => {
+    widened(V0120.schemas.ErrorCode!, now("ErrorCode"), V0170_CODES, "ErrorCode");
   });
 
-  it("adds only the new schemas v0.13.0 names", () => {
-    expect(exported.filter((n) => !(n in V0120.schemas)).sort()).toEqual([...NEW_SCHEMAS, ...V0160_SCHEMAS].sort());
+  it("adds only the new schemas v0.13.0, v0.17.0 and v0.17.0 name", () => {
+    expect(exported.filter((n) => !(n in V0120.schemas)).sort()).toEqual([...NEW_SCHEMAS, "NotFoundQuery", "NotFoundReport", "NotFoundRow", ...V0170_SCHEMAS].sort());
   });
 
   it("parses v0.12.0 bodies with the v0.13.0 schemas", () => {

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// The live check devkit runs against each deployed site (v0.16.0): keyless probes only, so it needs no secret and
+// The live check devkit runs against each deployed site (v0.17.0): keyless probes only, so it needs no secret and
 // changes nothing. site-api-live --origin https://example.com [--from <host>]
 //
 // Prints one GitHub Actions annotation per finding, `::error title=<item>::<url> <detail>` or `::warning ...`, the

@@ -25,7 +25,7 @@ const STATUS: Record<ErrorCode, number> = {
   internal: 500,
 };
 
-/** Each code's fixed title (v0.16.0), the `title` of its problem details; the README's Errors table says what each means. */
+/** Each code's fixed title (v0.17.0), the `title` of its problem details; the README's Errors table says what each means. */
 const TITLE: Record<ErrorCode, string> = {
   unauthorized: "Unauthorized",
   "rate-limited": "Too many requests",
@@ -58,7 +58,7 @@ export function json(status: number, body: unknown): Response {
 }
 
 /**
- * An error answer as RFC 9457 problem details (v0.16.0). `error` and `message` stay as every earlier reader expects;
+ * An error answer as RFC 9457 problem details (v0.17.0). `error` and `message` stay as every earlier reader expects;
  * `type`, `title`, `status` and `detail` are the standard's names for the same answer.
  */
 export function fail(code: ErrorCode, message: string, extra: Partial<ErrorBody> = {}): Response {

@@ -3,7 +3,7 @@
 // by it. The one exception is opt-in (probeMediaUpload): it uploads a file of its own, then deletes
 // that file and no other.
 
-import { MEDIA_LENSES, MediaBulkResult, ContentList, ErrorBody, RevisionList, RevisionSource, MediaDeleteResult, MediaDetail, MediaItem, MediaList, MentionList, Meta, PREFIX, schemaHash, type Meta as MetaType } from "./contract.js";
+import { MEDIA_LENSES, MediaBulkResult, ContentList, ErrorBody, RevisionList, RevisionSource, MediaDeleteResult, MediaDetail, MediaItem, MediaList, MentionList, Meta, NotFoundReport, PREFIX, schemaHash, type Meta as MetaType } from "./contract.js";
 
 export interface ConformanceConfig {
   baseUrl: string;
@@ -49,7 +49,7 @@ export async function runConformance(config: ConformanceConfig): Promise<Conform
   const origin = config.baseUrl.replace(/\/+$/, "");
   const auth = { authorization: `Bearer ${config.key}` };
   const checks: ConformanceCheck[] = [];
-  // v0.16.0: a fresh change id for every probe write, since a site with `replay` keeps a refused write's answer under its
+  // v0.17.0: a fresh change id for every probe write, since a site with `replay` keeps a refused write's answer under its
   // change id and would refuse the same id on another probe as a different request.
   const run = crypto.randomUUID().slice(0, 8);
   let probes = 0;
@@ -478,7 +478,33 @@ export async function runConformance(config: ConformanceConfig): Promise<Conform
     }
   }
 
-  // ---------- v0.16.0: each new route answers on the probe id, or 501 where the site lacks it
+  // ---------- insight (v0.16.0): the 404 report, read only, so checked whatever probeWrites says
+
+  const hasNotFound = capabilities?.insightNotFound === true;
+  const notFoundPath = `${origin}${PREFIX}/insight/not-found`;
+
+  await check("not-found report: advertised in capabilities, or answered 501", async () => {
+    const response = await doFetch(`${notFoundPath}?days=7&limit=5`, { headers: auth });
+    if (hasNotFound) {
+      expectStatus(response, 200, "not-found report");
+      const { rows } = NotFoundReport.parse(await response.json());
+      if (rows.length > 5) throw new Error(`${rows.length} rows for a limit of 5`);
+      return `${rows.length} missing path(s) in 7 days`;
+    }
+    expectStatus(response, 501, "not-found report on a site without it");
+    const code = await errorCode(response);
+    if (code !== "not-implemented") throw new Error(`error code ${code ?? "missing"}, expected not-implemented`);
+    return "501 not-implemented";
+  });
+
+  if (hasNotFound) {
+    await check("not-found report past 90 days: refused", async () => {
+      expectStatus(await doFetch(`${notFoundPath}?days=91`, { headers: auth }), 400, "days=91");
+      return "400 invalid";
+    });
+  }
+
+  // ---------- v0.17.0: each new route answers on the probe id, or 501 where the site lacks it
 
   await check("errors: problem details with type, title and status", async () => {
     const response = await doFetch(`${origin}${PREFIX}/no-such-route`, { headers: auth });

@@ -9,7 +9,7 @@ import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import * as contract from "../src/contract.js";
 import { additiveOnly, added, now, widened, type JsonSchema } from "./additive.js";
-import { V0160_CODES, V0160_ROUTES, V0160_SCHEMAS, V0160_WIDEN, withV0160 } from "./v0.16.0.js";
+import { V0170_CODES, V0170_ROUTES, V0170_SCHEMAS, V0170_WIDEN, withV0170 } from "./v0.17.0.js";
 
 const V050 = JSON.parse(readFileSync(new URL("./fixtures/contract-v0.5.0.json", import.meta.url), "utf8")) as {
   version: string;
@@ -22,12 +22,12 @@ const V050 = JSON.parse(readFileSync(new URL("./fixtures/contract-v0.5.0.json", 
 const V0130_ITEM = ["color", "credit", "downloadUrl", "license", "licenseExpires", "placeholder", "sourceUrl", "takenAt", "usedCount"];
 
 /** Every v0.5.0 schema later versions extend, and exactly the optional properties each adds (v0.10.0: scheduled updates, and a file's focal point and caption). */
-const ADDED: Record<string, string[]> = withV0160({
+const ADDED: Record<string, string[]> = withV0170({
   Capabilities: [
     "contentTags", "mediaCaption", "mediaChanges", "mediaCredit", "mediaDuplicates", "mediaEmbedded", "mediaFilters", "mediaFocus",
     "mediaHistory", "mediaImport", "mediaLenses", "mediaReplace", "mediaReplaceKeepsSize", "mediaResize", "mediaResizePass",
-    "mediaSuggestions", "mediaTransform", "mediaUsage", "mentionReset", "scheduledUpdates",
-  ],
+    "mediaSuggestions", "mediaTransform", "mediaUsage", "mentionReset", "scheduledUpdates", "insightNotFound",
+  ].sort(),
   MediaItem: ["caption", "focus", ...V0130_ITEM].sort(),
   MediaDetail: ["caption", "focus", "twins", ...V0130_ITEM].sort(),
   MediaUploadQuery: ["resize"],
@@ -77,7 +77,8 @@ describe("the v0.5.0 contract", () => {
       "POST /media/:id/revert",
       "GET /media/:id/suggestions",
       "POST /media/resize-pass",
-      ...V0160_ROUTES,
+      ...V0170_ROUTES,
+      "GET /insight/not-found",
     ]);
   });
 
@@ -89,13 +90,13 @@ describe("the v0.5.0 contract", () => {
 
   for (const [name, props] of Object.entries(ADDED)) {
     it(`extends ${name} by optional properties only: ${props.join(", ") || "none of its own"}`, () => {
-      additiveOnly(V050.schemas[name]!, now(name), name, V0160_WIDEN);
+      additiveOnly(V050.schemas[name]!, now(name), name, V0170_WIDEN);
       expect(added(V050.schemas[name]!, now(name)).sort()).toEqual(props);
     });
   }
 
   it("widens the error codes by in-progress, and nothing else", () => {
-    widened(V050.schemas.ErrorCode!, now("ErrorCode"), V0160_CODES, "ErrorCode");
+    widened(V050.schemas.ErrorCode!, now("ErrorCode"), V0170_CODES, "ErrorCode");
   });
 
   it("widens the mention decision by reset, and nothing else", () => {
@@ -107,7 +108,7 @@ describe("the v0.5.0 contract", () => {
     expect(strip(after)).toEqual(strip(before));
   });
 
-  it("adds only the new schemas v0.6.0, v0.10.0, v0.13.0 and v0.16.0 name", () => {
+  it("adds only the new schemas v0.6.0, v0.10.0, v0.13.0, v0.16.0 and v0.17.0 name", () => {
     const v060 = ["ContentTag", "ContentTagsInput", "ContentTags", "MediaLens", "SortDir"];
     const v0100 = [
       "ScheduleCancelQuery", "ScheduledUpdate", "ScheduledUpdateSummary",
@@ -119,7 +120,7 @@ describe("the v0.5.0 contract", () => {
       "MediaResizePassResult", "MediaRevertInput", "MediaRevision", "MediaSourceUrl", "MediaSuggestions",
       "MediaTransformInput", "MediaTransformOp", "MediaTransformResult", "MediaTwin", "MediaUploadResult",
     ];
-    expect(exported.filter((n) => !(n in V050.schemas)).sort()).toEqual([...v060, ...v0100, ...v0130, ...V0160_SCHEMAS].sort());
+    expect(exported.filter((n) => !(n in V050.schemas)).sort()).toEqual([...v060, ...v0100, ...v0130, "NotFoundQuery", "NotFoundReport", "NotFoundRow", ...V0170_SCHEMAS].sort());
   });
 
   it("parses v0.5.0 bodies with the v0.6.0 schemas", () => {

@@ -77,7 +77,7 @@ export interface IntentResult {
   conflict?: { id: string; currentVersion: string | null };
   /** Set instead of acting, for a step nothing can undo: what to ask, and the fields to post again with `confirm`. */
   confirm?: ConfirmRequest;
-  /** Set by the posts list's `preview-link` (v0.16.0): the link to show once, and when it stops working. */
+  /** Set by the posts list's `preview-link` (v0.17.0): the link to show once, and when it stops working. */
   previewLink?: { url: string; expiresAt: string };
 }
 

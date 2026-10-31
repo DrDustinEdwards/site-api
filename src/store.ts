@@ -1,4 +1,4 @@
-// What the package keeps for itself on a site that gives it a store (v0.16.0): the answers to writes, so a retry under
+// What the package keeps for itself on a site that gives it a store (v0.17.0): the answers to writes, so a retry under
 // the same change id is answered rather than run twice, the publish hooks that failed, so the cron tries them again, and
 // the shareable preview links and the webmentions each page last sent. A D1 site passes `d1SiteApiStore(env.DB)` as `store` and adds
 // `SITE_API_STORE_SQL` as its next migration. Exported as `@dustinedwards/site-api/store`.
@@ -40,13 +40,13 @@ export interface SiteApiStore {
   activePreviewLinks(contentId: string, now: string): Promise<PreviewLinkRow[]>;
   /** Revokes the unrevoked link whose hash starts with `prefix` (its id); false when none. */
   revokePreviewLink(prefix: string, at: string): Promise<boolean>;
-  /** The targets the webmention hook last sent for a source page (v0.16.0); [] when none. */
+  /** The targets the webmention hook last sent for a source page (v0.17.0); [] when none. */
   webmentionTargets(source: string): Promise<string[]>;
   /** Replaces a source's targets with the ones it links to now, and drops the row when there are none. */
   putWebmentionTargets(source: string, targets: string[], sentAt: string): Promise<void>;
 }
 
-/** One shareable preview link (v0.16.0). Times are UTC ISO text; `revokedAt` null while it works. */
+/** One shareable preview link (v0.17.0). Times are UTC ISO text; `revokedAt` null while it works. */
 export interface PreviewLinkRow {
   tokenHash: string;
   contentId: string;

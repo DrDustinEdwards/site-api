@@ -56,7 +56,7 @@ describe("PLANT: the wrong key", () => {
       const { api, logs } = site(adapter);
       const response = await api.handle(req("/api/carrel/v1/content", { key, headers }));
       expect(response.status).toBe(401);
-      // v0.16.0: problem details (RFC 9457), keeping the error and message every earlier reader expects.
+      // v0.17.0: problem details (RFC 9457), keeping the error and message every earlier reader expects.
       expect(response.headers.get("content-type")).toBe("application/problem+json; charset=utf-8");
       expect(await response.json()).toEqual({
         error: "unauthorized",
