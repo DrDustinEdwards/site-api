@@ -57,7 +57,8 @@ describe("media kit", () => {
 
   it("PLANT: a custom-domain gateway never fails a suggestion, and alt text with a chatbot's leftovers is not offered", async () => {
     const run = vi.fn(async (_model: string, _input: unknown, _options?: object) => ({ response: { alt: "As an AI language model, I see a dog.", tags: ["dog"] } }));
-    const images = { input: () => ({ transform: () => ({ output: async () => ({ response: () => new Response("jpeg") }) }) }) };
+    const output = async () => ({ response: () => new Response("jpeg") });
+    const images = { input: () => ({ output, transform: () => ({ output }) }) };
     const suggest = mediaSuggester({ app: "sample", describe: "on a sample site" });
     const custom = "https://ai.example.com/anthropic";
     const gatewayOn = async (env: Partial<SuggestEnv>) => {
