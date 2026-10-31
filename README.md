@@ -165,7 +165,7 @@ Additive: every v0.4.0 route and body is unchanged, and the schema hash and pack
 
 ## Changes in v0.16.0
 
-Additive: no route, body or schema changes. The media suggester (`mediaSuggester`) hardened, and site-runtime moves to v0.44.0.
+Additive: no route, body or schema changes. The media suggester (`mediaSuggester`) hardened, and site-runtime moves to v0.45.0.
 
 - **The gateway id** comes from site-runtime's `anthropicRoute`: read from a standard `AI_GATEWAY_BASE_URL`, else from the new `SuggestEnv.AI_GATEWAY_ID` (for a gateway on a custom domain). A gateway it cannot use (no id, or a malformed URL) is warned about and skipped: the call goes to Workers AI without it, and never fails the suggestion.
 - **JSON mode and a timeout.** The model is asked for `response_format` `json_schema` (the tags and alt text), and the call stops after 30 seconds (`AbortSignal.timeout`). `readSuggestion` still reads an object or a JSON string.
