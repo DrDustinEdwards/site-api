@@ -467,13 +467,17 @@ export function mediaRoutes(media: MediaAdapter, log: Log, siteStore?: Pick<Site
     // An import is served from the site's own storage: an address back at the source would be a hotlink.
     if (sourceUrl && (uploaded.url === sourceUrl || uploaded.downloadUrl === sourceUrl)) throw new ContractBreach(`import of ${sourceUrl} is served from its source`);
     const answer = checked(MediaUploadResult, uploaded, "uploaded media");
-    if (media.findByHash && siteStore) await siteStore.putUploadedMedia(sha256, answer.id, new Date().toISOString());
+    // The file is stored either way: a store that fails (a site that has not applied SITE_API_STORE_SQL_V0_21) loses only
+    // this key, as the package's other bookkeeping does, and says so in the log.
+    if (media.findByHash && siteStore) {
+      await siteStore.putUploadedMedia(sha256, answer.id, new Date().toISOString()).catch((error: unknown) => log({ siteApi: "media-uploads-store-failed", error: String(error) }));
+    }
     return json(201, answer);
   }
 
   /** The file an earlier upload with this key became, where the site still holds it (trashed or not); else null. */
   async function sentBefore(sha256: string) {
-    const id = siteStore ? await siteStore.uploadedMedia(sha256) : null;
+    const id = siteStore ? await siteStore.uploadedMedia(sha256).catch((error: unknown) => (log({ siteApi: "media-uploads-store-failed", error: String(error) }), null)) : null;
     const found = id ? await media.get(id) : null;
     if (!found) return null;
     const { usedBy: _usedBy, twins: _twins, ...item } = found;

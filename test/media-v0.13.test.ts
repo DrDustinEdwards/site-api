@@ -10,7 +10,7 @@ import { readFileSync } from "node:fs";
 import { createSiteApi } from "../src/index.js";
 import { sha256Hex } from "../src/media.js";
 import { stripMetadata } from "../src/media-upload.js";
-import { d1SiteApiStore, SITE_API_STORE_SQL } from "../src/store.js";
+import { d1SiteApiStore, SITE_API_STORE_SQL, SITE_API_STORE_SQL_V0_21 } from "../src/store.js";
 import { d1 } from "./d1.js";
 import { KEY, ORIGIN, allow, body, png, req, site } from "./helpers.js";
 
@@ -49,17 +49,18 @@ describe("duplicates (1)", () => {
 
 describe("duplicates of files the site changed on the way in (v0.21.0)", () => {
   // A site like the real ones: it stores what prepareUpload makes, so its own hash is of other bytes than the ones sent.
-  function changingSite(change: (bytes: Uint8Array) => Uint8Array, withStore: boolean) {
+  function changingSite(change: (bytes: Uint8Array) => Uint8Array, withStore: boolean, sql = SITE_API_STORE_SQL) {
+    const logs: Array<Record<string, unknown>> = [];
     const adapter = memoryAdapter({ mediaDuplicates: true });
     const upload = adapter.media!.upload.bind(adapter.media);
     adapter.media!.upload = async (input) => {
       const bytes = change(input.bytes);
       return upload({ ...input, bytes, sha256: await sha256Hex(bytes) });
     };
-    const api = createSiteApi({ adapter, key: KEY, limiter: allow, ...(withStore ? { store: d1SiteApiStore(d1(SITE_API_STORE_SQL)) } : {}) });
+    const api = createSiteApi({ adapter, key: KEY, limiter: allow, log: (e) => logs.push(e), ...(withStore ? { store: d1SiteApiStore(d1(sql)) } : {}) });
     const client = createSiteClient({ baseUrl: ORIGIN, key: KEY, fetch: (async (input: RequestInfo | URL, init?: RequestInit) => api.handle(new Request(input, init))) as typeof fetch });
     const put = (bytes: Uint8Array, contentType: string, n: number) => client.media.upload({ bytes, contentType, filename: `photo-${n}.jpg`, alt: "A test picture", changeId: `u-${n}` });
-    return { adapter, put };
+    return { adapter, put, logs };
   }
   const photo = new Uint8Array(readFileSync(new URL("./fixtures/photo.jpg", import.meta.url)));
 
@@ -81,6 +82,13 @@ describe("duplicates of files the site changed on the way in (v0.21.0)", () => {
     await adapter.media!.delete!(first.id, { changeId: "d-1" });
     expect((await put(photo, "image/jpeg", 3)).duplicateOf).toBeUndefined();
     expect(adapter.mediaStore.size).toBe(1);
+  });
+
+  it("still stores an upload on a site that has not applied SITE_API_STORE_SQL_V0_21, and logs it", async () => {
+    const { adapter, put, logs } = changingSite(() => png(10, 10), true, SITE_API_STORE_SQL.replace(SITE_API_STORE_SQL_V0_21, ""));
+    expect((await put(photo, "image/jpeg", 1)).duplicateOf).toBeUndefined();
+    expect(adapter.mediaStore.size).toBe(1);
+    expect(logs.filter((l) => l.siteApi === "media-uploads-store-failed")).toHaveLength(2);
   });
 });
 
