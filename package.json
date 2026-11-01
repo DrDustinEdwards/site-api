@@ -61,7 +61,7 @@
     "lint:promises": "oxlint --type-aware --tsconfig tsconfig.json src"
   },
   "dependencies": {
-    "@drdustinedwards/site-helpers": "github:DrDustinEdwards/prelum#v0.29.1",
+    "@drdustinedwards/site-helpers": "github:DrDustinEdwards/prelum#v0.31.3",
     "@dustinedwards/site-runtime": "github:DrDustinEdwards/site-runtime#v0.70.1",
     "diff": "9.0.0",
     "zod": "4.6.7"
