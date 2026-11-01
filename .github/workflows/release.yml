@@ -1,0 +1,33 @@
+name: release
+
+# A release is the merge of its version bump: devkit's release.yml tags package.json's version on main when it has no
+# v<version> tag yet and publishes the GitHub release from the CHANGELOG section, then bump-consumers.yml starts Renovate
+# in every repository that depends on it. Nobody pushes a tag by hand, and a session that cannot push tags can still
+# release by merging. Run it by hand (Actions > release > Run workflow) to release a version that merged without a tag.
+
+on:
+  push:
+    branches: [main]
+    paths: [package.json, CHANGELOG.md, .github/workflows/release.yml]
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    permissions:
+      contents: write
+    uses: DrDustinEdwards/devkit/.github/workflows/release.yml@e7ecda8f69c8bbde738edcd1cf510710e547bcf3 # v0.20.22
+
+  bump:
+    needs: release
+    if: needs.release.outputs.created == 'true'
+    uses: DrDustinEdwards/devkit/.github/workflows/bump-consumers.yml@e7ecda8f69c8bbde738edcd1cf510710e547bcf3 # v0.20.22
+    with:
+      dry_run: false
+    secrets:
+      token: ${{ secrets.RENOVATE_TRIGGER_TOKEN }}
