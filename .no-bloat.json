@@ -1,0 +1,25 @@
+{
+  "baseline": {
+    "measured_at": "9efec6d",
+    "knip": {
+      "Unused files": 1,
+      "Unused exports": 9,
+      "Unused exported types": 9,
+      "Duplicate exports": 1
+    },
+    "jscpd": {
+      "clones": 24,
+      "lines": 364,
+      "percentage": 1.96
+    },
+    "tests": {
+      "files": 29,
+      "cases": 269
+    },
+    "comments": {
+      "lines": 1804,
+      "code": 11640,
+      "percentage": 13.42
+    }
+  }
+}
