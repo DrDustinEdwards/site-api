@@ -583,6 +583,17 @@ export function stripMetadata(bytes: Uint8Array, contentType: string): Uint8Arra
   }
 }
 
+/**
+ * The key every site finds duplicates by (v0.21.0): the SHA-256, as lower case hex, of the bytes as sent with their
+ * private metadata taken out (stripMetadata). The same file sent twice has the same key, and so does a copy that differs
+ * only in what stripMetadata takes out (a location, a serial number, a date), since the site would store the same bytes
+ * for both. The package's route asks findByHash about it and sends it as `MediaUpload.sha256`; prepareUpload answers it
+ * as `uploadSha256`, equal to the stored bytes' `sha256` unless the picture was converted or shrunk.
+ */
+export async function duplicateKey(bytes: Uint8Array, contentType: string): Promise<string> {
+  return sha256Hex(stripMetadata(bytes, contentType));
+}
+
 /** @deprecated v0.19.0: stripMetadata, which takes out every private field, not only the location. */
 export const stripLocation = stripMetadata;
 
@@ -887,7 +898,11 @@ export interface PreparedUpload {
   height: number | null;
   /** The SHA-256 of `bytes`, the stored file. */
   sha256: string;
-  /** The SHA-256 of the bytes as sent: the hash the package's route asked findByHash about. */
+  /**
+   * The upload's duplicates key (duplicateKey, v0.21.0; before, the SHA-256 of the bytes as sent): what the package's route
+   * asked findByHash about and records for the file in the site's store. Equal to `sha256` unless the picture was
+   * converted or shrunk.
+   */
   uploadSha256: string;
   /** What the picture says about itself, read before anything changed it. The site fills each only where it is empty. */
   embedded: EmbeddedFields;
@@ -965,7 +980,7 @@ export async function prepareUpload(images: UploadImages, input: MediaUpload, op
 
   const { placeholder, color } = size ? await placeholderAndColor(images, bytes) : { placeholder: null, color: null };
   const sha256 = await sha256Hex(bytes);
-  const uploadSha256 = input.sha256 ?? (bytes === input.bytes ? sha256 : await sha256Hex(input.bytes));
+  const uploadSha256 = input.sha256 ?? (!converted && !resizedFrom ? sha256 : await duplicateKey(input.bytes, input.contentType));
   return {
     bytes,
     contentType,

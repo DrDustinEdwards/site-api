@@ -44,6 +44,13 @@ export interface SiteApiStore {
   webmentionTargets(source: string): Promise<string[]>;
   /** Replaces a source's targets with the ones it links to now, and drops the row when there are none. */
   putWebmentionTargets(source: string, targets: string[], sentAt: string): Promise<void>;
+  /**
+   * v0.21.0: the media id the last upload or import with this duplicates key (duplicateKey) became; null when none. The
+   * route asks it after the adapter's findByHash, so a file the site converted or shrank is still found when sent again.
+   */
+  uploadedMedia(sha256: string): Promise<string | null>;
+  /** v0.21.0: remembers the file an upload or import with this key became, replacing an earlier one. */
+  putUploadedMedia(sha256: string, mediaId: string, at: string): Promise<void>;
 }
 
 /** One shareable preview link (v0.17.0). Times are UTC ISO text; `revokedAt` null while it works. */
@@ -65,6 +72,17 @@ export interface HookRetry {
   nextAt: string;
   lastError: string;
 }
+
+/**
+ * v0.21.0's table, for a site that already applied SITE_API_STORE_SQL: it adds this as its next migration. Each row is the
+ * media id an upload's duplicates key became (duplicateKey), so the same file sent again is answered with that file.
+ */
+export const SITE_API_STORE_SQL_V0_21 = `CREATE TABLE IF NOT EXISTS media_uploads (
+  sha256 TEXT PRIMARY KEY,
+  media_id TEXT NOT NULL,
+  at TEXT NOT NULL
+);
+`;
 
 /** The migration: a D1 site adds it as its next file under `migrations/`. Every time is UTC ISO text. */
 export const SITE_API_STORE_SQL = `CREATE TABLE IF NOT EXISTS site_api_writes (
@@ -100,7 +118,7 @@ CREATE TABLE IF NOT EXISTS webmention_targets (
   targets TEXT NOT NULL,
   sent_at TEXT NOT NULL
 );
-`;
+${SITE_API_STORE_SQL_V0_21}`;
 
 interface WriteRow {
   route: string;
@@ -215,6 +233,16 @@ export function d1SiteApiStore(db: D1Like): SiteApiStore {
             .prepare("INSERT INTO webmention_targets (source, targets, sent_at) VALUES (?, ?, ?) ON CONFLICT (source) DO UPDATE SET targets = excluded.targets, sent_at = excluded.sent_at")
             .bind(source, JSON.stringify(targets), sentAt)
       ).run();
+    },
+    async uploadedMedia(sha256) {
+      const row = await db.prepare("SELECT media_id FROM media_uploads WHERE sha256 = ?").bind(sha256).first<{ media_id: string }>();
+      return row?.media_id ?? null;
+    },
+    async putUploadedMedia(sha256, mediaId, at) {
+      await db
+        .prepare("INSERT INTO media_uploads (sha256, media_id, at) VALUES (?, ?, ?) ON CONFLICT (sha256) DO UPDATE SET media_id = excluded.media_id, at = excluded.at")
+        .bind(sha256, mediaId, at)
+        .run();
     },
   };
 }
