@@ -58,7 +58,8 @@
     "prepare": "npm run build",
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run",
-    "lint:promises": "oxlint --type-aware --tsconfig tsconfig.json src"
+    "lint:promises": "oxlint --type-aware --tsconfig tsconfig.json src",
+    "bloat": "devkit-no-bloat"
   },
   "dependencies": {
     "@drdustinedwards/site-helpers": "github:DrDustinEdwards/prelum#v0.31.3",
@@ -67,6 +68,7 @@
     "zod": "4.6.7"
   },
   "devDependencies": {
+    "@dustinedwards/devkit": "github:DrDustinEdwards/devkit#v0.21.0",
     "@types/node": "22.20.5",
     "@vitest/coverage-v8": "4.1.12",
     "oxlint": "1.89.0",
