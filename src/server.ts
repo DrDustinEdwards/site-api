@@ -151,7 +151,7 @@ export function createSiteApi(config: SiteApiConfig): SiteApi {
 
   const routes: Route[] = [
     ...contentRoutes(adapter, { store: Boolean(store) }),
-    ...(media ? mediaRoutes(media, log) : []),
+    ...(media ? mediaRoutes(media, log, store) : []),
     ...(mentions ? mentionsRoutes(mentions) : []),
     ...(store ? previewLinkRoutes(adapter, store) : []),
     ...(insight ? insightRoutes(insight) : []),

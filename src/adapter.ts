@@ -121,8 +121,9 @@ export interface MediaUpload {
   decorative?: boolean;
   changeId: string;
   /**
-   * v0.13.0: the SHA-256 of the bytes as lower case hex, which the site keeps to find duplicates (findByHash, the duplicates
-   * lens, twins). The package always sends it; optional only so a site's own code can call upload without it.
+   * v0.13.0: the upload's duplicates key, lower case hex: since v0.21.0 duplicateKey's, the SHA-256 of the bytes without
+   * their private metadata, which is the stored bytes' hash unless the site converts or shrinks the picture (findByHash,
+   * the duplicates lens, twins). The package always sends it; optional only so a site's own code can call upload without it.
    */
   sha256?: string;
   /** v0.13.0: true when the site shrinks the picture to its `resize`; false or absent when it has none or the upload said `resize=no`. */

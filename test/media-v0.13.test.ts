@@ -6,7 +6,13 @@ import { createSiteClient, SiteApiError } from "../src/client.js";
 import { transformFocus } from "../src/media.js";
 import { MEDIA_TRANSFORMS } from "../src/contract.js";
 import { memoryAdapter, type MemoryAdapterOptions } from "../src/testing.js";
-import { KEY, ORIGIN, body, png, req, site } from "./helpers.js";
+import { readFileSync } from "node:fs";
+import { createSiteApi } from "../src/index.js";
+import { sha256Hex } from "../src/media.js";
+import { stripMetadata } from "../src/media-upload.js";
+import { d1SiteApiStore, SITE_API_STORE_SQL } from "../src/store.js";
+import { d1 } from "./d1.js";
+import { KEY, ORIGIN, allow, body, png, req, site } from "./helpers.js";
 
 function setup(options: MemoryAdapterOptions = {}) {
   const s = site(memoryAdapter(options));
@@ -38,6 +44,43 @@ describe("duplicates (1)", () => {
     await adapter.media!.upload({ bytes: png(10, 10), contentType: "image/png", filename: "old.png", alt: "", changeId: "seed", sha256: adapter.mediaStore.get(first.id)!.sha256! });
     expect((await client.media.list({ lens: "duplicates" })).items).toHaveLength(2);
     expect((await client.media.get(first.id)).twins).toEqual([{ id: "uploads/2-old.png", filename: "old.png" }]);
+  });
+});
+
+describe("duplicates of files the site changed on the way in (v0.21.0)", () => {
+  // A site like the real ones: it stores what prepareUpload makes, so its own hash is of other bytes than the ones sent.
+  function changingSite(change: (bytes: Uint8Array) => Uint8Array, withStore: boolean) {
+    const adapter = memoryAdapter({ mediaDuplicates: true });
+    const upload = adapter.media!.upload.bind(adapter.media);
+    adapter.media!.upload = async (input) => {
+      const bytes = change(input.bytes);
+      return upload({ ...input, bytes, sha256: await sha256Hex(bytes) });
+    };
+    const api = createSiteApi({ adapter, key: KEY, limiter: allow, ...(withStore ? { store: d1SiteApiStore(d1(SITE_API_STORE_SQL)) } : {}) });
+    const client = createSiteClient({ baseUrl: ORIGIN, key: KEY, fetch: (async (input: RequestInfo | URL, init?: RequestInit) => api.handle(new Request(input, init))) as typeof fetch });
+    const put = (bytes: Uint8Array, contentType: string, n: number) => client.media.upload({ bytes, contentType, filename: `photo-${n}.jpg`, alt: "A test picture", changeId: `u-${n}` });
+    return { adapter, put };
+  }
+  const photo = new Uint8Array(readFileSync(new URL("./fixtures/photo.jpg", import.meta.url)));
+
+  it("answers a photo sent again with the file its metadata-free bytes became, and a copy that differs only in that metadata", async () => {
+    // The 0.19 regression: the site stores the photo without its private metadata, and the route asked about the bytes as sent.
+    expect(stripMetadata(photo, "image/jpeg")).not.toEqual(photo);
+    const { adapter, put } = changingSite((bytes) => stripMetadata(bytes, "image/jpeg"), false);
+    const first = await put(photo, "image/jpeg", 1);
+    expect(await put(photo, "image/jpeg", 2)).toMatchObject({ id: first.id, duplicateOf: first.id });
+    expect(await put(stripMetadata(photo, "image/jpeg"), "image/jpeg", 3)).toMatchObject({ duplicateOf: first.id });
+    expect(adapter.mediaStore.size).toBe(1);
+  });
+
+  it("finds a file the site converted or shrank through the store, and stores it again once that file is deleted", async () => {
+    const { adapter, put } = changingSite(() => png(10, 10, {}, Math.floor(Math.random() * 200)), true);
+    const first = await put(photo, "image/jpeg", 1);
+    expect(await put(photo, "image/jpeg", 2)).toMatchObject({ id: first.id, duplicateOf: first.id });
+    expect(adapter.mediaStore.size).toBe(1);
+    await adapter.media!.delete!(first.id, { changeId: "d-1" });
+    expect((await put(photo, "image/jpeg", 3)).duplicateOf).toBeUndefined();
+    expect(adapter.mediaStore.size).toBe(1);
   });
 });
 

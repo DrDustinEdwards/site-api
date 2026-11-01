@@ -43,14 +43,15 @@ import {
   type MediaResizeOutcome,
   type MediaUse,
 } from "../contract.js";
-import { ImportRefusal, altRefusal, checkUpload, essence, fetchImport, importRefusal, kindOf, readUpload, sha256Hex, turnsSize } from "../media.js";
-import { stripMetadata } from "../media-upload.js";
+import { ImportRefusal, altRefusal, checkUpload, essence, fetchImport, importRefusal, kindOf, readUpload, turnsSize } from "../media.js";
+import { duplicateKey, stripMetadata } from "../media-upload.js";
+import type { SiteApiStore } from "../store.js";
 import { BadRequest, ContractBreach, ID, checked, describeFailure, fail, json, pathParam, readBody, readQuery, type Log, type Route } from "./http.js";
 
 /** How many trashed files one page of the empty-trash gather asks the site for. */
 const TRASH_PAGE = 200;
 
-export function mediaRoutes(media: MediaAdapter, log: Log): Route[] {
+export function mediaRoutes(media: MediaAdapter, log: Log, siteStore?: Pick<SiteApiStore, "uploadedMedia" | "putUploadedMedia">): Route[] {
   const mediaId = (m: RegExpMatchArray) => pathParam(m[1], MediaId, "media id");
 
   return [
@@ -436,7 +437,10 @@ export function mediaRoutes(media: MediaAdapter, log: Log): Route[] {
 
   /**
    * Stores checked bytes (an upload or an import): the file already holding them where the site finds duplicates, so the
-   * site never stores the same bytes twice, else the site's new file.
+   * site never stores the same bytes twice, else the site's new file. The key is duplicateKey's (v0.21.0): the bytes as
+   * sent without their private metadata, which is what a site stores unless it converts or shrinks the picture. For a
+   * file it converted or shrank, the store remembers which file each key became, since the site's own hashes are of other
+   * bytes.
    */
   async function store(
     bytes: Uint8Array,
@@ -444,9 +448,9 @@ export function mediaRoutes(media: MediaAdapter, log: Log): Route[] {
     fields: { filename: string; alt: string; decorative: boolean; changeId: string; resize?: "no" | undefined },
     sourceUrl?: string,
   ): Promise<Response> {
-    const sha256 = await sha256Hex(bytes);
+    const sha256 = await duplicateKey(bytes, contentType);
     if (media.findByHash) {
-      const twin = await media.findByHash(sha256);
+      const twin = (await media.findByHash(sha256)) ?? (await sentBefore(sha256));
       if (twin) return json(200, checked(MediaUploadResult, { ...twin, duplicateOf: twin.id }, "media duplicate"));
     }
     const uploaded = await media.upload({
@@ -462,7 +466,18 @@ export function mediaRoutes(media: MediaAdapter, log: Log): Route[] {
     });
     // An import is served from the site's own storage: an address back at the source would be a hotlink.
     if (sourceUrl && (uploaded.url === sourceUrl || uploaded.downloadUrl === sourceUrl)) throw new ContractBreach(`import of ${sourceUrl} is served from its source`);
-    return json(201, checked(MediaUploadResult, uploaded, "uploaded media"));
+    const answer = checked(MediaUploadResult, uploaded, "uploaded media");
+    if (media.findByHash && siteStore) await siteStore.putUploadedMedia(sha256, answer.id, new Date().toISOString());
+    return json(201, answer);
+  }
+
+  /** The file an earlier upload with this key became, where the site still holds it (trashed or not); else null. */
+  async function sentBefore(sha256: string) {
+    const id = siteStore ? await siteStore.uploadedMedia(sha256) : null;
+    const found = id ? await media.get(id) : null;
+    if (!found) return null;
+    const { usedBy: _usedBy, twins: _twins, ...item } = found;
+    return item;
   }
 
   /** The files changed since a cursor: a poll takes no other filter, so it never misses a file another filter would hide. */
