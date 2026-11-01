@@ -62,7 +62,7 @@
   },
   "dependencies": {
     "@drdustinedwards/site-helpers": "github:DrDustinEdwards/prelum#v0.31.3",
-    "@dustinedwards/site-runtime": "github:DrDustinEdwards/site-runtime#v0.70.1",
+    "@dustinedwards/site-runtime": "github:DrDustinEdwards/site-runtime#v0.72.0",
     "diff": "9.0.0",
     "zod": "4.6.7"
   },
