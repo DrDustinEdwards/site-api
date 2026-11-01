@@ -4,6 +4,7 @@
 // answers. readEmbedded, stripMetadata and the PNG reader are byte work on Web APIs alone, so they run in a Worker; the
 // conversion, the shrink and the placeholder go through the Images binding.
 
+import { escapeXml } from "@drdustinedwards/site-helpers/xml";
 import { sha256Hex, toBase64, toHex } from "@dustinedwards/site-runtime/encoding";
 import { IMAGE_QUALITY, editImage, type ImagesLike } from "@dustinedwards/site-runtime/image";
 
@@ -508,8 +509,6 @@ function keptTiff(tiff: Uint8Array): Uint8Array | null {
   if (exif.length > 0) write(exifAt, exif);
   return out;
 }
-
-const escapeXml = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
 /**
  * A fresh XMP packet holding only who made the picture and its terms, in the IPTC Photo Metadata properties Google Images
