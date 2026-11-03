@@ -594,8 +594,6 @@ export async function duplicateKey(bytes: Uint8Array, contentType: string): Prom
   return sha256Hex(stripMetadata(bytes, contentType));
 }
 
-/** @deprecated v0.19.0: stripMetadata, which takes out every private field, not only the location. */
-export const stripLocation = stripMetadata;
 
 const jpegSegment = (marker: number, data: Uint8Array) => concat([new Uint8Array([0xff, marker, (data.length + 2) >> 8, (data.length + 2) & 0xff]), data]);
 

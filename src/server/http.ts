@@ -43,7 +43,7 @@ const TITLE: Record<ErrorCode, string> = {
 };
 
 /** Where each code is explained: the README's Errors table, one anchor per code. */
-export const ERROR_TYPE_BASE = "https://github.com/DrDustinEdwards/site-api/blob/main/README.md#error-";
+const ERROR_TYPE_BASE = "https://github.com/DrDustinEdwards/site-api/blob/main/README.md#error-";
 
 export const BASE_HEADERS = {
   "cache-control": "no-store",

@@ -484,15 +484,6 @@ export function contentFiltersOf(adapter: SiteAdapter): ContentFilter[] {
   return CONTENT_FILTERS.filter((f) => offered.has(f));
 }
 
-/** @deprecated Since v0.2.0 capabilities depend on the adapter: use capabilitiesOf(adapter). */
-export const CAPABILITIES: Capabilities = {
-  content: true,
-  preview: true,
-  media: false,
-  inbox: false,
-  insight: false,
-  publications: false,
-};
 
 /**
  * A content version made from the fields that identify an item's own content: the first 32 hex
