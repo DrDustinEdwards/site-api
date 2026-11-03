@@ -6,7 +6,7 @@ import type { JsonSchema } from "./additive.js";
 const V0190_ITEM = ["acquireLicenseUrl", "copyright", "decorative", "licenseUrl"];
 
 /** The schemas v0.19.0 extends and the optional properties each gains. */
-export const V0190_ADDED: Record<string, string[]> = {
+const V0190_ADDED: Record<string, string[]> = {
   Capabilities: ["mediaUploadSuggestions"],
   Meta: [],
   MediaItem: V0190_ITEM,

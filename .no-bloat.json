@@ -3,9 +3,8 @@
     "measured_at": "fb94c86",
     "knip": {
       "Unused files": 1,
-      "Unused exports": 9,
-      "Unused exported types": 9,
-      "Duplicate exports": 1
+      "Unused exports": 6,
+      "Unused exported types": 9
     },
     "jscpd": {
       "clones": 24,
