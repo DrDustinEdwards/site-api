@@ -8,6 +8,7 @@ export function insightRoutes(insight: InsightAdapter): Route[] {
   return [
     {
       method: "GET",
+      query: true,
       pattern: /^\/insight\/not-found$/,
       run: async (_m, url) => {
         const query = readQuery(url, NotFoundQuery);

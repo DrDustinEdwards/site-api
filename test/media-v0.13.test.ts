@@ -12,7 +12,7 @@ import { sha256Hex } from "../src/media.js";
 import { stripMetadata } from "../src/media-upload.js";
 import { d1SiteApiStore, SITE_API_STORE_SQL, SITE_API_STORE_SQL_V0_21 } from "../src/store.js";
 import { d1 } from "./d1.js";
-import { KEY, ORIGIN, allow, body, png, req, site } from "./helpers.js";
+import { KEY, ORIGIN, allow, body, png, req, site, withDns } from "./helpers.js";
 
 function setup(options: MemoryAdapterOptions = {}) {
   const s = site(memoryAdapter(options));
@@ -139,7 +139,7 @@ describe("import (4)", () => {
       "https://photos.example.com/r/1": new Response(null, { status: 302, headers: { location: "/files/River%20at%20dusk.png" } }),
       "https://photos.example.com/files/River%20at%20dusk.png": new Response(png(30, 20) as Uint8Array<ArrayBuffer>, { headers: { "content-type": "image/png" } }),
     });
-    const { client, adapter } = setup({ mediaImportFetch: fetchRemote });
+    const { client, adapter } = setup({ mediaImportFetch: withDns(fetchRemote) });
     const item = await client.media.importUrl({ url: "https://photos.example.com/r/1", alt: "A river", changeId: "i1" });
     expect(item).toMatchObject({ filename: "River at dusk.png", alt: "A river", sourceUrl: "https://photos.example.com/r/1", url: `/media/${item.id}` });
     expect(adapter.mediaStore.get(item.id)!.revisions![0]!.reason).toBe("import");
@@ -150,12 +150,15 @@ describe("import (4)", () => {
       "https://bounce.example.com/a": new Response(null, { status: 301, headers: { location: "https://127.0.0.1/admin" } }),
       "https://pages.example.com/a": new Response("<html>", { headers: { "content-type": "text/html" } }),
     });
-    const { adapter, api } = setup({ mediaImportFetch: fetchRemote });
+    // v0.22.0: a name that resolves to a private address is refused at the fetch, after DNS, before the site is asked.
+    const { adapter, api } = setup({ mediaImportFetch: withDns(fetchRemote, { "127.0.0.1.nip.io": "127.0.0.1" }) });
     const upload = vi.spyOn(adapter.media!, "upload");
     const send = (url: string) => api.handle(req("/api/carrel/v1/media/import", { method: "POST", ...body({ url, alt: "A test picture", changeId: "i1" }) }));
     for (const url of ["http://example.com/a.png", "https://10.0.0.1/a.png", "https://[::1]/a.png", "https://localhost/a.png", "https://example.com:8443/a.png", "https://me:pw@example.com/a.png", "https://intranet/a.png"]) {
       expect((await send(url)).status, url).toBe(400);
     }
+    expect(fetchRemote).not.toHaveBeenCalled();
+    expect((await send("https://127.0.0.1.nip.io/a.png")).status).toBe(422);
     expect(fetchRemote).not.toHaveBeenCalled();
     expect((await send("https://bounce.example.com/a")).status).toBe(422);
     expect(fetchRemote).toHaveBeenCalledTimes(1);
@@ -300,15 +303,24 @@ describe("shrinking large pictures (11)", () => {
     expect(adapter.mediaStore.get(kept.id)!.revisions!.map((r) => r.reason)).toEqual(["upload", "resize"]);
   });
 
-  it("PLANT: refuses more files than one pass takes before the adapter, and offers no pass where addresses carry the size", async () => {
+  it("PLANT: refuses more files than one pass takes before the adapter, and where a replace keeps the size, a shrink that changes the proportions", async () => {
     const { adapter, api } = setup();
     const shrink = vi.spyOn(adapter.media!, "shrink");
     const items = Array.from({ length: 21 }, (_, n) => ({ id: `uploads/${n}.png`, expectedVersion: "m1", changeId: `p${n}` }));
     expect((await api.handle(req("/api/carrel/v1/media/resize-pass", { method: "POST", ...body({ items }) }))).status).toBe(400);
     expect(shrink).not.toHaveBeenCalled();
+    // v0.22.0: txasm's pages hold each picture's width and height, so a shrink in the same proportions is offered there.
     const keeps = setup({ mediaReplaceKeepsSize: true });
-    expect((await keeps.client.meta()).capabilities.mediaResizePass).toBeUndefined();
-    expect((await keeps.api.handle(req("/api/carrel/v1/media/resize-pass", { method: "POST", ...body({ items: items.slice(0, 1) }) }))).status).toBe(501);
+    expect((await keeps.client.meta()).capabilities.mediaResizePass).toBe(true);
+    const a = await keeps.put("a.png", png(4000, 3000), { resize: "no" });
+    const b = await keeps.put("b.png", png(4000, 3000, {}, 1), { resize: "no" });
+    const fair = keeps.adapter.media!.shrink!.bind(keeps.adapter.media);
+    vi.spyOn(keeps.adapter.media!, "shrink").mockImplementation(async (id, input) => {
+      const done = await fair(id, input);
+      return id === b.id ? { ...done, item: { ...done.item, height: done.item.width } } : done;
+    });
+    const pass = await keeps.client.media.resizePass({ items: [a, b].map((f, n) => ({ id: f.id, expectedVersion: f.version!, changeId: `k${n}` })) });
+    expect(pass.results).toMatchObject([{ ok: true, id: a.id, resized: true, width: 2048, height: 1536 }, { ok: false, id: b.id, error: "internal" }]);
   });
 });
 

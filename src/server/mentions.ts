@@ -20,6 +20,7 @@ export function mentionsRoutes(mentions: MentionsAdapter): Route[] {
   return [
     {
       method: "GET",
+      query: true,
       pattern: /^\/mentions$/,
       run: async (_m, url) => json(200, checked(MentionList, await mentions.list(readQuery(url, MentionListQuery)), "mentions list")),
     },
@@ -51,6 +52,7 @@ export function mentionsRoutes(mentions: MentionsAdapter): Route[] {
     },
     {
       method: "DELETE",
+      query: true,
       pattern: new RegExp(`^/mentions/${ID}$`),
       run: async (m, url) => {
         const id = mentionId(m);

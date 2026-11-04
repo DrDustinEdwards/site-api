@@ -2,8 +2,10 @@
 // every body; the adapter owns the site's storage, its rules and its render.
 
 import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
-import { CONTENT_FILTERS } from "./contract.js";
+import { CONTENT_FILTERS, PREVIEW_LINK_MAX_HOURS } from "./contract.js";
 import type {
+  Actor,
+  Backlink,
   Capabilities,
   ContentDoc,
   ContentFilter,
@@ -46,6 +48,11 @@ export interface ContentAdapter {
    */
   publishedAtSettable?: boolean;
   /**
+   * Optional (v0.22.0): true when items carry `hasDraft` (live, with a saved draft not yet published) and `list` treats
+   * such an item as published, a `status: "draft"` filter matching it too (capabilities.contentHasDraft).
+   */
+  hasDraft?: boolean;
+  /**
    * Optional (v0.17.0): the search and post fields the site renders from a post's frontmatter (capabilities.searchFields,
    * capabilities.postFields), each under its shared name in `@dustinedwards/site-api/frontmatter`. Absent: none.
    */
@@ -80,13 +87,13 @@ export interface ContentAdapter {
    * refuse. A site without it answers `DELETE /content/:id` with 501. The write and whatever the
    * site must do afterward (its cache purge, say) are one unit, so the site runs them together here.
    */
-  delete?(id: string, input: { expectedVersion: string; changeId: string }): Promise<void>;
+  delete?(id: string, input: { expectedVersion: string; changeId: string; actor?: Actor }): Promise<void>;
   /**
    * Optional (v0.6.0): sets the item's whole tag set, already unique, and returns the write like a
    * save does. Throws VersionConflictError, NotFoundError (checked first, for a missing id) or
    * RefusedError like the writes. A site without it answers `PUT /content/:id/tags` with 501.
    */
-  setTags?(id: string, input: { tags: string[]; expectedVersion: string; changeId: string }): Promise<WriteResult>;
+  setTags?(id: string, input: { tags: string[]; expectedVersion: string; changeId: string; actor?: Actor }): Promise<WriteResult>;
   /**
    * Optional (v0.17.0): moves the item to `newId`, its history with it, and, when it was ever published, keeps a permanent
    * (301) redirect from its old path to the new one; answers that old path as `previousPath` (null when never published).
@@ -100,8 +107,13 @@ export interface ContentAdapter {
    * item. Each throws like the writes. `list` then never lists a trashed item unless `trashed` is true, and then only
    * those. The package's `runSchedules` deletes items trashed more than TRASH_DAYS ago, through `delete`.
    */
-  trash?(id: string, input: { expectedVersion: string; changeId: string }): Promise<WriteResult>;
-  restore?(id: string, input: { expectedVersion: string; changeId: string }): Promise<WriteResult>;
+  trash?(id: string, input: { expectedVersion: string; changeId: string; actor?: Actor }): Promise<WriteResult>;
+  restore?(id: string, input: { expectedVersion: string; changeId: string; actor?: Actor }): Promise<WriteResult>;
+  /**
+   * Optional (v0.22.0, capabilities.backlinks): every other post that links to this one, so a delete or a trash warns with
+   * the list first. The package checks the id exists before it asks. Absent: `GET /content/:id/backlinks` answers 501.
+   */
+  backlinks?(id: string): Promise<Backlink[]>;
 }
 
 export interface PreviewAdapter {
@@ -155,6 +167,8 @@ export interface MediaAdapter {
   /**
    * Optional (v0.11.0): true when `replace` refuses new bytes whose picture is not the old one's size (RefusedError),
    * because the site's addresses or pages are sized by it. The package says so in capabilities.mediaReplaceKeepsSize.
+   * It does not rule out `shrink` (v0.22.0): a shrink that keeps the proportions still fits the boxes pages drew, and the
+   * package checks it did. A site whose addresses carry the size leaves `shrink` out.
    */
   replaceKeepsSize?: boolean;
   /**
@@ -278,7 +292,8 @@ export interface MediaAdapter {
   /**
    * Shrinks one stored picture to `resize` (capabilities.mediaResizePass), in place, keeping the old bytes where the site
    * keeps history. Throws VersionConflictError, NotFoundError or RefusedError like the writes; `resized: false` and the
-   * same version for a picture already within the size. Not offered on a site whose `replaceKeepsSize`.
+   * same version for a picture already within the size. On a site whose `replaceKeepsSize` (v0.22.0) the shrink must keep the
+   * picture's proportions and only make it smaller, which the package checks; a site whose addresses carry the size leaves it out.
    */
   shrink?(id: string, input: { expectedVersion: string; changeId: string }): Promise<{ resized: boolean; item: MediaItem }>;
   /**
@@ -363,13 +378,13 @@ export interface SchedulesAdapter {
    * Stores the update on a live item, replacing any update already waiting (a reschedule). The item stays live and
    * unchanged. Refuse (RefusedError) an item that is not live: the package sends only live items here.
    */
-  update(id: string, input: { source: string; publishAt: string; expectedVersion: string; changeId: string }): Promise<WriteResult>;
+  update(id: string, input: { source: string; publishAt: string; expectedVersion: string; changeId: string; actor?: Actor }): Promise<WriteResult>;
   /**
    * Cancels the schedule. A live item drops its waiting update and stays live; a scheduled item that was never live
    * returns to draft. Throws NotFoundError for a missing id (checked first), and RefusedError for an item with nothing
    * scheduled.
    */
-  cancel(id: string, input: { expectedVersion: string; changeId: string }): Promise<WriteResult>;
+  cancel(id: string, input: { expectedVersion: string; changeId: string; actor?: Actor }): Promise<WriteResult>;
   /** Every schedule due at `now`, scheduled items and live items' updates alike, oldest first, at most `limit`. */
   due(input: { now: Date; limit: number }): Promise<DueSchedule[]>;
   /**
@@ -424,7 +439,7 @@ export interface SiteAdapter {
  * Stage 2 implemented content and preview; v0.2.0 adds media for a site whose adapter has it. The
  * other groups answer 501 until their stage. `store` (v0.17.0): the site gave createSiteApi a store.
  */
-export function capabilitiesOf(adapter: SiteAdapter, options: { store?: boolean } = {}): Capabilities {
+export function capabilitiesOf(adapter: SiteAdapter, options: { store?: boolean; hooks?: readonly string[] } = {}): Capabilities {
   return {
     content: true,
     preview: true,
@@ -436,6 +451,7 @@ export function capabilitiesOf(adapter: SiteAdapter, options: { store?: boolean 
     ...(adapter.content.delete ? { contentDelete: true } : {}),
     ...(adapter.content.setTags ? { contentTags: true } : {}),
     ...(adapter.content.publishedAtSettable ? { contentPublishedAt: true } : {}),
+    ...(adapter.content.hasDraft ? { contentHasDraft: true } : {}),
     ...(adapter.content.rename ? { contentRename: true } : {}),
     ...(hasContentTrash(adapter) ? { contentTrash: true } : {}),
     ...(contentFiltersOf(adapter).length ? { contentFilters: contentFiltersOf(adapter) } : {}),
@@ -458,14 +474,16 @@ export function capabilitiesOf(adapter: SiteAdapter, options: { store?: boolean 
     ...(adapter.media?.history && adapter.media.revert ? { mediaHistory: true } : {}),
     ...(adapter.media?.changes ? { mediaChanges: true } : {}),
     ...(adapter.media?.resize ? { mediaResize: { ...adapter.media.resize } } : {}),
-    ...(adapter.media?.resize && adapter.media.shrink && !adapter.media.replaceKeepsSize ? { mediaResizePass: true } : {}),
+    ...(adapter.media?.resize && adapter.media.shrink ? { mediaResizePass: true } : {}),
     ...(adapter.media?.readsEmbedded ? { mediaEmbedded: true } : {}),
     ...(adapter.media?.suggest ? { mediaSuggestions: true } : {}),
     ...(adapter.media?.suggestFile ? { mediaUploadSuggestions: true } : {}),
     ...(adapter.mentions ? { mentions: true } : {}),
     ...(adapter.mentions?.reset ? { mentionReset: true } : {}),
     ...(adapter.schedules ? { scheduledUpdates: true } : {}),
-    ...(options.store ? { replay: true, previewLinks: true } : {}),
+    ...(options.store ? { replay: true, previewLinks: true, previewLinkHours: { max: PREVIEW_LINK_MAX_HOURS } } : {}),
+    ...(options.store && options.hooks?.length ? { hooks: [...options.hooks] } : {}),
+    ...(adapter.content.backlinks ? { backlinks: true } : {}),
     ...(adapter.renderVersion ? { render: { version: adapter.renderVersion } } : {}),
     ...(adapter.insight ? { insightNotFound: true } : {}),
   };
