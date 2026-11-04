@@ -65,8 +65,6 @@ const api = createSiteApi({
 if (api.matchesPreviewLink(request)) return api.servePreviewLink(request);
 ```
 
-**`onPageChange` is deprecated** in favor of `hooks: [indexNowHook(...)]`. A v0.9.0 site's `onPageChange: (paths, request) => submitIndexNow(...)` still works, and from v0.10.0 it also hears the pages a schedule changes, but it will be removed in a later breaking release; move to the hook.
-
 The guard runs in this order: prefix, rate limit, key, route.
 
 - **Prefix.** A request outside `/api/carrel/v1` is never served, whatever key it carries.
@@ -209,6 +207,10 @@ Additive: every v0.4.0 route and body is unchanged, and the schema hash and pack
 - **Sweep.** `POST /mentions/sweep` with `{ changeId }` removes the failed and rejected mentions past the site's own retention windows (dustinedwards.info: 30 days for failed, 90 for rejected; pending and approved ones never expire) and answers `{ changeId, removed: { failed, rejected } }`. It names no version because it is not about one mention, and the windows are the site's, not the package's.
 - **Versions.** A mention's `version` is opaque, like a content version, and must move whenever its status, its verification or its decision does, and not when another mention changes. A write with a version the site no longer holds is `409 version-conflict` with `currentVersion`; a missing mention is `404`. dustinedwards.info's table has no `updated_at` and no version column, so its adapter derives one: a hash of `status`, `received_at`, `verified_at` and `decided_at` (a re-send resets all three timestamps and the status, an approve or reject sets the status and `decided_at`). It checks the version and then writes with the same values in the `WHERE`, so a change between the check and the write matches no row and is reported as a conflict.
 - **Conformance** adds, for every site: the list in shape (or `501` where the site has no group), writes without the key or with a wrong one refused, a decide and a delete of an id no site holds refused (`404`, or `501` without the group), and, where the site has the group, a decide with a stale version refused on the first real mention, a sweep with no change id refused (`400`, before anything is removed), and an unknown status refused. It never decides, deletes or sweeps anything real.
+
+## Unreleased
+
+Breaking: `createSiteApi` no longer takes `onPageChange` (deprecated since v0.14.0). Pass `hooks: [indexNowHook(...)]` instead.
 
 ## Changes in v0.21.0
 

@@ -6,11 +6,11 @@ import { createSiteApi } from "../src/index.js";
 import { memoryAdapter } from "../src/testing.js";
 import { KEY, ORIGIN, allow } from "./helpers.js";
 
-describe("onPageChange (v0.9.0)", () => {
+describe("page changes (v0.9.0)", () => {
   it("names the page a publish, a live save, an unpublish and a delete change, never a draft's, and waits on nothing", async () => {
     const heard: string[][] = [];
     const pending: Promise<unknown>[] = [];
-    const api = createSiteApi({ adapter: memoryAdapter(), key: KEY, limiter: allow, log: () => {}, onPageChange: (paths) => void heard.push(paths) });
+    const api = createSiteApi({ adapter: memoryAdapter(), key: KEY, limiter: allow, log: () => {}, hooks: [{ name: "record", run: (e) => void heard.push([e.path]) }] });
     const fetch = (async (input: RequestInfo | URL, init?: RequestInit) =>
       api.handle(new Request(input, init), { waitUntil: (p) => pending.push(p) })) as typeof globalThis.fetch;
     const c = createSiteClient({ baseUrl: ORIGIN, key: KEY, fetch });
