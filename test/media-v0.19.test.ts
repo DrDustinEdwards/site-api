@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import { createSiteClient, SiteApiError } from "../src/client.js";
 import { memoryAdapter, type MemoryAdapterOptions } from "../src/testing.js";
-import { KEY, ORIGIN, png, req, site } from "./helpers.js";
+import { KEY, ORIGIN, png, req, site, withDns } from "./helpers.js";
 
 function setup(options: MemoryAdapterOptions = {}) {
   const s = site(memoryAdapter(options));
@@ -21,7 +21,7 @@ const refusal = (promise: Promise<unknown>) =>
 describe("alt at upload (B2, B3)", () => {
   it("PLANT: refuses an upload or an import with no alt and no decorative choice, or an alt that is the file's name, before the adapter", async () => {
     const remote = vi.fn(async () => new Response(png(4, 4) as Uint8Array<ArrayBuffer>, { headers: { "content-type": "image/png" } })) as unknown as typeof fetch;
-    const { adapter, client } = setup({ mediaImportFetch: remote });
+    const { adapter, client } = setup({ mediaImportFetch: withDns(remote) });
     const upload = vi.spyOn(adapter.media!, "upload");
     const file = { bytes: png(4, 4), contentType: "image/png", filename: "river-dusk.png", changeId: "u1" };
     expect(await refusal(client.media.upload(file))).toMatch(/^400 alt: Say what the picture shows/);
@@ -56,7 +56,7 @@ describe("alt at upload (B2, B3)", () => {
 describe("suggestions before an upload (B4)", () => {
   it("answers the model's alt text and tags for bytes or an import's address, storing nothing", async () => {
     const remote = vi.fn(async () => new Response(png(6, 6) as Uint8Array<ArrayBuffer>, { headers: { "content-type": "image/png" } })) as unknown as typeof fetch;
-    const { adapter, client } = setup({ mediaImportFetch: remote });
+    const { adapter, client } = setup({ mediaImportFetch: withDns(remote) });
     expect((await client.meta()).capabilities.mediaUploadSuggestions).toBe(true);
     const bytes = png(4, 4);
     expect(await client.media.suggestFile({ bytes, contentType: "image/png" })).toEqual({ tags: ["upload"], alt: `A picture of ${bytes.length} bytes.`, model: "memory-suggester" });

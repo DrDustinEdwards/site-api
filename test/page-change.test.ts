@@ -8,7 +8,7 @@ import { KEY, ORIGIN, allow } from "./helpers.js";
 
 describe("page changes (v0.9.0)", () => {
   it("names the page a publish, a live save, an unpublish and a delete change, never a draft's, and waits on nothing", async () => {
-    const heard: string[][] = [];
+    const heard: (string | null)[][] = [];
     const pending: Promise<unknown>[] = [];
     const api = createSiteApi({ adapter: memoryAdapter(), key: KEY, limiter: allow, log: () => {}, hooks: [{ name: "record", run: (e) => void heard.push([e.path]) }] });
     const fetch = (async (input: RequestInfo | URL, init?: RequestInit) =>
@@ -24,6 +24,7 @@ describe("page changes (v0.9.0)", () => {
     await Promise.all(pending);
 
     expect(heard).toEqual([["/blog/a"], ["/blog/a"], ["/blog/a"], ["/blog/a"], ["/blog/a"]]);
-    expect(pending).toHaveLength(6);
+    // The first save, to a draft never published, has no page to tell anyone of, so nothing waits on it.
+    expect(pending).toHaveLength(5);
   });
 });

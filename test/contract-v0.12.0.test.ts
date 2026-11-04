@@ -9,7 +9,7 @@ import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import * as contract from "../src/contract.js";
 import { additiveOnly, added, now, widened, type JsonSchema } from "./additive.js";
-import { V0170_CODES, V0170_ROUTES, V0170_SCHEMAS, V0170_WIDEN, withV0170 } from "./v0.17.0.js";
+import { V0170_CODES, V0170_ROUTES, V0170_SCHEMAS, V0170_WIDEN, V0220_ROUTES, withV0170, withV0220 } from "./v0.17.0.js";
 import { V0190_ROUTES, V0190_SCHEMAS, asOfV0190, withV0190 } from "./v0.19.0.js";
 
 const V0120 = JSON.parse(readFileSync(new URL("./fixtures/contract-v0.12.0.json", import.meta.url), "utf8")) as {
@@ -24,7 +24,7 @@ asOfV0190(V0120.schemas);
 const ITEM = ["color", "credit", "downloadUrl", "license", "licenseExpires", "placeholder", "sourceUrl", "takenAt", "usedCount"];
 
 /** Every v0.12.0 schema v0.13.0 and v0.17.0 extend, and exactly the optional properties each adds. */
-const ADDED: Record<string, string[]> = withV0190(withV0170({
+const ADDED: Record<string, string[]> = withV0220(withV0190(withV0170({
   Capabilities: [
     "mediaChanges", "mediaCredit", "mediaDuplicates", "mediaEmbedded", "mediaFilters", "mediaHistory", "mediaImport",
     "mediaResize", "mediaResizePass", "mediaSuggestions", "mediaTransform", "mediaUsage", "insightNotFound",
@@ -36,7 +36,7 @@ const ADDED: Record<string, string[]> = withV0190(withV0170({
   MediaList: ["changeCursor", "moreChanges", "removed"],
   MediaListQuery: ["changedSince", "kind", "orientation"],
   MediaUploadQuery: ["resize"],
-}), V0120.schemas);
+}), V0120.schemas), V0120.schemas);
 
 const NEW_LENSES = ["duplicates", "license-expired", "oversized"];
 
@@ -85,6 +85,7 @@ describe("the v0.12.0 contract", () => {
       ...V0170_ROUTES,
       "GET /insight/not-found",
       ...V0190_ROUTES,
+      ...V0220_ROUTES,
     ]);
   });
 
@@ -110,7 +111,7 @@ describe("the v0.12.0 contract", () => {
     widened(V0120.schemas.MediaLens!, now("MediaLens"), NEW_LENSES, "MediaLens");
   });
 
-  it("widens the error codes by in-progress (v0.17.0), and nothing else", () => {
+  it("widens the error codes by in-progress (v0.17.0) and unknown-field (v0.22.0), and nothing else", () => {
     widened(V0120.schemas.ErrorCode!, now("ErrorCode"), V0170_CODES, "ErrorCode");
   });
 

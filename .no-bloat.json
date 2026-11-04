@@ -1,6 +1,6 @@
 {
   "baseline": {
-    "measured_at": "fb94c86",
+    "measured_at": "c81b0b9",
     "knip": {
       "Unused files": 1,
       "Unused exports": 6,
@@ -9,16 +9,16 @@
     "jscpd": {
       "clones": 24,
       "lines": 364,
-      "percentage": 2.14
+      "percentage": 2
     },
     "tests": {
       "files": 29,
-      "cases": 272
+      "cases": 281
     },
     "comments": {
-      "lines": 1833,
-      "code": 11718,
-      "percentage": 13.53
+      "lines": 2058,
+      "code": 12610,
+      "percentage": 14.03
     }
   }
 }
