@@ -263,11 +263,11 @@ export const MediaList = z.object({
  */
 export const MediaUploadQuery = z.object({
   // A file name may not hold control characters, on purpose.
-  // oxlint-disable-next-line no-control-regex
   filename: z
     .string()
     .min(1)
     .max(200)
+    // oxlint-disable-next-line no-control-regex
     .regex(/^[^/\\\u0000-\u001f]+$/, "A file name, with no path"),
   /**
    * Required (v0.19.0) unless `decorative=yes`: what the picture shows, at most MAX_ALT_CHARS, never its file name, a bare
@@ -471,11 +471,11 @@ export const MediaResize = z.object({
 export const MediaImportInput = z.object({
   url: z.url({ protocol: /^https$/ }).max(2000),
   /** The name to keep; the last segment of the address when left out. */
-  // oxlint-disable-next-line no-control-regex
   filename: z
     .string()
     .min(1)
     .max(200)
+    // oxlint-disable-next-line no-control-regex
     .regex(/^[^/\\\u0000-\u001f]+$/, "A file name, with no path")
     .optional(),
   /** Required, or `decorative: true` (v0.19.0), as an upload's. */

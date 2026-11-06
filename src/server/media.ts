@@ -807,8 +807,8 @@ function nameOf(address: string): string {
     name = last;
   }
   // A file name may not hold control characters or a path, on purpose.
-  // oxlint-disable-next-line no-control-regex
   const plain = name
+    // oxlint-disable-next-line no-control-regex
     .replace(/[/\\\u0000-\u001f]+/g, "-")
     .trim()
     .slice(0, 200);
