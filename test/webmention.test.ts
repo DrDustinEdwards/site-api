@@ -20,12 +20,22 @@ describe("outboundLinks", () => {
         <a href='/own'>own</a> <a href="mailto:x@example.com">mail</a> <a href=https://b.example/two?x=1&amp;y=2>two</a>
         <a href="https://a.example/one">again</a>
       </div><a href="https://after.example/">after</a></div>`;
-    expect(outboundLinks(html, PAGE)).toEqual(["https://a.example/one", "https://b.example/two?x=1&y=2"]);
+    expect(outboundLinks(html, PAGE)).toEqual([
+      "https://a.example/one",
+      "https://b.example/two?x=1&y=2",
+    ]);
   });
 
   it("falls back to the article, then main, and to nothing", () => {
-    expect(outboundLinks(`<a href="https://x.example/">x</a><article><a href="https://a.example/">a</a></article>`, PAGE)).toEqual(["https://a.example/"]);
-    expect(outboundLinks(`<main><a href="https://m.example/">m</a></main>`, PAGE)).toEqual(["https://m.example/"]);
+    expect(
+      outboundLinks(
+        `<a href="https://x.example/">x</a><article><a href="https://a.example/">a</a></article>`,
+        PAGE,
+      ),
+    ).toEqual(["https://a.example/"]);
+    expect(outboundLinks(`<main><a href="https://m.example/">m</a></main>`, PAGE)).toEqual([
+      "https://m.example/",
+    ]);
     expect(outboundLinks(`<p><a href="https://x.example/">x</a></p>`, PAGE)).toEqual([]);
   });
 });
@@ -34,15 +44,48 @@ describe("outboundLinks", () => {
 describe("the outbound guard", () => {
   it("refuses local, loopback, private and link-local hosts in every spelling, other ports, and anything but http(s)", () => {
     for (const bad of [
-      "http://localhost/", "http://a.localhost/", "https://printer.local/", "http://127.0.0.1/", "http://2130706433/", "http://0x7f.1/",
-      "http://10.1.2.3/", "http://172.20.0.1/", "http://192.168.1.1/", "http://169.254.169.254/", "http://100.64.0.1/", "http://0.0.0.0/",
-      "http://[::1]/", "http://[fe80::1]/", "http://[fd00::1]/", "http://[::ffff:127.0.0.1]/", "ftp://example.com/", "file:///etc/passwd", "http://intranet/",
+      "http://localhost/",
+      "http://a.localhost/",
+      "https://printer.local/",
+      "http://127.0.0.1/",
+      "http://2130706433/",
+      "http://0x7f.1/",
+      "http://10.1.2.3/",
+      "http://172.20.0.1/",
+      "http://192.168.1.1/",
+      "http://169.254.169.254/",
+      "http://100.64.0.1/",
+      "http://0.0.0.0/",
+      "http://[::1]/",
+      "http://[fe80::1]/",
+      "http://[fd00::1]/",
+      "http://[::ffff:127.0.0.1]/",
+      "ftp://example.com/",
+      "file:///etc/passwd",
+      "http://intranet/",
       // IPv4 hidden in IPv6: compatible, translated, NAT64 of the metadata address, 6to4, Teredo; site-local; benchmarking.
-      "http://[::7f00:1]/", "http://[::ffff:0:7f00:1]/", "http://[64:ff9b::a9fe:a9fe]/", "http://[2002:7f00:1::]/", "http://[2001::1]/",
-      "http://[fec0::1]/", "http://198.18.0.1/", "http://192.0.0.1/",
-      "https://example.com:8443/", "http://example.com:22/", "https://user:pw@example.com/",
-    ]) expect(addressRefusal(bad, { allowHttp: true }), bad).not.toBeNull();
-    for (const good of ["https://example.com/", "http://8.8.8.8/x", "https://[2606:4700::1]/", "http://172.32.0.1/", "http://[64:ff9b::808:808]/", "http://[2002:808:808::]/", "https://example.com:443/"]) {
+      "http://[::7f00:1]/",
+      "http://[::ffff:0:7f00:1]/",
+      "http://[64:ff9b::a9fe:a9fe]/",
+      "http://[2002:7f00:1::]/",
+      "http://[2001::1]/",
+      "http://[fec0::1]/",
+      "http://198.18.0.1/",
+      "http://192.0.0.1/",
+      "https://example.com:8443/",
+      "http://example.com:22/",
+      "https://user:pw@example.com/",
+    ])
+      expect(addressRefusal(bad, { allowHttp: true }), bad).not.toBeNull();
+    for (const good of [
+      "https://example.com/",
+      "http://8.8.8.8/x",
+      "https://[2606:4700::1]/",
+      "http://172.32.0.1/",
+      "http://[64:ff9b::808:808]/",
+      "http://[2002:808:808::]/",
+      "https://example.com:443/",
+    ]) {
       expect(addressRefusal(good, { allowHttp: true }), good).toBeNull();
     }
     // The media import takes https only.
@@ -54,11 +97,19 @@ describe("the outbound guard", () => {
     const site = (async (input: RequestInfo | URL) => {
       const url = String(input);
       asked.push(url);
-      if (url === "https://hop.example/") return new Response(null, { status: 302, headers: { location: "https://127.0.0.1.nip.io/" } });
+      if (url === "https://hop.example/")
+        return new Response(null, {
+          status: 302,
+          headers: { location: "https://127.0.0.1.nip.io/" },
+        });
       return new Response("ok");
     }) as typeof fetch;
     const fetch = withDns(site, { "127.0.0.1.nip.io": "127.0.0.1", "v6.example": "fd00::1" });
-    for (const address of ["https://127.0.0.1.nip.io/", "https://v6.example/", "https://hop.example/"]) {
+    for (const address of [
+      "https://127.0.0.1.nip.io/",
+      "https://v6.example/",
+      "https://hop.example/",
+    ]) {
       await expect(guardedFetch(fetch, address), address).rejects.toBeInstanceOf(OutboundRefusal);
     }
     // The hop to the private name was refused before it was asked.
@@ -70,23 +121,40 @@ describe("the outbound guard", () => {
       fetched.push(String(input));
       return new Response(null, { status: 302, headers: { location: "https://self.example/" } });
     }) as typeof globalThis.fetch;
-    const refuse = (url: string) => (new URL(url).host === "self.example" ? "back onto this site" : null);
-    await expect(guardedFetch(withDns(back, {}), "https://public.example/", {}, { refuse })).rejects.toThrow("back onto this site");
-    await expect(guardedFetch(withDns(back, {}), "https://self.example/", {}, { refuse })).rejects.toThrow("back onto this site");
+    const refuse = (url: string) =>
+      new URL(url).host === "self.example" ? "back onto this site" : null;
+    await expect(
+      guardedFetch(withDns(back, {}), "https://public.example/", {}, { refuse }),
+    ).rejects.toThrow("back onto this site");
+    await expect(
+      guardedFetch(withDns(back, {}), "https://self.example/", {}, { refuse }),
+    ).rejects.toThrow("back onto this site");
     // The refused hop and the refused first address were never fetched, and a rule that answers "" still leaves the guard on.
     expect(fetched.filter((u) => !u.includes("dns-query"))).toEqual(["https://public.example/"]);
-    await expect(guardedFetch(fetch, "https://127.0.0.1.nip.io/", {}, { refuse: () => "" })).rejects.toBeInstanceOf(OutboundRefusal);
+    await expect(
+      guardedFetch(fetch, "https://127.0.0.1.nip.io/", {}, { refuse: () => "" }),
+    ).rejects.toBeInstanceOf(OutboundRefusal);
     const down = (async () => new Response("", { status: 503 })) as typeof globalThis.fetch;
-    await expect(guardedFetch(down, "https://public.example/")).rejects.toBeInstanceOf(OutboundRefusal);
+    await expect(guardedFetch(down, "https://public.example/")).rejects.toBeInstanceOf(
+      OutboundRefusal,
+    );
   });
 });
 
 describe("endpointOf", () => {
   it("takes the Link header first, then the first link or a with rel webmention in document order, resolved", () => {
-    expect(endpointOf('<https://e.example/other>; rel="other", </wm>; rel="webmention me"', "", "https://t.example/p")).toBe("https://t.example/wm");
+    expect(
+      endpointOf(
+        '<https://e.example/other>; rel="other", </wm>; rel="webmention me"',
+        "",
+        "https://t.example/p",
+      ),
+    ).toBe("https://t.example/wm");
     const html = `<!-- <link rel="webmention" href="/commented"> --><script>"<link rel='webmention' href='/script'>"</script><a rel="nofollow webmention" href="/first">x</a><link rel="webmention" href="/second">`;
     expect(endpointOf(null, html, "https://t.example/p")).toBe("https://t.example/first");
-    expect(endpointOf(null, `<link rel="webmention" href="">`, "https://t.example/p?q=1")).toBe("https://t.example/p?q=1");
+    expect(endpointOf(null, `<link rel="webmention" href="">`, "https://t.example/p?q=1")).toBe(
+      "https://t.example/p?q=1",
+    );
     expect(endpointOf(null, "<p>none</p>", "https://t.example/p")).toBeNull();
   });
 });
@@ -97,11 +165,18 @@ describe("webmentionHook", () => {
     const sent: string[] = [];
     const pages: Record<string, () => Response> = {
       // The page is read under the change's own query, past a stale edge copy at the bare address.
-      [`${PAGE}?webmention=c1`]: () => new Response(post, { headers: { "content-type": "text/html" } }),
-      "https://a.example/1": () => new Response("", { status: 301, headers: { location: "https://a.example/moved" } }),
-      "https://a.example/moved": () => new Response('<link rel="webmention" href="/wm">', { headers: { "content-type": "text/html" } }),
-      "https://b.example/2": () => new Response("", { headers: { link: '<http://10.0.0.1/wm>; rel="webmention"' } }),
-      "https://c.example/3": () => new Response("", { headers: { link: '<https://c.example/wm>; rel="webmention"' } }),
+      [`${PAGE}?webmention=c1`]: () =>
+        new Response(post, { headers: { "content-type": "text/html" } }),
+      "https://a.example/1": () =>
+        new Response("", { status: 301, headers: { location: "https://a.example/moved" } }),
+      "https://a.example/moved": () =>
+        new Response('<link rel="webmention" href="/wm">', {
+          headers: { "content-type": "text/html" },
+        }),
+      "https://b.example/2": () =>
+        new Response("", { headers: { link: '<http://10.0.0.1/wm>; rel="webmention"' } }),
+      "https://c.example/3": () =>
+        new Response("", { headers: { link: '<https://c.example/wm>; rel="webmention"' } }),
     };
     const fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
@@ -112,16 +187,33 @@ describe("webmentionHook", () => {
       return pages[url]?.() ?? new Response("", { status: 404 });
     }) as typeof globalThis.fetch;
     const logs: Array<Record<string, unknown>> = [];
-    const hook = webmentionHook({ store: d1SiteApiStore(d1(SITE_API_STORE_SQL)), fetch: withDns(fetch), log: (e) => logs.push(e) });
-    const event = (action: "publish" | "update" | "delete", status?: "published") => ({ action, id: "a", path: "/blog/a", url: PAGE, trigger: "request" as const, changeId: "c1", ...(status ? { status } : {}) });
+    const hook = webmentionHook({
+      store: d1SiteApiStore(d1(SITE_API_STORE_SQL)),
+      fetch: withDns(fetch),
+      log: (e) => logs.push(e),
+    });
+    const event = (action: "publish" | "update" | "delete", status?: "published") => ({
+      action,
+      id: "a",
+      path: "/blog/a",
+      url: PAGE,
+      trigger: "request" as const,
+      changeId: "c1",
+      ...(status ? { status } : {}),
+    });
 
     await hook.run(event("publish", "published"));
     expect(sent).toEqual(["https://a.example/wm https://a.example/1"]);
-    expect(logs).toContainEqual(expect.objectContaining({ target: "https://b.example/2", result: "refused endpoint" }));
+    expect(logs).toContainEqual(
+      expect.objectContaining({ target: "https://b.example/2", result: "refused endpoint" }),
+    );
 
     post = `<article><a href="https://c.example/3">c</a></article>`;
     await hook.run(event("update", "published"));
-    expect(sent.slice(1)).toEqual(["https://c.example/wm https://c.example/3", "https://a.example/wm https://a.example/1"]);
+    expect(sent.slice(1)).toEqual([
+      "https://c.example/wm https://c.example/3",
+      "https://a.example/wm https://a.example/1",
+    ]);
 
     await hook.run(event("delete"));
     expect(sent.slice(3)).toEqual(["https://c.example/wm https://c.example/3"]);

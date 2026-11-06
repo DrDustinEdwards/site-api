@@ -59,7 +59,9 @@ export const MentionList = z.object({
   /** What a sweep would remove now, by status (the site's retention windows). */
   expiring: z.object({ failed: z.number().int().min(0), rejected: z.number().int().min(0) }),
   /** The filters of v0.6.0 the site applied, echoed. Absent: the site did not filter by q or targetId. */
-  filtered: z.object({ q: z.string().max(200).optional(), targetId: z.string().max(300).optional() }).optional(),
+  filtered: z
+    .object({ q: z.string().max(200).optional(), targetId: z.string().max(300).optional() })
+    .optional(),
 });
 
 /** `reset` (v0.6.0, optional per site) takes an approved or rejected mention back to pending, so a decision can be undone. */

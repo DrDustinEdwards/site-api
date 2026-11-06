@@ -27,11 +27,18 @@ export async function claim(
   path: string,
   cap: number,
   log: Log,
-): Promise<{ answer: Response } | { request: Request; finish?: (response: Response) => Promise<void> }> {
+): Promise<
+  { answer: Response } | { request: Request; finish?: (response: Response) => Promise<void> }
+> {
   const read = await readUpload(request, { maxBytes: cap, types: [] });
-  if (!read.ok && read.refusal.code === "too-large") return { answer: fail("too-large", "The body is too large.") };
+  if (!read.ok && read.refusal.code === "too-large")
+    return { answer: fail("too-large", "The body is too large.") };
   const bytes = read.ok ? read.bytes : new Uint8Array();
-  const rebuilt = new Request(request.url, { method: request.method, headers: request.headers, ...(bytes.byteLength > 0 ? { body: bytes as Uint8Array<ArrayBuffer> } : {}) });
+  const rebuilt = new Request(request.url, {
+    method: request.method,
+    headers: request.headers,
+    ...(bytes.byteLength > 0 ? { body: bytes as Uint8Array<ArrayBuffer> } : {}),
+  });
 
   const url = new URL(request.url);
   const changeId = url.searchParams.get("changeId") ?? changeIdIn(bytes);
@@ -47,20 +54,40 @@ export async function claim(
   const now = Date.now();
   let held;
   try {
-    held = await store.claimWrite(changeId, { route, requestHash, at: new Date(now).toISOString(), staleBefore: new Date(now - STALE_CLAIM_MS).toISOString() });
+    held = await store.claimWrite(changeId, {
+      route,
+      requestHash,
+      at: new Date(now).toISOString(),
+      staleBefore: new Date(now - STALE_CLAIM_MS).toISOString(),
+    });
   } catch (error) {
     // A write whose claim could not be made could run twice, so it does not run at all.
     log({ siteApi: "replay-store-failed", error: String(error) });
     return { answer: fail("unavailable", "The site API is unavailable.") };
   }
   if (held) {
-    if (held.route !== route || held.requestHash !== requestHash) return { answer: fail("refused", "This change id was already used for a different request.") };
-    if (held.state === "running") return { answer: fail("in-progress", "A write under this change id is still running. Send it again once it has answered.") };
+    if (held.route !== route || held.requestHash !== requestHash)
+      return {
+        answer: fail("refused", "This change id was already used for a different request."),
+      };
+    if (held.state === "running")
+      return {
+        answer: fail(
+          "in-progress",
+          "A write under this change id is still running. Send it again once it has answered.",
+        ),
+      };
     const ok = held.status! >= 200 && held.status! < 300;
     return {
       answer: new Response(held.response, {
         status: held.status!,
-        headers: { ...BASE_HEADERS, "content-type": ok ? "application/json; charset=utf-8" : "application/problem+json; charset=utf-8", "idempotent-replayed": "true" },
+        headers: {
+          ...BASE_HEADERS,
+          "content-type": ok
+            ? "application/json; charset=utf-8"
+            : "application/problem+json; charset=utf-8",
+          "idempotent-replayed": "true",
+        },
       }),
     };
   }
@@ -72,7 +99,11 @@ export async function claim(
       // turn into a success) frees the id, so a retry runs again.
       const kept = response.ok || response.status === 409 || response.status === 422;
       try {
-        if (kept) await store.finishWrite(changeId, { status: response.status, response: await response.clone().text() });
+        if (kept)
+          await store.finishWrite(changeId, {
+            status: response.status,
+            response: await response.clone().text(),
+          });
         else await store.releaseWrite(changeId);
       } catch (error) {
         log({ siteApi: "replay-store-failed", changeId, error: String(error) });

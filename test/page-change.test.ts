@@ -10,14 +10,30 @@ describe("page changes (v0.9.0)", () => {
   it("names the page a publish, a live save, an unpublish and a delete change, never a draft's, and waits on nothing", async () => {
     const heard: (string | null)[][] = [];
     const pending: Promise<unknown>[] = [];
-    const api = createSiteApi({ adapter: memoryAdapter(), key: KEY, limiter: allow, log: () => {}, hooks: [{ name: "record", run: (e) => void heard.push([e.path]) }] });
+    const api = createSiteApi({
+      adapter: memoryAdapter(),
+      key: KEY,
+      limiter: allow,
+      log: () => {},
+      hooks: [{ name: "record", run: (e) => void heard.push([e.path]) }],
+    });
     const fetch = (async (input: RequestInfo | URL, init?: RequestInit) =>
-      api.handle(new Request(input, init), { waitUntil: (p) => pending.push(p) })) as typeof globalThis.fetch;
+      api.handle(new Request(input, init), {
+        waitUntil: (p) => pending.push(p),
+      })) as typeof globalThis.fetch;
     const c = createSiteClient({ baseUrl: ORIGIN, key: KEY, fetch });
 
-    const draft = await c.saveDraft("a", { source: "# A\n", expectedVersion: null, changeId: "c1" });
+    const draft = await c.saveDraft("a", {
+      source: "# A\n",
+      expectedVersion: null,
+      changeId: "c1",
+    });
     const live = await c.publish("a", { expectedVersion: draft.version, changeId: "c2" });
-    const edited = await c.saveDraft("a", { source: "# A, edited\n", expectedVersion: live.version, changeId: "c3" });
+    const edited = await c.saveDraft("a", {
+      source: "# A, edited\n",
+      expectedVersion: live.version,
+      changeId: "c3",
+    });
     const down = await c.unpublish("a", { expectedVersion: edited.version, changeId: "c4" });
     const again = await c.publish("a", { expectedVersion: down.version, changeId: "c5" });
     await c.delete("a", { expectedVersion: again.version, changeId: "c6" });

@@ -10,7 +10,16 @@ import type { ContentStatus } from "./contract.js";
  * delete: it was deleted. v0.17.0: trash and restore (to and from the content trash), rename (a move to a new id, its
  * old path redirecting), schedule and unschedule (a schedule made or canceled, nothing changed yet).
  */
-export type PublishAction = "publish" | "update" | "unpublish" | "delete" | "trash" | "restore" | "rename" | "schedule" | "unschedule";
+export type PublishAction =
+  | "publish"
+  | "update"
+  | "unpublish"
+  | "delete"
+  | "trash"
+  | "restore"
+  | "rename"
+  | "schedule"
+  | "unschedule";
 
 export interface PublishEvent {
   action: PublishAction;
@@ -48,7 +57,14 @@ export interface PublishHook {
 }
 
 /** What a hook with no `on` hears, each only when it changed a public page. */
-export const PAGE_ACTIONS: readonly PublishAction[] = ["publish", "update", "unpublish", "delete", "trash", "rename"];
+export const PAGE_ACTIONS: readonly PublishAction[] = [
+  "publish",
+  "update",
+  "unpublish",
+  "delete",
+  "trash",
+  "rename",
+];
 
 /** Whether a hook hears the event: one it names, or with no `on`, a page action that changed a public page. */
 export function hears(hook: PublishHook, event: PublishEvent): boolean {
@@ -56,7 +72,8 @@ export function hears(hook: PublishHook, event: PublishEvent): boolean {
   // No page, no page change (v0.22.0): only a hook that names schedule or unschedule hears one without a path.
   if (event.path === null) return false;
   if (!PAGE_ACTIONS.includes(event.action)) return false;
-  const live = event.action === "publish" || event.action === "update" ? event.status : event.previousStatus;
+  const live =
+    event.action === "publish" || event.action === "update" ? event.status : event.previousStatus;
   // An event that does not say (a site's own runHooks call before v0.17.0) is taken as a page change, as it was then.
   return live === undefined || live === "published";
 }
@@ -74,23 +91,34 @@ export async function runHooks(
 ): Promise<void> {
   const { request: _r, ...logged } = event;
   await Promise.all(
-    hooks.filter((hook) => hears(hook, event)).map(async (hook) => {
-      let error: string | null;
-      try {
-        error = (await hook.run(event)) === false ? "the hook reported a failure" : null;
-      } catch (thrown) {
-        error = thrown instanceof Error ? thrown.message : String(thrown);
-      }
-      await ran?.(hook, error === null).catch((e) => log({ siteApi: "hook-run-not-kept", hook: hook.name, error: String(e) }));
-      if (error === null) return;
-      log({ siteApi: "hook-failed", hook: hook.name, ...logged, error });
-      await failed?.(hook, error).catch((e) => log({ siteApi: "hook-retry-failed", hook: hook.name, error: String(e) }));
-    }),
+    hooks
+      .filter((hook) => hears(hook, event))
+      .map(async (hook) => {
+        let error: string | null;
+        try {
+          error = (await hook.run(event)) === false ? "the hook reported a failure" : null;
+        } catch (thrown) {
+          error = thrown instanceof Error ? thrown.message : String(thrown);
+        }
+        await ran?.(hook, error === null).catch((e) =>
+          log({ siteApi: "hook-run-not-kept", hook: hook.name, error: String(e) }),
+        );
+        if (error === null) return;
+        log({ siteApi: "hook-failed", hook: hook.name, ...logged, error });
+        await failed?.(hook, error).catch((e) =>
+          log({ siteApi: "hook-retry-failed", hook: hook.name, error: String(e) }),
+        );
+      }),
   );
 }
 
 /** The shape of Prelum's `submitIndexNow` (`@drdustinedwards/site-helpers/indexnow`), which the site passes in. */
-export type SubmitIndexNow = (input: { origin: string; key: string; urls: string[]; from?: string }) => Promise<boolean>;
+export type SubmitIndexNow = (input: {
+  origin: string;
+  key: string;
+  urls: string[];
+  from?: string;
+}) => Promise<boolean>;
 
 /**
  * The IndexNow hook: tells search engines the changed page, through Prelum's `submitIndexNow`. The site passes the
@@ -98,7 +126,11 @@ export type SubmitIndexNow = (input: { origin: string; key: string; urls: string
  * preview, localhost) sends nothing and is not a failure; a schedule has no request, so it always sends. Prelum resolves
  * false when the engines refuse or cannot be reached, which the hook runner logs.
  */
-export function indexNowHook(options: { submit: SubmitIndexNow; key: string; origin: string }): PublishHook {
+export function indexNowHook(options: {
+  submit: SubmitIndexNow;
+  key: string;
+  origin: string;
+}): PublishHook {
   return {
     name: "indexnow",
     run: (event) => {

@@ -20,9 +20,9 @@ npm builds `dist/` on install through the `prepare` script.
 import { createSiteApi } from "@dustinedwards/site-api";
 
 const api = createSiteApi({
-  adapter: mySiteAdapter(env),     // the site's own storage and render
-  key: env.CARREL_SITE_KEY,        // wrangler secret put CARREL_SITE_KEY
-  limiter: env.CARREL_RATE_LIMIT,  // a Workers `ratelimit` binding
+  adapter: mySiteAdapter(env), // the site's own storage and render
+  key: env.CARREL_SITE_KEY, // wrangler secret put CARREL_SITE_KEY
+  limiter: env.CARREL_RATE_LIMIT, // a Workers `ratelimit` binding
 });
 
 if (api.matches(request)) return api.handle(request, ctx);
@@ -40,7 +40,9 @@ const api = createSiteApi({
 });
 
 export default {
-  fetch(request, env, ctx) { /* ...as above */ },
+  fetch(request, env, ctx) {
+    /* ...as above */
+  },
   // wrangler.jsonc: "triggers": { "crons": ["* * * * *"] }
   scheduled(controller, env, ctx) {
     ctx.waitUntil(api.runSchedules({ now: new Date(controller.scheduledTime) }));
@@ -54,11 +56,11 @@ From v0.17.0 a site with D1 also passes the package a store, for safe retries, p
 import { webmentionHook } from "@dustinedwards/site-api";
 import { d1SiteApiStore } from "@dustinedwards/site-api/store";
 
-const store = d1SiteApiStore(env.DB);              // migration: SITE_API_STORE_SQL (v0.22.0: SITE_API_STORE_SQL_V0_19 after it)
+const store = d1SiteApiStore(env.DB); // migration: SITE_API_STORE_SQL (v0.22.0: SITE_API_STORE_SQL_V0_19 after it)
 const api = createSiteApi({
   // ...as above
   store,
-  hooks: [indexNowHook({ /* ... */ }), webmentionHook({ store })],
+  hooks: [indexNowHook({/* ... */}), webmentionHook({ store })],
 });
 
 // in fetch, before the handler:
@@ -90,59 +92,59 @@ Each site must use its own `namespace_id`, never one another site uses. Sites in
 
 All paths sit under `/api/carrel/v1`. Bodies are JSON, checked on the way in and on the way out. An adapter that answers outside the contract is reported as a site failure, and its body is never passed on.
 
-| Group | Route | Body in | Answer |
-|---|---|---|---|
-| meta | `GET /meta` | | `Meta`: package version, schema hash, site, capabilities |
-| content | `GET /content?status&q&sort&dir&kind&tag&author&publishedAfter&publishedBefore&trashed&cursor&limit` | | `ContentList`, with `total` and `sorted` where the site gives them (`sort` and `dir` are v0.6.0; the filters and `trashed` v0.17.0) |
-| content | `GET /content/:id` | | `ContentDoc`: summary, markdown source, version |
-| content | `PUT /content/:id/draft` | `SaveDraftInput` | `WriteResult` |
-| content | `POST /content/:id/publish` | `PublishInput` | `WriteResult` |
-| content | `POST /content/:id/schedule` | `ScheduleInput` | `WriteResult`; on a live item, a scheduled update (v0.10.0) |
-| content | `GET /content/:id/schedule` | | `ScheduledUpdate`: the update waiting on a live item, with its source (v0.10.0, optional per site) |
-| content | `DELETE /content/:id/schedule?expectedVersion&changeId` | | `WriteResult` (v0.10.0, optional per site) |
-| content | `POST /content/:id/unpublish` | `UnpublishInput` | `WriteResult` |
-| content | `GET /content/:id/revisions` | | `RevisionList`, newest first |
-| content | `GET /content/:id/diff?from&to` | | `Diff`: a unified patch; `to` defaults to current |
-| content | `GET /content/:id/revisions/:version` | | `RevisionSource`: the source as it was at that version (v0.3.0) |
-| content | `DELETE /content/:id?expectedVersion&changeId` | | `ContentDeleteResult` (v0.3.0, optional per site: `501` where the adapter has no `delete`) |
-| content | `PUT /content/:id/tags` | `ContentTagsInput` | `WriteResult` (v0.6.0, optional per site: `501` where the adapter has no `setTags`) |
-| content | `POST /content/:id/rename` | `RenameInput` | `RenameResult` (v0.17.0, optional per site) |
-| content | `POST /content/:id/trash` | `ContentTrashInput` | `WriteResult` (v0.17.0, optional per site) |
-| content | `POST /content/:id/restore` | `ContentTrashInput` | `WriteResult`, always a draft (v0.17.0, optional per site) |
-| content | `GET /content/:id/backlinks` | | `BacklinkList`: the posts that link to this one (v0.22.0, optional per site) |
-| hooks | `GET /hooks/recent?changeId` | | `HookRunList`: each publish hook's run for that change (v0.22.0, with a store) |
-| preview | `POST /preview` | `PreviewInput` | the full page HTML from the site's own pipeline |
-| preview | `POST /preview-links` | `PreviewLinkInput` | `201 PreviewLink` (v0.17.0, with a store) |
-| preview | `GET /preview-links?id` | | `PreviewLinkList` (v0.17.0, with a store) |
-| preview | `DELETE /preview-links/:linkId?changeId` | | `PreviewLinkRevokeResult` (v0.17.0, with a store) |
-| media | `GET /media?q&tag&trashed&lens&sort&dir&orientation&kind&cursor&limit` | | `MediaList` (`tag` and `trashed=only` are v0.4.0; `lens`, `sort`, `dir`, `total` and `sorted` v0.6.0; `orientation`, `kind` and `changeCursor` v0.13.0) |
-| media | `GET /media?changedSince&limit` | | `MediaList` of the files changed since, with `removed` and `moreChanges` (v0.13.0, optional) |
-| media | `POST /media?filename&alt&decorative&resize&changeId` | the file's own bytes, typed by `Content-Type` | `201 MediaUploadResult`, or `200` with `duplicateOf` (`resize` and the answer's extras are v0.13.0; `alt` or `decorative=yes` required from v0.19.0) |
-| media | `POST /media/import` | `MediaImportInput` | `201 MediaUploadResult`, or `200` with `duplicateOf` (v0.13.0, optional) |
-| media | `POST /media/suggestions?url` | the file's own bytes, or none with `url` | `MediaFileSuggestions`: the site's model's alt text and tags before an upload, nothing stored (v0.19.0, optional) |
-| media | `GET /media/:id` | | `MediaDetail`: the file and every place it is used |
-| media | `DELETE /media/:id?changeId` | | `MediaDeleteResult`, or `422 refused` naming each use |
-| media | `PUT /media/:id/alt` | `MediaAltInput` | `MediaWriteResult` (v0.4.0, optional) |
-| media | `PUT /media/:id/tags` | `MediaTagsInput` | `MediaWriteResult` (v0.4.0, optional) |
-| media | `PUT /media/:id/focus` | `MediaFocusInput` | `MediaWriteResult` (v0.10.1, optional) |
-| media | `PUT /media/:id/caption` | `MediaCaptionInput` | `MediaWriteResult` (v0.10.1, optional) |
-| media | `PUT /media/:id/file?filename&expectedVersion&changeId` | the new bytes, typed by `Content-Type` | `MediaReplaceResult` (v0.10.1, optional) |
-| media | `PUT /media/:id/credit` | `MediaCreditInput` | `MediaWriteResult` (v0.13.0, optional) |
-| media | `POST /media/:id/transform` | `MediaTransformInput` | `MediaTransformResult` (v0.13.0, optional) |
-| media | `GET /media/:id/history` | | `MediaHistory`: the file's bytes, newest first (v0.13.0, optional) |
-| media | `POST /media/:id/revert` | `MediaRevertInput` | `MediaTransformResult` (v0.13.0, optional) |
-| media | `GET /media/:id/suggestions` | | `MediaSuggestions`: the site's model's tags and alt text, never applied (v0.13.0, optional) |
-| media | `POST /media/:id/trash` | `MediaTrashInput` | `MediaWriteResult` (v0.4.0, optional) |
-| media | `POST /media/:id/restore` | `MediaTrashInput` | `MediaWriteResult` (v0.4.0, optional) |
-| media | `POST /media/trash/empty` | `MediaTrashEmptyInput` | `MediaTrashEmptyResult` (v0.4.0, optional) |
-| media | `POST /media/bulk` | `MediaBulkInput` | `MediaBulkResult` (v0.4.0, optional) |
-| media | `POST /media/resize-pass` | `MediaResizePassInput` | `MediaResizePassResult`, one outcome per file (v0.13.0, optional) |
-| mentions | `GET /mentions?status&q&targetId&cursor&limit` | | `MentionList` with the whole queue's `counts` and what a sweep would remove (v0.5.0, optional per site) |
-| mentions | `POST /mentions/:id/decide` | `MentionDecideInput` | `MentionWriteResult` (v0.5.0) |
-| mentions | `DELETE /mentions/:id?expectedVersion&changeId` | | `MentionDeleteResult` (v0.5.0) |
-| mentions | `POST /mentions/sweep` | `MentionSweepInput` | `MentionSweepResult` (v0.5.0) |
-| insight | `GET /insight/not-found?days&limit&includeProbes` | | `NotFoundReport`: the site's most-hit missing paths and who linked to them (v0.16.0, optional per site) |
-| inbox, insight, publications | `/*` | | `501` until their stage |
+| Group                        | Route                                                                                                | Body in                                       | Answer                                                                                                                                                  |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------- | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| meta                         | `GET /meta`                                                                                          |                                               | `Meta`: package version, schema hash, site, capabilities                                                                                                |
+| content                      | `GET /content?status&q&sort&dir&kind&tag&author&publishedAfter&publishedBefore&trashed&cursor&limit` |                                               | `ContentList`, with `total` and `sorted` where the site gives them (`sort` and `dir` are v0.6.0; the filters and `trashed` v0.17.0)                     |
+| content                      | `GET /content/:id`                                                                                   |                                               | `ContentDoc`: summary, markdown source, version                                                                                                         |
+| content                      | `PUT /content/:id/draft`                                                                             | `SaveDraftInput`                              | `WriteResult`                                                                                                                                           |
+| content                      | `POST /content/:id/publish`                                                                          | `PublishInput`                                | `WriteResult`                                                                                                                                           |
+| content                      | `POST /content/:id/schedule`                                                                         | `ScheduleInput`                               | `WriteResult`; on a live item, a scheduled update (v0.10.0)                                                                                             |
+| content                      | `GET /content/:id/schedule`                                                                          |                                               | `ScheduledUpdate`: the update waiting on a live item, with its source (v0.10.0, optional per site)                                                      |
+| content                      | `DELETE /content/:id/schedule?expectedVersion&changeId`                                              |                                               | `WriteResult` (v0.10.0, optional per site)                                                                                                              |
+| content                      | `POST /content/:id/unpublish`                                                                        | `UnpublishInput`                              | `WriteResult`                                                                                                                                           |
+| content                      | `GET /content/:id/revisions`                                                                         |                                               | `RevisionList`, newest first                                                                                                                            |
+| content                      | `GET /content/:id/diff?from&to`                                                                      |                                               | `Diff`: a unified patch; `to` defaults to current                                                                                                       |
+| content                      | `GET /content/:id/revisions/:version`                                                                |                                               | `RevisionSource`: the source as it was at that version (v0.3.0)                                                                                         |
+| content                      | `DELETE /content/:id?expectedVersion&changeId`                                                       |                                               | `ContentDeleteResult` (v0.3.0, optional per site: `501` where the adapter has no `delete`)                                                              |
+| content                      | `PUT /content/:id/tags`                                                                              | `ContentTagsInput`                            | `WriteResult` (v0.6.0, optional per site: `501` where the adapter has no `setTags`)                                                                     |
+| content                      | `POST /content/:id/rename`                                                                           | `RenameInput`                                 | `RenameResult` (v0.17.0, optional per site)                                                                                                             |
+| content                      | `POST /content/:id/trash`                                                                            | `ContentTrashInput`                           | `WriteResult` (v0.17.0, optional per site)                                                                                                              |
+| content                      | `POST /content/:id/restore`                                                                          | `ContentTrashInput`                           | `WriteResult`, always a draft (v0.17.0, optional per site)                                                                                              |
+| content                      | `GET /content/:id/backlinks`                                                                         |                                               | `BacklinkList`: the posts that link to this one (v0.22.0, optional per site)                                                                            |
+| hooks                        | `GET /hooks/recent?changeId`                                                                         |                                               | `HookRunList`: each publish hook's run for that change (v0.22.0, with a store)                                                                          |
+| preview                      | `POST /preview`                                                                                      | `PreviewInput`                                | the full page HTML from the site's own pipeline                                                                                                         |
+| preview                      | `POST /preview-links`                                                                                | `PreviewLinkInput`                            | `201 PreviewLink` (v0.17.0, with a store)                                                                                                               |
+| preview                      | `GET /preview-links?id`                                                                              |                                               | `PreviewLinkList` (v0.17.0, with a store)                                                                                                               |
+| preview                      | `DELETE /preview-links/:linkId?changeId`                                                             |                                               | `PreviewLinkRevokeResult` (v0.17.0, with a store)                                                                                                       |
+| media                        | `GET /media?q&tag&trashed&lens&sort&dir&orientation&kind&cursor&limit`                               |                                               | `MediaList` (`tag` and `trashed=only` are v0.4.0; `lens`, `sort`, `dir`, `total` and `sorted` v0.6.0; `orientation`, `kind` and `changeCursor` v0.13.0) |
+| media                        | `GET /media?changedSince&limit`                                                                      |                                               | `MediaList` of the files changed since, with `removed` and `moreChanges` (v0.13.0, optional)                                                            |
+| media                        | `POST /media?filename&alt&decorative&resize&changeId`                                                | the file's own bytes, typed by `Content-Type` | `201 MediaUploadResult`, or `200` with `duplicateOf` (`resize` and the answer's extras are v0.13.0; `alt` or `decorative=yes` required from v0.19.0)    |
+| media                        | `POST /media/import`                                                                                 | `MediaImportInput`                            | `201 MediaUploadResult`, or `200` with `duplicateOf` (v0.13.0, optional)                                                                                |
+| media                        | `POST /media/suggestions?url`                                                                        | the file's own bytes, or none with `url`      | `MediaFileSuggestions`: the site's model's alt text and tags before an upload, nothing stored (v0.19.0, optional)                                       |
+| media                        | `GET /media/:id`                                                                                     |                                               | `MediaDetail`: the file and every place it is used                                                                                                      |
+| media                        | `DELETE /media/:id?changeId`                                                                         |                                               | `MediaDeleteResult`, or `422 refused` naming each use                                                                                                   |
+| media                        | `PUT /media/:id/alt`                                                                                 | `MediaAltInput`                               | `MediaWriteResult` (v0.4.0, optional)                                                                                                                   |
+| media                        | `PUT /media/:id/tags`                                                                                | `MediaTagsInput`                              | `MediaWriteResult` (v0.4.0, optional)                                                                                                                   |
+| media                        | `PUT /media/:id/focus`                                                                               | `MediaFocusInput`                             | `MediaWriteResult` (v0.10.1, optional)                                                                                                                  |
+| media                        | `PUT /media/:id/caption`                                                                             | `MediaCaptionInput`                           | `MediaWriteResult` (v0.10.1, optional)                                                                                                                  |
+| media                        | `PUT /media/:id/file?filename&expectedVersion&changeId`                                              | the new bytes, typed by `Content-Type`        | `MediaReplaceResult` (v0.10.1, optional)                                                                                                                |
+| media                        | `PUT /media/:id/credit`                                                                              | `MediaCreditInput`                            | `MediaWriteResult` (v0.13.0, optional)                                                                                                                  |
+| media                        | `POST /media/:id/transform`                                                                          | `MediaTransformInput`                         | `MediaTransformResult` (v0.13.0, optional)                                                                                                              |
+| media                        | `GET /media/:id/history`                                                                             |                                               | `MediaHistory`: the file's bytes, newest first (v0.13.0, optional)                                                                                      |
+| media                        | `POST /media/:id/revert`                                                                             | `MediaRevertInput`                            | `MediaTransformResult` (v0.13.0, optional)                                                                                                              |
+| media                        | `GET /media/:id/suggestions`                                                                         |                                               | `MediaSuggestions`: the site's model's tags and alt text, never applied (v0.13.0, optional)                                                             |
+| media                        | `POST /media/:id/trash`                                                                              | `MediaTrashInput`                             | `MediaWriteResult` (v0.4.0, optional)                                                                                                                   |
+| media                        | `POST /media/:id/restore`                                                                            | `MediaTrashInput`                             | `MediaWriteResult` (v0.4.0, optional)                                                                                                                   |
+| media                        | `POST /media/trash/empty`                                                                            | `MediaTrashEmptyInput`                        | `MediaTrashEmptyResult` (v0.4.0, optional)                                                                                                              |
+| media                        | `POST /media/bulk`                                                                                   | `MediaBulkInput`                              | `MediaBulkResult` (v0.4.0, optional)                                                                                                                    |
+| media                        | `POST /media/resize-pass`                                                                            | `MediaResizePassInput`                        | `MediaResizePassResult`, one outcome per file (v0.13.0, optional)                                                                                       |
+| mentions                     | `GET /mentions?status&q&targetId&cursor&limit`                                                       |                                               | `MentionList` with the whole queue's `counts` and what a sweep would remove (v0.5.0, optional per site)                                                 |
+| mentions                     | `POST /mentions/:id/decide`                                                                          | `MentionDecideInput`                          | `MentionWriteResult` (v0.5.0)                                                                                                                           |
+| mentions                     | `DELETE /mentions/:id?expectedVersion&changeId`                                                      |                                               | `MentionDeleteResult` (v0.5.0)                                                                                                                          |
+| mentions                     | `POST /mentions/sweep`                                                                               | `MentionSweepInput`                           | `MentionSweepResult` (v0.5.0)                                                                                                                           |
+| insight                      | `GET /insight/not-found?days&limit&includeProbes`                                                    |                                               | `NotFoundReport`: the site's most-hit missing paths and who linked to them (v0.16.0, optional per site)                                                 |
+| inbox, insight, publications | `/*`                                                                                                 |                                               | `501` until their stage                                                                                                                                 |
 
 The media group arrived in v0.2.0. A site whose adapter has no `media` still answers it `501`, as in v0.1.0.
 
@@ -162,22 +164,22 @@ Every write carries an `expectedVersion` and a Carrel `changeId`.
 
 Every error answer is `application/problem+json` (RFC 9457, v0.17.0): `{ error, message, type, title, status, detail }`. `error` and `message` are what every earlier reader reads; `type` is this table's anchor for the code, `title` the code's fixed title, `status` the HTTP status and `detail` the message again. A version conflict adds `currentVersion`, a refused media delete `usedBy`, and an unknown field `field` (v0.22.0).
 
-| Code | Status | Title | When |
-|---|---|---|---|
-| <a id="error-unauthorized"></a>`unauthorized` | 401 | Unauthorized | No key, or not the site's key. Every route, known or not, answers this to a caller without the key. |
-| <a id="error-rate-limited"></a>`rate-limited` | 429 | Too many requests | The caller's address spent the site's limit. |
-| <a id="error-not-configured"></a>`not-configured` | 503 | Not configured | The site's key is unset or shorter than 32 characters. |
-| <a id="error-unavailable"></a>`unavailable` | 503 | Unavailable | The rate limiter failed, so the request was refused. |
-| <a id="error-not-found"></a>`not-found` | 404 | Not found | No such route, id or version. |
-| <a id="error-method-not-allowed"></a>`method-not-allowed` | 405 | Method not allowed | The route exists, but not with this method. |
-| <a id="error-invalid"></a>`invalid` | 400 | Invalid request | The body or query is outside the contract. |
-| <a id="error-too-large"></a>`too-large` | 413 | Too large | The body or file is over the limit. |
-| <a id="error-version-conflict"></a>`version-conflict` | 409 | Version conflict | `expectedVersion` is not what the site holds; `currentVersion` says what it does (null: no such id). |
-| <a id="error-in-progress"></a>`in-progress` | 409 | In progress | A write under this change id is still running (v0.17.0, on a site with `replay`). Send it again once it has answered. |
-| <a id="error-refused"></a>`refused` | 422 | Refused | The site's own rules said no; the message says why. |
-| <a id="error-not-implemented"></a>`not-implemented` | 501 | Not implemented | The site does not offer this route, query or option; `meta.capabilities` says so beforehand. |
-| <a id="error-unknown-field"></a>`unknown-field` | 400 | Unknown field | The body or query has a field the contract does not name (v0.22.0); `field` names it. Nothing ran. |
-| <a id="error-internal"></a>`internal` | 500 | Internal error | The site failed, or answered outside the contract. Logged on the site; nothing of it is passed on. |
+| Code                                                      | Status | Title              | When                                                                                                                  |
+| --------------------------------------------------------- | ------ | ------------------ | --------------------------------------------------------------------------------------------------------------------- |
+| <a id="error-unauthorized"></a>`unauthorized`             | 401    | Unauthorized       | No key, or not the site's key. Every route, known or not, answers this to a caller without the key.                   |
+| <a id="error-rate-limited"></a>`rate-limited`             | 429    | Too many requests  | The caller's address spent the site's limit.                                                                          |
+| <a id="error-not-configured"></a>`not-configured`         | 503    | Not configured     | The site's key is unset or shorter than 32 characters.                                                                |
+| <a id="error-unavailable"></a>`unavailable`               | 503    | Unavailable        | The rate limiter failed, so the request was refused.                                                                  |
+| <a id="error-not-found"></a>`not-found`                   | 404    | Not found          | No such route, id or version.                                                                                         |
+| <a id="error-method-not-allowed"></a>`method-not-allowed` | 405    | Method not allowed | The route exists, but not with this method.                                                                           |
+| <a id="error-invalid"></a>`invalid`                       | 400    | Invalid request    | The body or query is outside the contract.                                                                            |
+| <a id="error-too-large"></a>`too-large`                   | 413    | Too large          | The body or file is over the limit.                                                                                   |
+| <a id="error-version-conflict"></a>`version-conflict`     | 409    | Version conflict   | `expectedVersion` is not what the site holds; `currentVersion` says what it does (null: no such id).                  |
+| <a id="error-in-progress"></a>`in-progress`               | 409    | In progress        | A write under this change id is still running (v0.17.0, on a site with `replay`). Send it again once it has answered. |
+| <a id="error-refused"></a>`refused`                       | 422    | Refused            | The site's own rules said no; the message says why.                                                                   |
+| <a id="error-not-implemented"></a>`not-implemented`       | 501    | Not implemented    | The site does not offer this route, query or option; `meta.capabilities` says so beforehand.                          |
+| <a id="error-unknown-field"></a>`unknown-field`           | 400    | Unknown field      | The body or query has a field the contract does not name (v0.22.0); `field` names it. Nothing ran.                    |
+| <a id="error-internal"></a>`internal`                     | 500    | Internal error     | The site failed, or answered outside the contract. Logged on the site; nothing of it is passed on.                    |
 
 ## Changes in v0.3.0
 
@@ -234,13 +236,24 @@ Additive: no route, body or schema changes. **The media library** (`mediaLibrary
 import { d1MediaStore, mediaLibrary, mediaSuggester } from "@dustinedwards/site-api";
 
 const media = mediaLibrary({
-  store: d1MediaStore(env.DB),                       // or the site's own MediaLibraryStore over its own tables
+  store: d1MediaStore(env.DB), // or the site's own MediaLibraryStore over its own tables
   bucket: env.MEDIA,
   images: env.IMAGES,
-  limits: { maxBytes: 20 * 1024 * 1024, types: ["image/jpeg", "image/png", "image/webp", "image/avif", "image/gif", "image/heic", "image/heif"] },
+  limits: {
+    maxBytes: 20 * 1024 * 1024,
+    types: [
+      "image/jpeg",
+      "image/png",
+      "image/webp",
+      "image/avif",
+      "image/gif",
+      "image/heic",
+      "image/heif",
+    ],
+  },
   url: (key) => `/media/${key}`,
   resize: { maxEdge: 4096, quality: 85 },
-  usage: (keys) => usesOf(env, keys),                // the site's reference check; absent: nothing counts uses
+  usage: (keys) => usesOf(env, keys), // the site's reference check; absent: nothing counts uses
   suggest: (picture, id) => suggest(env, picture, id),
 });
 ```
@@ -477,12 +490,12 @@ Additive: every v0.9.0 route and body is unchanged, and the schema hash and pack
 
 **Scheduled updates to a live post, optional per site** (`meta.capabilities.scheduledUpdates`). Modeled on EmDash's scheduled publishing: a published post can carry one pending revision with its own publish time. The live version stays served until then, and at that time the revision replaces it.
 
-| The item | `status` | `scheduledUpdate` | What readers see |
-|---|---|---|---|
-| A draft | `draft` | `null` | nothing |
-| Scheduled, never live | `scheduled` (`publishAt` set) | `null` | nothing until `publishAt` |
-| Live | `published` | `null` | the live version |
-| Live, with an update waiting | `published` | `{ publishAt, changeId }` | the live version until `publishAt`, then the update |
+| The item                     | `status`                      | `scheduledUpdate`         | What readers see                                    |
+| ---------------------------- | ----------------------------- | ------------------------- | --------------------------------------------------- |
+| A draft                      | `draft`                       | `null`                    | nothing                                             |
+| Scheduled, never live        | `scheduled` (`publishAt` set) | `null`                    | nothing until `publishAt`                           |
+| Live                         | `published`                   | `null`                    | the live version                                    |
+| Live, with an update waiting | `published`                   | `{ publishAt, changeId }` | the live version until `publishAt`, then the update |
 
 - **Schedule.** `POST /content/:id/schedule` takes the same `ScheduleInput` as before: `{ expectedVersion, changeId, publishAt, source? }`. On a draft or a scheduled item it works as it always has. On a live item it stores an update: `source` (the live source when left out) goes live at `publishAt`, and the item stays `published` and unchanged until then. The answer is `WriteResult` with `status: "published"` and `scheduledUpdate: { publishAt, changeId }`. The item's `version` moves, since the update is part of the item, so the next write sends the new one. A site without the capability refuses a schedule on a live item, `422 refused`, and the post stays live.
 - **Reschedule.** Send the schedule again with the current version: the new `source` and `publishAt` replace the update that was waiting. There is only ever one.
@@ -561,19 +574,19 @@ Files stay in the site's own storage and are served by the site. Carrel only lis
 
 Errors are `{ "error": code, "message": text }`. A refused media delete adds `usedBy`, and a version conflict adds `currentVersion`.
 
-| Status | Code |
-|---|---|
-| 400 | `invalid` |
-| 401 | `unauthorized` |
-| 404 | `not-found` |
-| 405 | `method-not-allowed` |
-| 409 | `version-conflict` |
-| 413 | `too-large` |
-| 422 | `refused` (the site's own rules) |
-| 429 | `rate-limited` |
-| 501 | `not-implemented` |
-| 503 | `not-configured` / `unavailable` |
-| 500 | `internal` |
+| Status | Code                             |
+| ------ | -------------------------------- |
+| 400    | `invalid`                        |
+| 401    | `unauthorized`                   |
+| 404    | `not-found`                      |
+| 405    | `method-not-allowed`             |
+| 409    | `version-conflict`               |
+| 413    | `too-large`                      |
+| 422    | `refused` (the site's own rules) |
+| 429    | `rate-limited`                   |
+| 501    | `not-implemented`                |
+| 503    | `not-configured` / `unavailable` |
+| 500    | `internal`                       |
 
 The **schema hash** is the SHA-256 of every schema, as JSON Schema, plus the route table. A site and Carrel agree when their hashes match.
 
@@ -594,65 +607,139 @@ interface SiteAdapter {
     revisions(id: string): Promise<Revision[] | null>;
     revisionSource(id: string, version: string): Promise<string | null>;
     delete?(id: string, input: { expectedVersion: string; changeId: string }): Promise<void>; // v0.3.0; omit and the route answers 501
-    setTags?(id: string, input: { tags: string[]; expectedVersion: string; changeId: string }): Promise<WriteResult>; // v0.6.0; omit and the route answers 501
+    setTags?(
+      id: string,
+      input: { tags: string[]; expectedVersion: string; changeId: string },
+    ): Promise<WriteResult>; // v0.6.0; omit and the route answers 501
     // v0.17.0, each optional (the route or option answers 501 when absent).
-    publishedAtSettable?: boolean;                 // publish takes publishedAt
-    searchFields?: SearchField[];                  // the search fields the site renders
-    postFields?: PostField[];                      // the post fields the site renders
+    publishedAtSettable?: boolean; // publish takes publishedAt
+    searchFields?: SearchField[]; // the search fields the site renders
+    postFields?: PostField[]; // the post fields the site renders
     filters?: ("kind" | "tag" | "author" | "published")[]; // the list filters list applies
-    rename?(id: string, input: RenameInput): Promise<RenameResult>;          // the old path redirects (301)
-    trash?(id: string, input: { expectedVersion: string; changeId: string }): Promise<WriteResult>;   // with restore and delete, or neither
-    restore?(id: string, input: { expectedVersion: string; changeId: string }): Promise<WriteResult>; // always a draft
+    rename?(id: string, input: RenameInput): Promise<RenameResult>; // the old path redirects (301)
+    trash?(id: string, input: { expectedVersion: string; changeId: string }): Promise<WriteResult>; // with restore and delete, or neither
+    restore?(
+      id: string,
+      input: { expectedVersion: string; changeId: string },
+    ): Promise<WriteResult>; // always a draft
   };
-  renderVersion?: string;                          // v0.17.0: Prelum's RENDER_VERSION
+  renderVersion?: string; // v0.17.0: Prelum's RENDER_VERSION
   preview: { render(input: PreviewInput): Promise<string> };
-  schedules?: {                                    // v0.10.0; omit for a site with no scheduled updates to live posts
+  schedules?: {
+    // v0.10.0; omit for a site with no scheduled updates to live posts
     get(id: string): Promise<ScheduledUpdate | null>;
-    update(id: string, input: { source: string; publishAt: string; expectedVersion: string; changeId: string }): Promise<WriteResult>;
+    update(
+      id: string,
+      input: { source: string; publishAt: string; expectedVersion: string; changeId: string },
+    ): Promise<WriteResult>;
     cancel(id: string, input: { expectedVersion: string; changeId: string }): Promise<WriteResult>;
-    due(input: { now: Date; limit: number }): Promise<DueSchedule[]>;          // { id, kind: "publish" | "update", publishAt, changeId }
+    due(input: { now: Date; limit: number }): Promise<DueSchedule[]>; // { id, kind: "publish" | "update", publishAt, changeId }
     apply(id: string, input: DueSchedule & { now: Date }): Promise<WriteResult | null>; // null: no longer matches, nothing changed
   };
-  insight?: {                                      // v0.16.0; omit for a site that does not count its 404s
-    notFound(options: { days: number; limit: number; includeProbes: boolean }): Promise<NotFoundRow[]>; // site-runtime's notFoundReport
+  insight?: {
+    // v0.16.0; omit for a site that does not count its 404s
+    notFound(options: {
+      days: number;
+      limit: number;
+      includeProbes: boolean;
+    }): Promise<NotFoundRow[]>; // site-runtime's notFoundReport
   };
-  mentions?: {                                     // v0.5.0; omit for a site with no webmentions
+  mentions?: {
+    // v0.5.0; omit for a site with no webmentions
     list(query: MentionListQuery): Promise<MentionList>; // items, nextCursor, counts, expiring
-    decide(id: string, input: { decision: "approve" | "reject"; expectedVersion: string; changeId: string }): Promise<{ status: MentionStatus; version: string; purged: boolean | null }>;
-    reset?(id: string, input: { expectedVersion: string; changeId: string }): Promise<{ status: MentionStatus; version: string; purged: boolean | null }>; // v0.6.0; omit and a reset answers 501
-    delete(id: string, input: { expectedVersion: string; changeId: string }): Promise<{ purged: boolean | null }>;
+    decide(
+      id: string,
+      input: { decision: "approve" | "reject"; expectedVersion: string; changeId: string },
+    ): Promise<{ status: MentionStatus; version: string; purged: boolean | null }>;
+    reset?(
+      id: string,
+      input: { expectedVersion: string; changeId: string },
+    ): Promise<{ status: MentionStatus; version: string; purged: boolean | null }>; // v0.6.0; omit and a reset answers 501
+    delete(
+      id: string,
+      input: { expectedVersion: string; changeId: string },
+    ): Promise<{ purged: boolean | null }>;
     sweep(input: { changeId: string }): Promise<{ failed: number; rejected: number }>;
   };
-  media?: {                                        // v0.2.0; omit for a site with no media manager
+  media?: {
+    // v0.2.0; omit for a site with no media manager
     limits: { maxBytes: number; types: string[] };
-    lenses?: ("unattached" | "no-alt" | "large")[];  // v0.6.0; the lenses list answers, and with any of them it sorts
+    lenses?: ("unattached" | "no-alt" | "large")[]; // v0.6.0; the lenses list answers, and with any of them it sorts
     list(query: MediaListQuery): Promise<MediaList>;
-    get(id: string): Promise<MediaDetail | null>;  // with usedBy, from the site's reference check
+    get(id: string): Promise<MediaDetail | null>; // with usedBy, from the site's reference check
     upload(input: MediaUpload): Promise<MediaItem>; // already checked against the limits and the bytes
     delete(id: string, input: { changeId: string }): Promise<void>;
     // v0.4.0, each optional (the route answers 501 when absent). Each throws VersionConflictError,
     // NotFoundError or RefusedError, and returns the file's version after the write.
-    setAlt?(id: string, input: { alt: string; expectedVersion: string; changeId: string }): Promise<{ version: string }>;
-    setTags?(id: string, input: { tags: string[]; expectedVersion: string; changeId: string }): Promise<{ version: string }>;
-    trash?(id: string, input: { expectedVersion: string; changeId: string }): Promise<{ version: string }>;   // with restore, or neither
-    restore?(id: string, input: { expectedVersion: string; changeId: string }): Promise<{ version: string }>;
+    setAlt?(
+      id: string,
+      input: { alt: string; expectedVersion: string; changeId: string },
+    ): Promise<{ version: string }>;
+    setTags?(
+      id: string,
+      input: { tags: string[]; expectedVersion: string; changeId: string },
+    ): Promise<{ version: string }>;
+    trash?(
+      id: string,
+      input: { expectedVersion: string; changeId: string },
+    ): Promise<{ version: string }>; // with restore, or neither
+    restore?(
+      id: string,
+      input: { expectedVersion: string; changeId: string },
+    ): Promise<{ version: string }>;
     // v0.10.0, each optional, throwing and moving the version like the writes above.
-    setFocus?(id: string, input: { focus: string | null; expectedVersion: string; changeId: string }): Promise<{ version: string }>;
-    setCaption?(id: string, input: { caption: string; expectedVersion: string; changeId: string }): Promise<{ version: string }>;
-    replace?(id: string, input: MediaReplace): Promise<{ item: MediaItem; sizesNeedPurge: boolean }>; // same id and address
+    setFocus?(
+      id: string,
+      input: { focus: string | null; expectedVersion: string; changeId: string },
+    ): Promise<{ version: string }>;
+    setCaption?(
+      id: string,
+      input: { caption: string; expectedVersion: string; changeId: string },
+    ): Promise<{ version: string }>;
+    replace?(
+      id: string,
+      input: MediaReplace,
+    ): Promise<{ item: MediaItem; sizesNeedPurge: boolean }>; // same id and address
     // v0.13.0: flags, and methods each optional (the route or query answers 501 when absent).
-    usage?: boolean;                               // items carry usedCount; the list sorts by used
-    filters?: boolean;                             // the list takes orientation and kind
+    usage?: boolean; // items carry usedCount; the list sorts by used
+    filters?: boolean; // the list takes orientation and kind
     resize?: { maxEdge: number; quality: number }; // what uploads shrink to
-    readsEmbedded?: boolean;                       // upload fills empty fields from IPTC and EXIF
-    importFetch?: typeof fetch;                    // the fetch POST /media/import uses
+    readsEmbedded?: boolean; // upload fills empty fields from IPTC and EXIF
+    importFetch?: typeof fetch; // the fetch POST /media/import uses
     findByHash?(sha256: string): Promise<MediaItem | null>;
-    setCredit?(id: string, input: { credit: string; license: string; sourceUrl: string | null; licenseExpires: string | null; expectedVersion: string; changeId: string }): Promise<{ version: string }>;
-    transform?(id: string, input: { op: MediaTransformOp; asNewFile: boolean; expectedVersion: string; changeId: string }): Promise<{ item: MediaItem; sizesNeedPurge: boolean }>;
-    history?(id: string): Promise<MediaRevision[] | null>;  // with revert, or neither
-    revert?(id: string, input: { to: string; expectedVersion: string; changeId: string }): Promise<{ item: MediaItem; sizesNeedPurge: boolean }>;
-    changes?(input: { since: string; limit: number }): Promise<{ items: MediaItem[]; removed: string[]; cursor: string; more: boolean }>;
-    shrink?(id: string, input: { expectedVersion: string; changeId: string }): Promise<{ resized: boolean; item: MediaItem }>;
+    setCredit?(
+      id: string,
+      input: {
+        credit: string;
+        license: string;
+        sourceUrl: string | null;
+        licenseExpires: string | null;
+        expectedVersion: string;
+        changeId: string;
+      },
+    ): Promise<{ version: string }>;
+    transform?(
+      id: string,
+      input: {
+        op: MediaTransformOp;
+        asNewFile: boolean;
+        expectedVersion: string;
+        changeId: string;
+      },
+    ): Promise<{ item: MediaItem; sizesNeedPurge: boolean }>;
+    history?(id: string): Promise<MediaRevision[] | null>; // with revert, or neither
+    revert?(
+      id: string,
+      input: { to: string; expectedVersion: string; changeId: string },
+    ): Promise<{ item: MediaItem; sizesNeedPurge: boolean }>;
+    changes?(input: {
+      since: string;
+      limit: number;
+    }): Promise<{ items: MediaItem[]; removed: string[]; cursor: string; more: boolean }>;
+    shrink?(
+      id: string,
+      input: { expectedVersion: string; changeId: string },
+    ): Promise<{ resized: boolean; item: MediaItem }>;
     suggest?(id: string): Promise<{ tags: string[]; alt: string | null; model: string } | null>;
   };
 }

@@ -1,12 +1,25 @@
 // The content group: list, read, write, scheduled updates, revisions, diff, delete, tags and the preview.
 
 import { z } from "zod";
-import { Actor, ActorName, ChangeId, ContentId, Source, SortDir, Timestamp, Version } from "./base.js";
+import {
+  Actor,
+  ActorName,
+  ChangeId,
+  ContentId,
+  Source,
+  SortDir,
+  Timestamp,
+  Version,
+} from "./base.js";
 
 export const ContentStatus = z.enum(["draft", "scheduled", "published"]);
 
 /** A post tag (v0.6.0): one short piece of text, trimmed, with nothing that would break a frontmatter list. */
-export const ContentTag = z.string().min(1).max(40).regex(/^[^\s,[\]"'#:\\](?:[^\r\n,[\]"'#:\\]*[^\s,[\]"'#:\\])?$/);
+export const ContentTag = z
+  .string()
+  .min(1)
+  .max(40)
+  .regex(/^[^\s,[\]"'#:\\](?:[^\r\n,[\]"'#:\\]*[^\s,[\]"'#:\\])?$/);
 
 /** A display name credited on a post (v0.17.0), as its `authors` post field holds it. */
 export const AuthorName = z.string().min(1).max(200);
@@ -282,16 +295,29 @@ export const BacklinkList = z.object({ items: z.array(Backlink).max(1000) });
 export const HookRunsQuery = z.object({ changeId: ChangeId });
 
 /** One hook run as the store keeps it (`hook_runs`): the hook's name, whether it worked, and when. */
-export const HookRun = z.object({ hook: z.string().min(1).max(200), ok: z.boolean(), at: Timestamp });
+export const HookRun = z.object({
+  hook: z.string().min(1).max(200),
+  ok: z.boolean(),
+  at: Timestamp,
+});
 
 export const HookRunList = z.object({ items: z.array(HookRun) });
 
 /** An item's working links, the newest first. `id` is the first 12 hex characters of the token's hash: it revokes the link, and cannot open it. */
 export const PreviewLinkList = z.object({
-  items: z.array(z.object({ id: z.string().regex(/^[0-9a-f]{12}$/), createdAt: Timestamp, expiresAt: Timestamp })),
+  items: z.array(
+    z.object({
+      id: z.string().regex(/^[0-9a-f]{12}$/),
+      createdAt: Timestamp,
+      expiresAt: Timestamp,
+    }),
+  ),
 });
 
-export const PreviewLinkRevokeQuery = z.object({ changeId: ChangeId, actorName: ActorName.optional() });
+export const PreviewLinkRevokeQuery = z.object({
+  changeId: ChangeId,
+  actorName: ActorName.optional(),
+});
 
 export const PreviewLinkRevokeResult = z.object({
   id: z.string().regex(/^[0-9a-f]{12}$/),

@@ -11,9 +11,13 @@ import * as contract from "../src/contract.js";
 import { additiveOnly, now, widened, type JsonSchema } from "./additive.js";
 import { V0170_ADDED, V0170_CODES, V0170_WIDEN, V0220_ADDED } from "./v0.17.0.js";
 import { V0190_ROUTES } from "./v0.19.0.js";
-const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as { version: string };
+const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as {
+  version: string;
+};
 
-const V010 = JSON.parse(readFileSync(new URL("./fixtures/contract-v0.1.0.json", import.meta.url), "utf8")) as {
+const V010 = JSON.parse(
+  readFileSync(new URL("./fixtures/contract-v0.1.0.json", import.meta.url), "utf8"),
+) as {
   version: string;
   schemaHash: string;
   routes: Array<Record<string, string>>;
@@ -21,24 +25,43 @@ const V010 = JSON.parse(readFileSync(new URL("./fixtures/contract-v0.1.0.json", 
 };
 
 /** The schemas later versions extend, by optional properties only: v0.2.0 the first three, v0.6.0 the content list, v0.10.0 the write result, v0.17.0 those test/v0.17.0.ts names. Every other one must be identical. */
-const EXTENDED = new Set(["Meta", "Capabilities", "ErrorBody", "ContentSummary", "ContentDoc", "ListQuery", "ContentList", "WriteResult", ...Object.keys(V0170_ADDED), ...Object.keys(V0220_ADDED).filter((n) => n in V010.schemas)]);
-
+const EXTENDED = new Set([
+  "Meta",
+  "Capabilities",
+  "ErrorBody",
+  "ContentSummary",
+  "ContentDoc",
+  "ListQuery",
+  "ContentList",
+  "WriteResult",
+  ...Object.keys(V0170_ADDED),
+  ...Object.keys(V0220_ADDED).filter((n) => n in V010.schemas),
+]);
 
 describe("the v0.1.0 contract", () => {
   it("is the recorded v0.1.0 (the fixture's own hash is the one Carrel's design names)", () => {
     expect(V010.version).toBe("0.1.0");
-    expect(V010.schemaHash).toBe("496b0dd37e86b34c18dde78333f8d1615fbb1d1f483054b2b098bc0f585f0e58");
+    expect(V010.schemaHash).toBe(
+      "496b0dd37e86b34c18dde78333f8d1615fbb1d1f483054b2b098bc0f585f0e58",
+    );
   });
 
   it("keeps every v0.1.0 route exactly, and replaces only the media placeholder", () => {
     for (const route of V010.routes) {
       if (route.group === "media") {
-        expect(route).toEqual({ group: "media", method: "*", path: "/media/*", response: "not-implemented" });
+        expect(route).toEqual({
+          group: "media",
+          method: "*",
+          path: "/media/*",
+          response: "not-implemented",
+        });
         continue;
       }
       expect(contract.ROUTES, JSON.stringify(route)).toContainEqual(route);
     }
-    expect(contract.ROUTES.filter((r) => r.group === "media").map((r) => `${r.method} ${r.path}`)).toEqual([
+    expect(
+      contract.ROUTES.filter((r) => r.group === "media").map((r) => `${r.method} ${r.path}`),
+    ).toEqual([
       "GET /media",
       "POST /media",
       "POST /media/import",
@@ -63,7 +86,9 @@ describe("the v0.1.0 contract", () => {
     ]);
   });
 
-  for (const name of Object.keys(V010.schemas).filter((n) => !EXTENDED.has(n) && n !== "ErrorCode")) {
+  for (const name of Object.keys(V010.schemas).filter(
+    (n) => !EXTENDED.has(n) && n !== "ErrorCode",
+  )) {
     it(`keeps ${name} identical`, () => {
       expect(now(name)).toEqual(V010.schemas[name]);
     });
@@ -90,7 +115,14 @@ describe("the v0.1.0 contract", () => {
       packageVersion: "0.1.0",
       schemaHash: V010.schemaHash,
       site: { id: "memory", name: "Memory", origin: "https://memory.example" },
-      capabilities: { content: true, preview: true, media: false, inbox: false, insight: false, publications: false },
+      capabilities: {
+        content: true,
+        preview: true,
+        media: false,
+        inbox: false,
+        insight: false,
+        publications: false,
+      },
     };
     expect(contract.Meta.safeParse(v010meta).success).toBe(true);
     expect(contract.ErrorBody.safeParse({ error: "refused", message: "No." }).success).toBe(true);

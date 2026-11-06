@@ -4,7 +4,13 @@ import { describe, expect, it } from "vitest";
 import { createSiteClient } from "../src/client.js";
 import { memoryAdapter } from "../src/testing.js";
 import { createSiteApi, indexNowHook, type PublishEvent, type PublishHook } from "../src/index.js";
-import { d1SiteApiStore, goneResponse, SITE_API_STORE_SQL, SITE_API_STORE_SQL_V0_22, tombstoned } from "../src/store.js";
+import {
+  d1SiteApiStore,
+  goneResponse,
+  SITE_API_STORE_SQL,
+  SITE_API_STORE_SQL_V0_22,
+  tombstoned,
+} from "../src/store.js";
 import { d1 } from "./d1.js";
 import { KEY, ORIGIN, allow, site } from "./helpers.js";
 
@@ -16,20 +22,44 @@ function client(adapter = memoryAdapter()) {
 describe("a settable publish date (v0.17.0)", () => {
   it("publishes under a past date, re-dates a live post, refuses a future one, and answers 501 where the site cannot", async () => {
     const { c } = client();
-    const draft = await c.saveDraft("a", { source: "# A\n", expectedVersion: null, changeId: "c1" });
-    const live = await c.publish("a", { expectedVersion: draft.version, changeId: "c2", publishedAt: "2020-05-01T12:00:00Z" });
+    const draft = await c.saveDraft("a", {
+      source: "# A\n",
+      expectedVersion: null,
+      changeId: "c1",
+    });
+    const live = await c.publish("a", {
+      expectedVersion: draft.version,
+      changeId: "c2",
+      publishedAt: "2020-05-01T12:00:00Z",
+    });
     expect((await c.get("a")).publishedAt).toBe("2020-05-01T12:00:00.000Z");
-    await c.publish("a", { expectedVersion: live.version, changeId: "c3", publishedAt: "2021-01-01T00:00:00Z" });
+    await c.publish("a", {
+      expectedVersion: live.version,
+      changeId: "c3",
+      publishedAt: "2021-01-01T00:00:00Z",
+    });
     expect((await c.get("a")).publishedAt).toBe("2021-01-01T00:00:00.000Z");
 
     const now = (await c.get("a")).version;
-    await expect(c.publish("a", { expectedVersion: now, changeId: "c4", publishedAt: "2999-01-01T00:00:00Z" })).rejects.toMatchObject({ status: 400 });
+    await expect(
+      c.publish("a", { expectedVersion: now, changeId: "c4", publishedAt: "2999-01-01T00:00:00Z" }),
+    ).rejects.toMatchObject({ status: 400 });
 
     const without = memoryAdapter();
     delete without.content.publishedAtSettable;
     const other = client(without).c;
-    const d = await other.saveDraft("a", { source: "# A\n", expectedVersion: null, changeId: "c1" });
-    await expect(other.publish("a", { expectedVersion: d.version, changeId: "c2", publishedAt: "2020-05-01T12:00:00Z" })).rejects.toMatchObject({ status: 501 });
+    const d = await other.saveDraft("a", {
+      source: "# A\n",
+      expectedVersion: null,
+      changeId: "c1",
+    });
+    await expect(
+      other.publish("a", {
+        expectedVersion: d.version,
+        changeId: "c2",
+        publishedAt: "2020-05-01T12:00:00Z",
+      }),
+    ).rejects.toMatchObject({ status: 501 });
     expect((await other.meta()).capabilities.contentPublishedAt).toBeUndefined();
   });
 });
@@ -40,17 +70,28 @@ describe("rename (v0.17.0)", () => {
     const a = await c.saveDraft("a", { source: "# A\n", expectedVersion: null, changeId: "c1" });
     const live = await c.publish("a", { expectedVersion: a.version, changeId: "c2" });
     const b = await c.saveDraft("b", { source: "# B\n", expectedVersion: null, changeId: "c3" });
-    await expect(c.rename("a", { newId: "b", expectedVersion: live.version, changeId: "c4" })).rejects.toMatchObject({ status: 422 });
+    await expect(
+      c.rename("a", { newId: "b", expectedVersion: live.version, changeId: "c4" }),
+    ).rejects.toMatchObject({ status: 422 });
 
-    const moved = await c.rename("a", { newId: "a-new", expectedVersion: live.version, changeId: "c5" });
+    const moved = await c.rename("a", {
+      newId: "a-new",
+      expectedVersion: live.version,
+      changeId: "c5",
+    });
     expect(moved).toMatchObject({ id: "a-new", status: "published", previousPath: "/blog/a" });
     expect(adapter.redirects.get("/blog/a")).toBe("/blog/a-new");
     expect((await c.revisions("a-new")).items).toHaveLength(3);
     await expect(c.get("a")).rejects.toMatchObject({ status: 404 });
-    expect((await c.rename("b", { newId: "b2", expectedVersion: b.version, changeId: "c6" })).previousPath).toBeNull();
+    expect(
+      (await c.rename("b", { newId: "b2", expectedVersion: b.version, changeId: "c6" }))
+        .previousPath,
+    ).toBeNull();
 
     const other = client(memoryAdapter({ contentExtras: false })).c;
-    await expect(other.rename("a", { newId: "b", expectedVersion: "v1", changeId: "c1" })).rejects.toMatchObject({ status: 501 });
+    await expect(
+      other.rename("a", { newId: "b", expectedVersion: "v1", changeId: "c1" }),
+    ).rejects.toMatchObject({ status: 501 });
   });
 });
 
@@ -80,7 +121,9 @@ describe("the content trash (v0.17.0)", () => {
 
     const other = client(memoryAdapter({ contentExtras: false })).c;
     await expect(other.list({ trashed: true })).rejects.toMatchObject({ status: 501 });
-    await expect(other.trash("a", { expectedVersion: "v1", changeId: "c1" })).rejects.toMatchObject({ status: 501 });
+    await expect(other.trash("a", { expectedVersion: "v1", changeId: "c1" })).rejects.toMatchObject(
+      { status: 501 },
+    );
   });
 
   // The two ways a deletion that cannot be undone could reach a post that is not old trash.
@@ -104,7 +147,11 @@ describe("the content trash (v0.17.0)", () => {
       delete body.filtered;
       return Response.json(body);
     };
-    const stale = createSiteClient({ baseUrl: ORIGIN, key: KEY, fetch: old as typeof globalThis.fetch });
+    const stale = createSiteClient({
+      baseUrl: ORIGIN,
+      key: KEY,
+      fetch: old as typeof globalThis.fetch,
+    });
     await expect(stale.list({ trashed: true })).rejects.toMatchObject({ status: 501 });
   });
 });
@@ -112,13 +159,30 @@ describe("the content trash (v0.17.0)", () => {
 describe("list filters (v0.17.0)", () => {
   it("filters by tag, author and published dates where the site offers them, and answers 501 for one it does not", async () => {
     const { c } = client();
-    const a = await c.saveDraft("a", { source: '---\ntitle: A\ntags: [news]\nauthors: ["Ada", "Grace"]\n---\nA\n', expectedVersion: null, changeId: "c1" });
-    await c.publish("a", { expectedVersion: a.version, changeId: "c2", publishedAt: "2020-01-01T00:00:00Z" });
-    await c.saveDraft("b", { source: "---\ntitle: B\n---\nB\n", expectedVersion: null, changeId: "c3" });
+    const a = await c.saveDraft("a", {
+      source: '---\ntitle: A\ntags: [news]\nauthors: ["Ada", "Grace"]\n---\nA\n',
+      expectedVersion: null,
+      changeId: "c1",
+    });
+    await c.publish("a", {
+      expectedVersion: a.version,
+      changeId: "c2",
+      publishedAt: "2020-01-01T00:00:00Z",
+    });
+    await c.saveDraft("b", {
+      source: "---\ntitle: B\n---\nB\n",
+      expectedVersion: null,
+      changeId: "c3",
+    });
     const ids = async (q: Parameters<typeof c.list>[0]) => (await c.list(q)).items.map((i) => i.id);
     expect(await ids({ tag: "news" })).toEqual(["a"]);
     expect(await ids({ author: "Grace" })).toEqual(["a"]);
-    expect(await ids({ publishedAfter: "2019-01-01T00:00:00Z", publishedBefore: "2021-01-01T00:00:00Z" })).toEqual(["a"]);
+    expect(
+      await ids({
+        publishedAfter: "2019-01-01T00:00:00Z",
+        publishedBefore: "2021-01-01T00:00:00Z",
+      }),
+    ).toEqual(["a"]);
     expect((await c.list({ author: "Ada" })).items[0]).toMatchObject({ authors: ["Ada", "Grace"] });
 
     const other = client(memoryAdapter({ contentExtras: false })).c;
@@ -131,18 +195,39 @@ describe("list filters (v0.17.0)", () => {
 
 function stored(hooks: PublishHook[] = []) {
   const adapter = memoryAdapter({ site: { id: "memory", name: "Memory site", origin: ORIGIN } });
-  const store = d1SiteApiStore(d1(SITE_API_STORE_SQL.replace(SITE_API_STORE_SQL_V0_22, "") + SITE_API_STORE_SQL_V0_22));
+  const store = d1SiteApiStore(
+    d1(SITE_API_STORE_SQL.replace(SITE_API_STORE_SQL_V0_22, "") + SITE_API_STORE_SQL_V0_22),
+  );
   const api = createSiteApi({ adapter, key: KEY, limiter: allow, log: () => {}, store, hooks });
-  const c = createSiteClient({ baseUrl: ORIGIN, key: KEY, fetch: (async (i: RequestInfo | URL, init?: RequestInit) => api.handle(new Request(i, init))) as typeof fetch });
+  const c = createSiteClient({
+    baseUrl: ORIGIN,
+    key: KEY,
+    fetch: (async (i: RequestInfo | URL, init?: RequestInit) =>
+      api.handle(new Request(i, init))) as typeof fetch,
+  });
   return { adapter, store, api, c };
 }
 
 describe("unknown fields (v0.22.0, A8)", () => {
   it("refuses an unknown body field or query key on every route, naming it, before the adapter runs", async () => {
     const { api, adapter } = stored();
-    const send = (path: string, init: RequestInit = {}) => api.handle(new Request(`${ORIGIN}/api/carrel/v1${path}`, { ...init, headers: { authorization: `Bearer ${KEY}`, "content-type": "application/json" } }));
+    const send = (path: string, init: RequestInit = {}) =>
+      api.handle(
+        new Request(`${ORIGIN}/api/carrel/v1${path}`, {
+          ...init,
+          headers: { authorization: `Bearer ${KEY}`, "content-type": "application/json" },
+        }),
+      );
     const answers = [
-      await send("/content/a/draft", { method: "PUT", body: JSON.stringify({ source: "# A\n", expectedVersion: null, changeId: "c1", bogusField: 1 }) }),
+      await send("/content/a/draft", {
+        method: "PUT",
+        body: JSON.stringify({
+          source: "# A\n",
+          expectedVersion: null,
+          changeId: "c1",
+          bogusField: 1,
+        }),
+      }),
       await send("/content?series=x"),
       // A route that takes no query at all.
       await send("/content/a?series=x"),
@@ -161,12 +246,27 @@ describe("schedule events (v0.22.0, J1)", () => {
     const announced: string[] = [];
     const { c } = stored([
       { name: "listener", on: ["schedule", "unschedule"], run: (e) => void heard.push(e) },
-      indexNowHook({ submit: async ({ urls }) => (announced.push(...urls), true), key: "k", origin: ORIGIN }),
+      indexNowHook({
+        submit: async ({ urls }) => (announced.push(...urls), true),
+        key: "k",
+        origin: ORIGIN,
+      }),
     ]);
-    const draft = await c.saveDraft("a", { source: "# A\n", expectedVersion: null, changeId: "c1" });
-    const scheduled = await c.schedule("a", { expectedVersion: draft.version, changeId: "c2", publishAt: "2999-01-01T00:00:00Z" });
+    const draft = await c.saveDraft("a", {
+      source: "# A\n",
+      expectedVersion: null,
+      changeId: "c1",
+    });
+    const scheduled = await c.schedule("a", {
+      expectedVersion: draft.version,
+      changeId: "c2",
+      publishAt: "2999-01-01T00:00:00Z",
+    });
     await c.cancelSchedule("a", { expectedVersion: scheduled.version, changeId: "c3" });
-    expect(heard.map((e) => [e.action, e.path, e.url, e.status])).toEqual([["schedule", null, null, "scheduled"], ["unschedule", null, null, "draft"]]);
+    expect(heard.map((e) => [e.action, e.path, e.url, e.status])).toEqual([
+      ["schedule", null, null, "scheduled"],
+      ["unschedule", null, null, "draft"],
+    ]);
     // A page that was never live is never announced.
     expect(announced).toEqual([]);
   });
@@ -179,7 +279,11 @@ describe("tombstones (v0.22.0, F5)", () => {
     const live = await c.publish("a", { expectedVersion: a.version, changeId: "c2" });
     await c.delete("a", { expectedVersion: live.version, changeId: "c3" });
     expect(await store.isGone("/blog/a/")).toBe(true);
-    const again = await c.saveDraft("a", { source: "# A again\n", expectedVersion: null, changeId: "c4" });
+    const again = await c.saveDraft("a", {
+      source: "# A again\n",
+      expectedVersion: null,
+      changeId: "c4",
+    });
     const back = await c.publish("a", { expectedVersion: again.version, changeId: "c5" });
     expect(await store.isGone("/blog/a")).toBe(false);
     await c.trash("a", { expectedVersion: back.version, changeId: "c6" });
@@ -191,29 +295,76 @@ describe("tombstones (v0.22.0, F5)", () => {
 
     // v0.23.0: a site's own 404 becomes 410 with its body kept; a live 200 and a path never live stay as they are.
     const own = await tombstoned(new Response("not here", { status: 404 }), "/blog/a/", store);
-    expect([own.status, own.headers.get("cache-control"), own.headers.get("x-robots-tag"), await own.text()]).toEqual([410, "no-store", "noindex", "not here"]);
+    expect([
+      own.status,
+      own.headers.get("cache-control"),
+      own.headers.get("x-robots-tag"),
+      await own.text(),
+    ]).toEqual([410, "no-store", "noindex", "not here"]);
     expect((await tombstoned(new Response("ok"), "/blog/a", store)).status).toBe(200);
-    expect((await tombstoned(new Response("x", { status: 404 }), "/blog/never", store)).status).toBe(404);
+    expect(
+      (await tombstoned(new Response("x", { status: 404 }), "/blog/never", store)).status,
+    ).toBe(404);
 
-    const page = goneResponse(new Request(`${ORIGIN}/blog/a`, { headers: { accept: "text/html" } }));
-    expect([page.status, page.headers.get("cache-control"), page.headers.get("content-type")]).toEqual([410, "no-store", "text/html; charset=utf-8"]);
-    const problem = goneResponse(new Request(`${ORIGIN}/blog/a`, { headers: { accept: "application/problem+json" } }));
-    expect([problem.status, problem.headers.get("content-type"), (await problem.json()).status]).toEqual([410, "application/problem+json; charset=utf-8", 410]);
+    const page = goneResponse(
+      new Request(`${ORIGIN}/blog/a`, { headers: { accept: "text/html" } }),
+    );
+    expect([
+      page.status,
+      page.headers.get("cache-control"),
+      page.headers.get("content-type"),
+    ]).toEqual([410, "no-store", "text/html; charset=utf-8"]);
+    const problem = goneResponse(
+      new Request(`${ORIGIN}/blog/a`, { headers: { accept: "application/problem+json" } }),
+    );
+    expect([
+      problem.status,
+      problem.headers.get("content-type"),
+      (await problem.json()).status,
+    ]).toEqual([410, "application/problem+json; charset=utf-8", 410]);
   });
 });
 
 describe("the acting person, backlinks and the feature image (v0.22.0, C2, F4, A2)", () => {
   it("keeps the actor as the revision's author, lists backlinks, and refuses a feature image with no alt unless decorative", async () => {
     const { c } = stored();
-    const a = await c.saveDraft("a", { source: "# A\n", expectedVersion: null, changeId: "c1", actor: { name: "Ada Example" } });
+    const a = await c.saveDraft("a", {
+      source: "# A\n",
+      expectedVersion: null,
+      changeId: "c1",
+      actor: { name: "Ada Example" },
+    });
     expect((await c.revisions("a")).items[0]!.author).toBe("Ada Example");
-    await c.saveDraft("b", { source: "# B\n\nSee [A](/blog/a).\n", expectedVersion: null, changeId: "c2" });
+    await c.saveDraft("b", {
+      source: "# B\n\nSee [A](/blog/a).\n",
+      expectedVersion: null,
+      changeId: "c2",
+    });
     expect((await c.backlinks("a")).items).toEqual([{ id: "b", title: "B", path: null }]);
     await expect(c.backlinks("missing")).rejects.toMatchObject({ status: 404 });
 
-    const bare = await c.saveDraft("a", { source: '---\ntitle: "A"\nfeatureImage: "/media/a.png"\n---\n\nA\n', expectedVersion: a.version, changeId: "c3" });
-    await expect(c.publish("a", { expectedVersion: bare.version, changeId: "c4" })).rejects.toMatchObject({ status: 422 });
-    const decorative = await c.saveDraft("a", { source: '---\ntitle: "A"\nfeatureImage: "/media/a.png"\nfeatureImageDecorative: true\n---\n\nA\n', expectedVersion: bare.version, changeId: "c5" });
-    expect((await c.publish("a", { expectedVersion: decorative.version, changeId: "c6", actor: { name: "Ada Example" } })).status).toBe("published");
+    const bare = await c.saveDraft("a", {
+      source: '---\ntitle: "A"\nfeatureImage: "/media/a.png"\n---\n\nA\n',
+      expectedVersion: a.version,
+      changeId: "c3",
+    });
+    await expect(
+      c.publish("a", { expectedVersion: bare.version, changeId: "c4" }),
+    ).rejects.toMatchObject({ status: 422 });
+    const decorative = await c.saveDraft("a", {
+      source:
+        '---\ntitle: "A"\nfeatureImage: "/media/a.png"\nfeatureImageDecorative: true\n---\n\nA\n',
+      expectedVersion: bare.version,
+      changeId: "c5",
+    });
+    expect(
+      (
+        await c.publish("a", {
+          expectedVersion: decorative.version,
+          changeId: "c6",
+          actor: { name: "Ada Example" },
+        })
+      ).status,
+    ).toBe("published");
   });
 });

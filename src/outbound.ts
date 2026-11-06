@@ -40,7 +40,11 @@ function publicIPv4([a, b, c]: number[]): boolean {
   if (a === 172 && b! >= 16 && b! <= 31) return false;
   if (a === 192 && (b === 168 || (b === 0 && (c === 0 || c === 2)))) return false;
   // Benchmarking (198.18.0.0/15) and the documentation ranges.
-  if ((a === 198 && (b === 18 || b === 19 || (b === 51 && c === 100))) || (a === 203 && b === 0 && c === 113)) return false;
+  if (
+    (a === 198 && (b === 18 || b === 19 || (b === 51 && c === 100))) ||
+    (a === 203 && b === 0 && c === 113)
+  )
+    return false;
   return true;
 }
 
@@ -56,7 +60,9 @@ function groups(host: string): number[] | null {
   const part = (t: string | undefined) => (t ? t.split(":").map((g) => parseInt(g, 16)) : []);
   const [first, last] = [part(head), part(rest)];
   const all = [...first, ...Array(Math.max(0, 8 - first.length - last.length)).fill(0), ...last];
-  return all.length === 8 && all.every((g) => Number.isInteger(g) && g >= 0 && g <= 0xffff) ? all : null;
+  return all.length === 8 && all.every((g) => Number.isInteger(g) && g >= 0 && g <= 0xffff)
+    ? all
+    : null;
 }
 
 function publicIPv6(host: string): boolean {
@@ -66,14 +72,29 @@ function publicIPv6(host: string): boolean {
   const zero = (from: number, to: number) => g.slice(from, to).every((x) => x === 0);
   // An IPv4 address carried inside IPv6 is judged as that address: compatible (::a.b.c.d, which covers :: and ::1),
   // mapped (::ffff:a.b.c.d), translated (::ffff:0:a.b.c.d), NAT64 (64:ff9b::a.b.c.d) and 6to4 (2002:aabb:ccdd::).
-  if (zero(0, 6) || (zero(0, 5) && g[5] === 0xffff) || (zero(0, 4) && g[4] === 0xffff && g[5] === 0)) return v4(g[6]!, g[7]!);
+  if (
+    zero(0, 6) ||
+    (zero(0, 5) && g[5] === 0xffff) ||
+    (zero(0, 4) && g[4] === 0xffff && g[5] === 0)
+  )
+    return v4(g[6]!, g[7]!);
   if (g[0] === 0x64 && g[1] === 0xff9b && zero(2, 6)) return v4(g[6]!, g[7]!);
   if (g[0] === 0x2002) return v4(g[1]!, g[2]!);
   // NAT64 local use (64:ff9b:1::/48), discard (100::/64), Teredo (2001::/32, which hides its IPv4) and documentation (2001:db8::/32).
-  if ((g[0] === 0x64 && g[1] === 0xff9b) || (g[0] === 0x100 && zero(1, 4)) || (g[0] === 0x2001 && (g[1] === 0 || g[1] === 0xdb8))) return false;
+  if (
+    (g[0] === 0x64 && g[1] === 0xff9b) ||
+    (g[0] === 0x100 && zero(1, 4)) ||
+    (g[0] === 0x2001 && (g[1] === 0 || g[1] === 0xdb8))
+  )
+    return false;
   // fc00::/7 unique local, fe80::/10 link-local, fec0::/10 site-local, ff00::/8 multicast.
   const first = g[0]!;
-  return !((first & 0xfe00) === 0xfc00 || (first & 0xff80) === 0xfe80 || (first & 0xffc0) === 0xfec0 || (first & 0xff00) === 0xff00);
+  return !(
+    (first & 0xfe00) === 0xfc00 ||
+    (first & 0xff80) === 0xfe80 ||
+    (first & 0xffc0) === 0xfec0 ||
+    (first & 0xff00) === 0xff00
+  );
 }
 
 /** True for an IP address, either family, that a public fetch may reach; false for every forbidden range or a non-address. */
@@ -92,20 +113,28 @@ const LOCAL_NAME = /(^|\.)(localhost|local|internal|lan|home|arpa|localdomain)$/
  * Why this address may not be fetched, judged on the address alone (no DNS), or null when it may. An IP literal is judged
  * by its range here; a host name still needs `resolveRefusal`.
  */
-export function addressRefusal(raw: string | URL, options: Pick<OutboundOptions, "allowHttp"> = {}): string | null {
+export function addressRefusal(
+  raw: string | URL,
+  options: Pick<OutboundOptions, "allowHttp"> = {},
+): string | null {
   let url: URL;
   try {
     url = new URL(raw);
   } catch {
     return "That is not a web address.";
   }
-  if (url.protocol !== "https:" && !(options.allowHttp && url.protocol === "http:")) return options.allowHttp ? "Only http and https addresses are fetched." : "Only https addresses are fetched.";
-  if (url.username || url.password) return "An address carrying a user name or password is not fetched.";
+  if (url.protocol !== "https:" && !(options.allowHttp && url.protocol === "http:"))
+    return options.allowHttp
+      ? "Only http and https addresses are fetched."
+      : "Only https addresses are fetched.";
+  if (url.username || url.password)
+    return "An address carrying a user name or password is not fetched.";
   // The URL parser drops a default port, so any port left is another one.
   if (url.port !== "") return "Only the default port is fetched.";
   const host = url.hostname.toLowerCase().replace(/\.$/, "");
   // The URL parser has already turned every IPv4 spelling (decimal, hex, short) into a dotted quad.
-  if (host.startsWith("[") || /^\d+\.\d+\.\d+\.\d+$/.test(host)) return publicAddress(host) ? null : "That address is in a private or local network.";
+  if (host.startsWith("[") || /^\d+\.\d+\.\d+\.\d+$/.test(host))
+    return publicAddress(host) ? null : "That address is in a private or local network.";
   if (!host.includes(".") || LOCAL_NAME.test(host)) return "A local address is not fetched.";
   return null;
 }
@@ -127,21 +156,28 @@ export async function resolveRefusal(host: string, dnsFetch: typeof fetch): Prom
         headers: { accept: "application/dns-json" },
         signal: AbortSignal.timeout(DOH_TIMEOUT_MS),
       });
-      if (!response.ok) return `The name ${name} could not be checked (the resolver answered ${response.status}).`;
+      if (!response.ok)
+        return `The name ${name} could not be checked (the resolver answered ${response.status}).`;
       answer = (await response.json()) as typeof answer;
     } catch {
       return `The name ${name} could not be checked.`;
     }
     // 1 is A, 28 is AAAA; a CNAME (5) on the way is followed by the resolver, which answers its addresses too.
-    for (const record of answer.Answer ?? []) if (record.type === 1 || record.type === 28) found.push(record.data);
+    for (const record of answer.Answer ?? [])
+      if (record.type === 1 || record.type === 28) found.push(record.data);
   }
   if (found.length === 0) return `The name ${name} does not resolve.`;
   const inside = found.find((ip) => !publicAddress(ip));
-  return inside ? `The name ${name} resolves to an address in a private or local network (${inside}).` : null;
+  return inside
+    ? `The name ${name} resolves to an address in a private or local network (${inside}).`
+    : null;
 }
 
 /** Why the address may not be fetched, after the address and its DNS answers are both checked, or null when it may. */
-export async function outboundRefusal(raw: string | URL, options: OutboundOptions & { dnsFetch: typeof fetch }): Promise<string | null> {
+export async function outboundRefusal(
+  raw: string | URL,
+  options: OutboundOptions & { dnsFetch: typeof fetch },
+): Promise<string | null> {
   const refusal = addressRefusal(raw, options);
   if (refusal) return refusal;
   const host = new URL(raw).hostname;
@@ -159,7 +195,10 @@ export async function guardedFetch(
   doFetch: typeof fetch,
   address: string,
   init: RequestInit = {},
-  options: OutboundOptions & { maxRedirects?: number; refuse?: (url: string) => string | null } = {},
+  options: OutboundOptions & {
+    maxRedirects?: number;
+    refuse?: (url: string) => string | null;
+  } = {},
 ): Promise<{ response: Response; url: string }> {
   const dnsFetch = options.dnsFetch ?? doFetch;
   const maxRedirects = options.maxRedirects ?? 5;
@@ -172,7 +211,8 @@ export async function guardedFetch(
     const location = response.headers.get("location");
     if (response.status >= 300 && response.status < 400 && location) {
       await response.body?.cancel().catch(() => {});
-      if (hop >= maxRedirects) throw new OutboundRefusal(`The address redirects more than ${maxRedirects} times.`);
+      if (hop >= maxRedirects)
+        throw new OutboundRefusal(`The address redirects more than ${maxRedirects} times.`);
       url = new URL(location, url).href;
       continue;
     }

@@ -2,7 +2,13 @@
 // trigger-kept `media_changes` (MEDIA_LIBRARY_SQL). A site on these tables passes `d1MediaStore(env.DB)` to
 // `mediaLibrary` and keeps no store of its own; a site whose tables differ writes a MediaLibraryStore over its own.
 
-import type { MediaLibraryStore, MediaRecord, MediaRecordFields, MediaRevisionRecord, MediaRecordWrite } from "./media-library.js";
+import type {
+  MediaLibraryStore,
+  MediaRecord,
+  MediaRecordFields,
+  MediaRevisionRecord,
+  MediaRecordWrite,
+} from "./media-library.js";
 import type { D1Like, D1StatementLike } from "./schedules.js";
 
 /** The D1 binding as the store uses it: a statement, and a batch that runs several in one transaction. */
@@ -166,7 +172,16 @@ function recordOf(row: Row): MediaRecord {
 }
 
 function revisionOf(row: RevisionRow): MediaRevisionRecord {
-  return { id: row.id, at: row.at, bytes: row.bytes, width: row.width, height: row.height, reason: row.reason, sha256: row.sha256, copyKey: row.copy_key };
+  return {
+    id: row.id,
+    at: row.at,
+    bytes: row.bytes,
+    width: row.width,
+    height: row.height,
+    reason: row.reason,
+    sha256: row.sha256,
+    copyKey: row.copy_key,
+  };
 }
 
 /** The columns a write sets, and their values, in the store's order. Fields with no column here are dropped. */
@@ -194,7 +209,10 @@ export interface D1MediaStoreOptions {
 }
 
 /** The library's store over MEDIA_LIBRARY_SQL's tables. */
-export function d1MediaStore(db: D1BatchLike, options: D1MediaStoreOptions = {}): MediaLibraryStore {
+export function d1MediaStore(
+  db: D1BatchLike,
+  options: D1MediaStoreOptions = {},
+): MediaLibraryStore {
   const one = async (key: string) => {
     const row = await db.prepare("SELECT * FROM media WHERE key = ?").bind(key).first<Row>();
     return row ? recordOf(row) : null;
@@ -217,15 +235,22 @@ export function d1MediaStore(db: D1BatchLike, options: D1MediaStoreOptions = {})
     },
 
     async all() {
-      const { results } = await db.prepare("SELECT * FROM media ORDER BY uploaded_at DESC, key ASC").all<Row>();
+      const { results } = await db
+        .prepare("SELECT * FROM media ORDER BY uploaded_at DESC, key ASC")
+        .all<Row>();
       return results.map(recordOf);
     },
 
     async byHash(sha256) {
-      const current = await db.prepare("SELECT * FROM media WHERE sha256 = ? ORDER BY uploaded_at ASC, key ASC LIMIT 1").bind(sha256).first<Row>();
+      const current = await db
+        .prepare("SELECT * FROM media WHERE sha256 = ? ORDER BY uploaded_at ASC, key ASC LIMIT 1")
+        .bind(sha256)
+        .first<Row>();
       if (current) return recordOf(current);
       const original = await db
-        .prepare("SELECT m.* FROM media_revisions r JOIN media m ON m.key = r.media_key WHERE r.sha256 = ? AND r.reason IN ('upload', 'import') ORDER BY r.id ASC LIMIT 1")
+        .prepare(
+          "SELECT m.* FROM media_revisions r JOIN media m ON m.key = r.media_key WHERE r.sha256 = ? AND r.reason IN ('upload', 'import') ORDER BY r.id ASC LIMIT 1",
+        )
         .bind(sha256)
         .first<Row>();
       return original ? recordOf(original) : null;
@@ -235,7 +260,9 @@ export function d1MediaStore(db: D1BatchLike, options: D1MediaStoreOptions = {})
       const { sql, values } = assignments(record);
       const columns = sql.map((s) => s.slice(0, -4));
       await db
-        .prepare(`INSERT INTO media (key, ${columns.join(", ")}) VALUES (?, ${columns.map(() => "?").join(", ")})`)
+        .prepare(
+          `INSERT INTO media (key, ${columns.join(", ")}) VALUES (?, ${columns.map(() => "?").join(", ")})`,
+        )
         .bind(record.key, ...values)
         .run();
     },
@@ -243,7 +270,9 @@ export function d1MediaStore(db: D1BatchLike, options: D1MediaStoreOptions = {})
     async writeAtRev(key, fields, expectedRev): Promise<MediaRecordWrite> {
       const { sql, values } = assignments(fields);
       const row = await db
-        .prepare(`UPDATE media SET ${[...sql, "rev = rev + 1"].join(", ")} WHERE key = ? AND rev = ? RETURNING *`)
+        .prepare(
+          `UPDATE media SET ${[...sql, "rev = rev + 1"].join(", ")} WHERE key = ? AND rev = ? RETURNING *`,
+        )
         .bind(...values, key, expectedRev)
         .first<Row>();
       if (row) return { ok: true, record: recordOf(row) };
@@ -266,20 +295,37 @@ export function d1MediaStore(db: D1BatchLike, options: D1MediaStoreOptions = {})
 
     async addRevision(key, revision) {
       const row = await db
-        .prepare("INSERT INTO media_revisions (media_key, at, bytes, width, height, reason, sha256, copy_key) VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id")
-        .bind(key, revision.at, revision.bytes, revision.width, revision.height, revision.reason, revision.sha256 ?? "", revision.copyKey)
+        .prepare(
+          "INSERT INTO media_revisions (media_key, at, bytes, width, height, reason, sha256, copy_key) VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
+        )
+        .bind(
+          key,
+          revision.at,
+          revision.bytes,
+          revision.width,
+          revision.height,
+          revision.reason,
+          revision.sha256 ?? "",
+          revision.copyKey,
+        )
         .first<{ id: number }>();
       if (!row) throw new Error(`${key}'s revision was not recorded`);
       return row.id;
     },
 
     async revisions(key, limit = 100) {
-      const { results } = await db.prepare("SELECT * FROM media_revisions WHERE media_key = ? ORDER BY id DESC LIMIT ?").bind(key, limit).all<RevisionRow>();
+      const { results } = await db
+        .prepare("SELECT * FROM media_revisions WHERE media_key = ? ORDER BY id DESC LIMIT ?")
+        .bind(key, limit)
+        .all<RevisionRow>();
       return results.map(revisionOf);
     },
 
     async keepCopy(revisionId, copyKey) {
-      await db.prepare("UPDATE media_revisions SET copy_key = ? WHERE id = ?").bind(copyKey, revisionId).run();
+      await db
+        .prepare("UPDATE media_revisions SET copy_key = ? WHERE id = ?")
+        .bind(copyKey, revisionId)
+        .run();
     },
 
     async remove(key, rev) {
@@ -287,10 +333,18 @@ export function d1MediaStore(db: D1BatchLike, options: D1MediaStoreOptions = {})
       if (!now) return "missing";
       if (now.rev !== rev) return "stale";
       const guard = options.inUse ? ` AND NOT (${options.inUse})` : "";
-      const guardBinds = options.inUse ? Array.from({ length: (options.inUse.match(/\?/g) ?? []).length }, () => key) : [];
+      const guardBinds = options.inUse
+        ? Array.from({ length: (options.inUse.match(/\?/g) ?? []).length }, () => key)
+        : [];
       const [deleted] = (await db.batch([
-        db.prepare(`DELETE FROM media WHERE key = ? AND rev = ?${guard} RETURNING key`).bind(key, rev, ...guardBinds),
-        db.prepare("DELETE FROM media_revisions WHERE media_key = ? AND NOT EXISTS (SELECT 1 FROM media WHERE key = ?)").bind(key, key),
+        db
+          .prepare(`DELETE FROM media WHERE key = ? AND rev = ?${guard} RETURNING key`)
+          .bind(key, rev, ...guardBinds),
+        db
+          .prepare(
+            "DELETE FROM media_revisions WHERE media_key = ? AND NOT EXISTS (SELECT 1 FROM media WHERE key = ?)",
+          )
+          .bind(key, key),
       ])) as Array<{ results?: unknown[] }>;
       if ((deleted?.results?.length ?? 0) > 0) return "removed";
       const after = await one(key);
@@ -298,13 +352,17 @@ export function d1MediaStore(db: D1BatchLike, options: D1MediaStoreOptions = {})
     },
 
     async changeCursor() {
-      const row = await db.prepare("SELECT max(seq) AS seq FROM media_changes").first<{ seq: number | null }>();
+      const row = await db
+        .prepare("SELECT max(seq) AS seq FROM media_changes")
+        .first<{ seq: number | null }>();
       return row?.seq ?? 0;
     },
 
     async changedSince(from, head, limit) {
       const { results } = await db
-        .prepare("SELECT media_key AS key, max(seq) AS seq FROM media_changes WHERE seq > ? AND seq <= ? GROUP BY media_key ORDER BY max(seq) ASC LIMIT ?")
+        .prepare(
+          "SELECT media_key AS key, max(seq) AS seq FROM media_changes WHERE seq > ? AND seq <= ? GROUP BY media_key ORDER BY max(seq) ASC LIMIT ?",
+        )
         .bind(from, head, limit + 1)
         .all<{ key: string; seq: number }>();
       return results;

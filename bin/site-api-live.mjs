@@ -16,7 +16,9 @@ import { parseArgs } from "node:util";
 const PREFIX = "/api/carrel/v1";
 
 function usage(message) {
-  console.error(`site-api-live: ${message}\nUsage: site-api-live --origin <https://site> [--from <https://where it is served>]`);
+  console.error(
+    `site-api-live: ${message}\nUsage: site-api-live --origin <https://site> [--from <https://where it is served>]`,
+  );
   process.exit(2);
 }
 
@@ -46,7 +48,11 @@ const report = (level, item, url, detail) => {
 async function get(path) {
   const url = `${origin}${path}`;
   try {
-    const response = await fetch(url, { headers, redirect: "manual", signal: AbortSignal.timeout(10_000) });
+    const response = await fetch(url, {
+      headers,
+      redirect: "manual",
+      signal: AbortSignal.timeout(10_000),
+    });
     return { url, response, body: await response.text() };
   } catch (error) {
     console.error(`site-api-live: could not reach ${url}: ${error.message}`);
@@ -56,16 +62,47 @@ async function get(path) {
 
 /** A keyless answer must be 401, problem details, and never stored by a cache. */
 function keyless({ url, response, body }, what) {
-  if (response.status !== 401) return report("error", "K4", url, `${what} answered ${response.status} without the key, expected 401`);
+  if (response.status !== 401)
+    return report(
+      "error",
+      "K4",
+      url,
+      `${what} answered ${response.status} without the key, expected 401`,
+    );
   // v0.22.0: any Cache-Control whose directives include no-store (so "private, no-store" passes too).
-  const directives = (response.headers.get("cache-control") ?? "").toLowerCase().split(",").map((d) => d.trim());
-  if (!directives.includes("no-store")) report("error", "K4", url, `${what} has cache-control ${response.headers.get("cache-control") ?? "missing"}, expected one with no-store`);
+  const directives = (response.headers.get("cache-control") ?? "")
+    .toLowerCase()
+    .split(",")
+    .map((d) => d.trim());
+  if (!directives.includes("no-store"))
+    report(
+      "error",
+      "K4",
+      url,
+      `${what} has cache-control ${response.headers.get("cache-control") ?? "missing"}, expected one with no-store`,
+    );
   if (!(response.headers.get("content-type") ?? "").startsWith("application/problem+json")) {
-    report("error", "K2", url, `${what} is ${response.headers.get("content-type") ?? "untyped"}, expected application/problem+json`);
+    report(
+      "error",
+      "K2",
+      url,
+      `${what} is ${response.headers.get("content-type") ?? "untyped"}, expected application/problem+json`,
+    );
   } else {
     try {
       const problem = JSON.parse(body);
-      if (problem.error !== "unauthorized" || !problem.type || !problem.title || problem.status !== 401) report("error", "K2", url, `${what} is not the unauthorized problem: ${body.slice(0, 200)}`);
+      if (
+        problem.error !== "unauthorized" ||
+        !problem.type ||
+        !problem.title ||
+        problem.status !== 401
+      )
+        report(
+          "error",
+          "K2",
+          url,
+          `${what} is not the unauthorized problem: ${body.slice(0, 200)}`,
+        );
     } catch {
       report("error", "K2", url, `${what} is not JSON`);
     }
@@ -78,11 +115,31 @@ keyless(meta, "meta");
 // Without the key an unknown route must look exactly like a known one, or the answer tells which routes exist.
 const unknown = await get(`${PREFIX}/site-api-live-${randomBytes(6).toString("hex")}`);
 keyless(unknown, "an unknown route");
-if (unknown.response.status !== meta.response.status || unknown.body !== meta.body) report("error", "K4", unknown.url, "answers differently from a known route without the key, so it tells which routes exist");
+if (unknown.response.status !== meta.response.status || unknown.body !== meta.body)
+  report(
+    "error",
+    "K4",
+    unknown.url,
+    "answers differently from a known route without the key, so it tells which routes exist",
+  );
 
 const preview = await get(`/preview/${randomBytes(32).toString("base64url")}`);
-const noindex = /noindex/i.test(preview.response.headers.get("x-robots-tag") ?? "") || /<meta[^>]+noindex/i.test(preview.body);
-if (preview.response.status !== 404) report("error", "E2", preview.url, `an unknown preview link answered ${preview.response.status}, expected 404`);
-else if (!noindex) report("warning", "E2", preview.url, "answers the site's own 404, not a preview link's: the site does not mount preview links yet");
+const noindex =
+  /noindex/i.test(preview.response.headers.get("x-robots-tag") ?? "") ||
+  /<meta[^>]+noindex/i.test(preview.body);
+if (preview.response.status !== 404)
+  report(
+    "error",
+    "E2",
+    preview.url,
+    `an unknown preview link answered ${preview.response.status}, expected 404`,
+  );
+else if (!noindex)
+  report(
+    "warning",
+    "E2",
+    preview.url,
+    "answers the site's own 404, not a preview link's: the site does not mount preview links yet",
+  );
 
 process.exitCode = errors > 0 ? 1 : 0;

@@ -22,7 +22,15 @@ export function mentionsRoutes(mentions: MentionsAdapter): Route[] {
       method: "GET",
       query: true,
       pattern: /^\/mentions$/,
-      run: async (_m, url) => json(200, checked(MentionList, await mentions.list(readQuery(url, MentionListQuery)), "mentions list")),
+      run: async (_m, url) =>
+        json(
+          200,
+          checked(
+            MentionList,
+            await mentions.list(readQuery(url, MentionListQuery)),
+            "mentions list",
+          ),
+        ),
     },
     {
       method: "POST",
@@ -30,7 +38,10 @@ export function mentionsRoutes(mentions: MentionsAdapter): Route[] {
       run: async (_m, _u, request) => {
         const input = await readBody(request, MentionSweepInput);
         const removed = await mentions.sweep(input);
-        return json(200, checked(MentionSweepResult, { changeId: input.changeId, removed }, "mentions sweep"));
+        return json(
+          200,
+          checked(MentionSweepResult, { changeId: input.changeId, removed }, "mentions sweep"),
+        );
       },
     },
     {
@@ -42,12 +53,20 @@ export function mentionsRoutes(mentions: MentionsAdapter): Route[] {
         const { decision, ...rest } = input;
         let result;
         if (decision === "reset") {
-          if (!mentions.reset) return fail("not-implemented", "This site does not take a mention decision back.");
+          if (!mentions.reset)
+            return fail("not-implemented", "This site does not take a mention decision back.");
           result = await mentions.reset(id, rest);
         } else {
           result = await mentions.decide(id, { ...rest, decision });
         }
-        return json(200, checked(MentionWriteResult, { id, ...result, changeId: input.changeId }, "mention decision"));
+        return json(
+          200,
+          checked(
+            MentionWriteResult,
+            { id, ...result, changeId: input.changeId },
+            "mention decision",
+          ),
+        );
       },
     },
     {
@@ -58,7 +77,14 @@ export function mentionsRoutes(mentions: MentionsAdapter): Route[] {
         const id = mentionId(m);
         const query = readQuery(url, MentionDeleteQuery);
         const result = await mentions.delete(id, query);
-        return json(200, checked(MentionDeleteResult, { id, deleted: true, changeId: query.changeId, purged: result.purged }, "mention delete"));
+        return json(
+          200,
+          checked(
+            MentionDeleteResult,
+            { id, deleted: true, changeId: query.changeId, purged: result.purged },
+            "mention delete",
+          ),
+        );
       },
     },
   ];

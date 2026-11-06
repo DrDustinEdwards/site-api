@@ -24,20 +24,30 @@ export interface R2BucketLike {
   put(
     key: string,
     value: ArrayBuffer | Uint8Array,
-    options: { httpMetadata?: R2ObjectLike["httpMetadata"]; customMetadata?: Record<string, string>; onlyIf: { etagMatches: string } },
+    options: {
+      httpMetadata?: R2ObjectLike["httpMetadata"];
+      customMetadata?: Record<string, string>;
+      onlyIf: { etagMatches: string };
+    },
   ): Promise<R2ObjectLike | null>;
 }
 
-const RACED = "The file changed on the site while this was being written. Nothing was changed; try again.";
+const RACED =
+  "The file changed on the site while this was being written. Nothing was changed; try again.";
 
 /**
  * Sets the object's focal point (customMetadata `focus`, FOCUS_METADATA, in `focusOf`'s spelling), or removes it for
  * null, keeping its bytes and every other metadata field. Answers the object as written; its etag moves, so the
  * image route's cached sizes (keyed by etag from site-runtime 0.27.0) are made afresh around the new point.
  */
-export async function writeFocus(bucket: R2BucketLike, key: string, focus: string | null): Promise<R2ObjectLike> {
+export async function writeFocus(
+  bucket: R2BucketLike,
+  key: string,
+  focus: string | null,
+): Promise<R2ObjectLike> {
   const point = focus === null ? null : focusOf(focus);
-  if (focus !== null && point === null) throw new RefusedError(`"${focus}" is not a focal point: write it as XxY, each from 0 to 1.`);
+  if (focus !== null && point === null)
+    throw new RefusedError(`"${focus}" is not a focal point: write it as XxY, each from 0 to 1.`);
   const object = await bucket.get(key);
   if (!object) throw new NotFoundError("No such media.");
   const { [FOCUS_METADATA]: _old, ...rest } = object.customMetadata ?? {};
@@ -55,11 +65,18 @@ export async function writeFocus(bucket: R2BucketLike, key: string, focus: strin
  * metadata, less the focal point, which named a place in the old picture. Refuses bytes of another type: the key names
  * the type. Answers the object as written.
  */
-export async function replaceObject(bucket: R2BucketLike, key: string, input: { bytes: Uint8Array; contentType: string }): Promise<R2ObjectLike> {
+export async function replaceObject(
+  bucket: R2BucketLike,
+  key: string,
+  input: { bytes: Uint8Array; contentType: string },
+): Promise<R2ObjectLike> {
   const object = await bucket.head(key);
   if (!object) throw new NotFoundError("No such media.");
   const held = (object.httpMetadata?.contentType ?? "").split(";")[0]!.trim().toLowerCase();
-  if (held && held !== input.contentType) throw new RefusedError(`This file is ${held}, and the replacement is ${input.contentType}. Upload it as a new file instead.`);
+  if (held && held !== input.contentType)
+    throw new RefusedError(
+      `This file is ${held}, and the replacement is ${input.contentType}. Upload it as a new file instead.`,
+    );
   const { [FOCUS_METADATA]: _old, ...rest } = object.customMetadata ?? {};
   const written = await bucket.put(key, input.bytes, {
     httpMetadata: { ...object.httpMetadata, contentType: input.contentType },
