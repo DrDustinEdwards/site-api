@@ -79,6 +79,21 @@ export function gonePath(path: string): string {
 }
 
 /**
+ * A site's own not-found answer, made 410 where the path holds a tombstone (v0.23.0): the same body and headers, so the
+ * site's own page still shows, and never cached or indexed. Asked only on a 404, so a page that answers costs no query;
+ * `isGone` answers false when the store cannot be read. Wrap the response the Worker is about to send:
+ *
+ *     return tombstoned(response, url.pathname, d1SiteApiStore(env.DB));
+ */
+export async function tombstoned(response: Response, pathname: string, store: Pick<SiteApiStore, "isGone">): Promise<Response> {
+  if (response.status !== 404 || !store.isGone || !(await store.isGone(pathname))) return response;
+  const gone = new Response(response.body, { status: 410, statusText: "Gone", headers: response.headers });
+  gone.headers.set("Cache-Control", "no-store");
+  gone.headers.set("X-Robots-Tag", "noindex");
+  return gone;
+}
+
+/**
  * The answer for a path that holds a tombstone (v0.22.0, F5): 410 Gone, never cached, never indexed. problem+json when
  * the request asks for JSON over HTML, a small HTML page otherwise. A site's not-found handler answers it when
  * `store.isGone(url.pathname)`:

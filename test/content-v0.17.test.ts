@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { createSiteClient } from "../src/client.js";
 import { memoryAdapter } from "../src/testing.js";
 import { createSiteApi, indexNowHook, type PublishEvent, type PublishHook } from "../src/index.js";
-import { d1SiteApiStore, goneResponse, SITE_API_STORE_SQL, SITE_API_STORE_SQL_V0_22 } from "../src/store.js";
+import { d1SiteApiStore, goneResponse, SITE_API_STORE_SQL, SITE_API_STORE_SQL_V0_22, tombstoned } from "../src/store.js";
 import { d1 } from "./d1.js";
 import { KEY, ORIGIN, allow, site } from "./helpers.js";
 
@@ -188,6 +188,12 @@ describe("tombstones (v0.22.0, F5)", () => {
     const b = await c.saveDraft("b", { source: "# B\n", expectedVersion: null, changeId: "c7" });
     await c.delete("b", { expectedVersion: b.version, changeId: "c8" });
     expect(await store.isGone("/blog/b")).toBe(false);
+
+    // v0.23.0: a site's own 404 becomes 410 with its body kept; a live 200 and a path never live stay as they are.
+    const own = await tombstoned(new Response("not here", { status: 404 }), "/blog/a/", store);
+    expect([own.status, own.headers.get("cache-control"), own.headers.get("x-robots-tag"), await own.text()]).toEqual([410, "no-store", "noindex", "not here"]);
+    expect((await tombstoned(new Response("ok"), "/blog/a", store)).status).toBe(200);
+    expect((await tombstoned(new Response("x", { status: 404 }), "/blog/never", store)).status).toBe(404);
 
     const page = goneResponse(new Request(`${ORIGIN}/blog/a`, { headers: { accept: "text/html" } }));
     expect([page.status, page.headers.get("cache-control"), page.headers.get("content-type")]).toEqual([410, "no-store", "text/html; charset=utf-8"]);

@@ -21,7 +21,7 @@ import { claim, REPLAY_DAYS, REPLAYED } from "./server/replay.js";
 import type { SiteApiStore } from "./store.js";
 
 export type { D1SiteApiStore, HookRetry, PreviewLinkRow, SiteApiStore, StoredWrite } from "./store.js";
-export { goneResponse, gonePath } from "./store.js";
+export { goneResponse, gonePath, tombstoned } from "./store.js";
 export { PREVIEW_LINK_PATH } from "./server/preview-links.js";
 
 /** The shape of Cloudflare's `ratelimit` binding, so a site passes its binding straight in. */
