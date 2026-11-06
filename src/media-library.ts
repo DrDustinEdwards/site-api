@@ -127,10 +127,11 @@ export interface MediaLibraryStore {
   /** Names the kept copy of a revision's bytes. */
   keepCopy(revisionId: number, copyKey: string): Promise<void>;
   /**
-   * Removes the file's row and its revisions in one batch. `in-use` when the site's own tables still name the file and the
-   * store refused atomically; `missing` when there was no row.
+   * Removes the file's row and its revisions in one batch, only while the row is at `rev` (the version the reference check
+   * saw). `stale` when it moved; `in-use` when the site's own tables still name the file and the store refused
+   * atomically; `missing` when there was no row.
    */
-  remove(key: string): Promise<"removed" | "in-use" | "missing">;
+  remove(key: string, rev: number): Promise<"removed" | "stale" | "in-use" | "missing">;
   /** Where the next poll of the change log starts: the newest entry's number, or 0 before the first. */
   changeCursor(): Promise<number>;
   /** Each file changed after `from` (up to `head`) once, at its latest change, oldest first; `limit + 1` at most. */
@@ -423,6 +424,14 @@ export function mediaLibrary(options: MediaLibraryOptions): MediaAdapter {
   const prepare = (bytes: Uint8Array, contentType: string, filename: string, changeId: string, shrink: boolean) =>
     prepareUpload(images, { bytes, contentType, filename, alt: "", changeId, resize: shrink }, resize ? { resize } : {});
 
+  /** Refuses a picture the Images binding could not measure: its bytes are broken, and no page could size it. */
+  function measured<T extends { contentType: string; width: number | null }>(prepared: T): T {
+    if (prepared.width === null && kindOf(prepared.contentType) === "image" && prepared.contentType !== "image/svg+xml") {
+      throw new RefusedError("Cloudflare Images could not read this picture, so it was not stored. Save it again from an image editor and upload that.");
+    }
+    return prepared;
+  }
+
   /** A key no row or object holds. */
   async function freshKey(file: MediaKeyInput): Promise<string> {
     for (let attempt = 1; attempt <= 50; attempt++) {
@@ -633,7 +642,7 @@ export function mediaLibrary(options: MediaLibraryOptions): MediaAdapter {
     },
 
     async upload(input): Promise<MediaUploaded> {
-      const prepared = await prepareUpload(images, input, resize ? { resize } : {});
+      const prepared = measured(await prepareUpload(images, input, resize ? { resize } : {}));
       const found = prepared.embedded;
       const embeddable: MediaEmbeddedField[] = ["credit", "license", "caption", "takenAt", ...(keepsRights ? (["copyright", "licenseUrl", "acquireLicenseUrl"] as const) : [])];
       const embedded = embeddable.filter((field) => found[field]);
@@ -688,8 +697,9 @@ export function mediaLibrary(options: MediaLibraryOptions): MediaAdapter {
           await keepCopy(id, record.sha256 ?? (await sha256Hex(bytes)), bytes, record.contentType);
         }
       }
-      const removed = await store.remove(id);
+      const removed = await store.remove(id, record.rev);
       if (removed === "missing") throw new NotFoundError("No such media.");
+      if (removed === "stale") throw new RefusedError("The file changed while it was being deleted, so it was kept. Reload it, then delete it again.");
       if (removed === "in-use") {
         const now_ = (await usesOf([id])).get(id) ?? [];
         if (now_.length > 0) throw new MediaInUseError(now_);
@@ -742,7 +752,7 @@ export function mediaLibrary(options: MediaLibraryOptions): MediaAdapter {
     async replace(id, input) {
       const record = await recordOf(id);
       atVersion(record, input.expectedVersion);
-      const prepared = await prepare(input.bytes, input.contentType, input.filename, input.changeId, false);
+      const prepared = measured(await prepare(input.bytes, input.contentType, input.filename, input.changeId, false));
       if (options.replaceKeepsSize && (prepared.width !== positive(record.width) || prepared.height !== positive(record.height))) {
         throw new RefusedError(
           `Pages on this site hold this picture's size (${record.width ?? "?"} by ${record.height ?? "?"}), and the new one is ${prepared.width ?? "?"} by ${prepared.height ?? "?"}. Upload it as a new file instead.`,

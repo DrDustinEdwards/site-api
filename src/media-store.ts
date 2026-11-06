@@ -281,15 +281,19 @@ export function d1MediaStore(db: D1BatchLike, options: D1MediaStoreOptions = {})
       await db.prepare("UPDATE media_revisions SET copy_key = ? WHERE id = ?").bind(copyKey, revisionId).run();
     },
 
-    async remove(key) {
-      if (!(await one(key))) return "missing";
+    async remove(key, rev) {
+      const now = await one(key);
+      if (!now) return "missing";
+      if (now.rev !== rev) return "stale";
       const guard = options.inUse ? ` AND NOT (${options.inUse})` : "";
       const guardBinds = options.inUse ? Array.from({ length: (options.inUse.match(/\?/g) ?? []).length }, () => key) : [];
       const [deleted] = (await db.batch([
-        db.prepare(`DELETE FROM media WHERE key = ?${guard} RETURNING key`).bind(key, ...guardBinds),
+        db.prepare(`DELETE FROM media WHERE key = ? AND rev = ?${guard} RETURNING key`).bind(key, rev, ...guardBinds),
         db.prepare("DELETE FROM media_revisions WHERE media_key = ? AND NOT EXISTS (SELECT 1 FROM media WHERE key = ?)").bind(key, key),
       ])) as Array<{ results?: unknown[] }>;
-      return (deleted?.results?.length ?? 0) > 0 ? "removed" : "in-use";
+      if ((deleted?.results?.length ?? 0) > 0) return "removed";
+      const after = await one(key);
+      return !after ? "missing" : after.rev !== rev ? "stale" : "in-use";
     },
 
     async changeCursor() {
