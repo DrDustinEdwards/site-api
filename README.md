@@ -215,6 +215,29 @@ Additive: every v0.4.0 route and body is unchanged, and the schema hash and pack
 - **Versions.** A mention's `version` is opaque, like a content version, and must move whenever its status, its verification or its decision does, and not when another mention changes. A write with a version the site no longer holds is `409 version-conflict` with `currentVersion`; a missing mention is `404`. dustinedwards.info's table has no `updated_at` and no version column, so its adapter derives one: a hash of `status`, `received_at`, `verified_at` and `decided_at` (a re-send resets all three timestamps and the status, an approve or reject sets the status and `decided_at`). It checks the version and then writes with the same values in the `WHERE`, so a change between the check and the write matches no row and is reported as a conflict.
 - **Conformance** adds, for every site: the list in shape (or `501` where the site has no group), writes without the key or with a wrong one refused, a decide and a delete of an id no site holds refused (`404`, or `501` without the group), and, where the site has the group, a decide with a stale version refused on the first real mention, a sweep with no change id refused (`400`, before anything is removed), and an unknown status refused. It never decides, deletes or sweeps anything real.
 
+## Changes in v0.24.0
+
+Additive: no route, body or schema changes. **The media library** (`mediaLibrary`, from the package root): the whole media group over a site's index rows and its R2 bucket, written once. Seven sites each wrote it for themselves and the copies drifted; a site now passes its store, bucket and rules, and keeps no media adapter of its own.
+
+```ts
+import { d1MediaStore, mediaLibrary, mediaSuggester } from "@dustinedwards/site-api";
+
+const media = mediaLibrary({
+  store: d1MediaStore(env.DB),                       // or the site's own MediaLibraryStore over its own tables
+  bucket: env.MEDIA,
+  images: env.IMAGES,
+  limits: { maxBytes: 20 * 1024 * 1024, types: ["image/jpeg", "image/png", "image/webp", "image/avif", "image/gif", "image/heic", "image/heif"] },
+  url: (key) => `/media/${key}`,
+  resize: { maxEdge: 4096, quality: 85 },
+  usage: (keys) => usesOf(env, keys),                // the site's reference check; absent: nothing counts uses
+  suggest: (picture, id) => suggest(env, picture, id),
+});
+```
+
+- **The store** is the site's index (`MediaLibraryStore`): rows in the contract's terms (`MediaRecord`), a versioned write (`writeAtRev`), revisions, the change log and a `remove` of the row and its revisions in one batch. `d1MediaStore(db, { inUse })` is the store over the network's standard tables (`MEDIA_LIBRARY_SQL`, a new site's migration); `inUse` is the site's own SQL check that a file is still used, run in the delete statement itself. A site whose tables differ writes the store over its own columns.
+- **Rules a site sets:** `limits`, `url` and `downloadUrl`, `key` (the key for a new file; `datedKey("uploads/")` by default, `uploads/<yyyy>/<mm>/<name>-<hash>.<ext>`, never one a row or object holds), `resize`, `shrink: false` for a site whose addresses carry a picture's size, `replaceKeepsSize`, `usage`, `deletable`, `history` (where earlier bytes are kept: the served bucket under `history/` by default, or a backups bucket and prefix), `httpMetadata` and `customMetadata` for the objects, `afterBytes` (a re-render of the pages that hold a file's size), `onWrite` (the site's audit or event log), `suggest` and `importFetch`.
+- **One behavior everywhere**, where the copies disagreed: a search trims its words and looks in the key, name, alt, caption, credit and tags; the no-alt lens ignores whitespace-only alt and leaves decorative files out; sorts apply in the trash too, and ties go newest first, then by key; a malformed page cursor is refused, never read as the first page; trash and restore of a file already there answer its version unchanged; a write's version is checked before any costly work, and the rev moves once per write; a new key is never one in use, and the object goes again if its row cannot be written; every upload records its first revision; a replace, turn, revert and shrink make a new placeholder and color, and a shrink keeps the focal point on the row and the object; each change of bytes is one conditional put with the object's metadata; a delete refuses a file in use (and refuses when the check cannot run), takes the row and its revisions together, and removes the copies kept in the served bucket; the duplicates lookup finds the earliest file, and falls back to the bytes a file was uploaded with before a shrink.
+
 ## Changes in v0.23.0
 
 Additive. `tombstoned(response, pathname, store)` (`@dustinedwards/site-api/store` and `/server`) is the one place a site turns its own 404 into the 410: where `store.isGone(pathname)`, the response keeps its body and headers, takes status 410, `Cache-Control: no-store` and `X-Robots-Tag: noindex`; any other response comes back as it was. A site wraps what its Worker is about to send, `return tombstoned(response, url.pathname, d1SiteApiStore(env.DB))`, and keeps no copy of its own. `goneResponse` stays for a site with no page of its own to show.
