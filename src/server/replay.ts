@@ -6,7 +6,6 @@ import { ChangeId } from "../contract.js";
 import { readUpload, sha256Hex } from "../media.js";
 import type { SiteApiStore } from "../store.js";
 import { BASE_HEADERS, fail, type Log } from "./http.js";
-import { must } from "../must.js";
 
 /** The writes that claim their change id: every one under content, media and mentions. */
 export const REPLAYED = /^\/(content|media|mentions)(\/|$)/;
@@ -57,10 +56,10 @@ export async function claim(
   if (held) {
     if (held.route !== route || held.requestHash !== requestHash) return { answer: fail("refused", "This change id was already used for a different request.") };
     if (held.state === "running") return { answer: fail("in-progress", "A write under this change id is still running. Send it again once it has answered.") };
-    const ok = must(held.status) >= 200 && must(held.status) < 300;
+    const ok = held.status! >= 200 && held.status! < 300;
     return {
       answer: new Response(held.response, {
-        status: must(held.status),
+        status: held.status!,
         headers: { ...BASE_HEADERS, "content-type": ok ? "application/json; charset=utf-8" : "application/problem+json; charset=utf-8", "idempotent-replayed": "true" },
       }),
     };

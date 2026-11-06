@@ -14,7 +14,6 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { toArrayBuffer } from "../src/media-kit.js";
 import { prepareUpload, readEmbedded, stripMetadata, type UploadImages } from "../src/media-upload.js";
-import { must } from "../src/must.js";
 
 const fixture = (name: string) => new Uint8Array(readFileSync(new URL(`./fixtures/${name}`, import.meta.url)));
 const latin = (b: Uint8Array) => Buffer.from(b).toString("latin1");
@@ -120,7 +119,7 @@ describe("prepareUpload", () => {
     expect(prepared).toMatchObject({ placeholder: `data:image/webp;base64,${btoa("RIFF\0\0\0\0WEBPVP8 ")}`, color: "#12abcd", stripped: true });
     expect(transforms).toEqual([{ width: 3000, height: 3000, fit: "scale-down" }, { width: 16, height: 16, fit: "scale-down", blur: 2 }, { width: 1, height: 1, fit: "squeeze" }]);
     expect(outputs).toEqual(["image/jpeg", "image/jpeg", "image/webp", "image/png"]);
-    expect(PRIVATE.filter((p) => latin(must(prepared.original)).includes(p))).toEqual([]);
+    expect(PRIVATE.filter((p) => latin(prepared.original!).includes(p))).toEqual([]);
     expect(prepared.sha256).not.toBe(prepared.uploadSha256);
 
     // A decorative upload keeps a camera's name, with the stored type's extension; a person's own name is kept.

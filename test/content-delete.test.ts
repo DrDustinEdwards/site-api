@@ -6,7 +6,6 @@ import { RefusedError } from "../src/adapter.js";
 import { createSiteClient, SiteApiError } from "../src/client.js";
 import { memoryAdapter } from "../src/testing.js";
 import { KEY, ORIGIN, req, site } from "./helpers.js";
-import { must } from "../src/must.js";
 
 function client(adapter = memoryAdapter()) {
   const s = site(adapter);
@@ -104,7 +103,7 @@ describe("content delete", () => {
 
   it("PLANT: refused without the key or with a wrong one, before the adapter runs", async () => {
     const adapter = memoryAdapter();
-    const spy = vi.fn(must(adapter.content.delete));
+    const spy = vi.fn(adapter.content.delete!);
     adapter.content.delete = spy;
     const { api } = site(adapter);
     const path = "/api/carrel/v1/content/first-post?expectedVersion=v1&changeId=c1";
@@ -116,7 +115,7 @@ describe("content delete", () => {
 
   it("PLANT: refuses a delete with no expectedVersion or change id, or a bad id, before the adapter runs", async () => {
     const adapter = memoryAdapter();
-    const spy = vi.fn(must(adapter.content.delete));
+    const spy = vi.fn(adapter.content.delete!);
     adapter.content.delete = spy;
     const { api } = site(adapter);
     for (const path of [

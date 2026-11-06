@@ -42,7 +42,6 @@ import {
   absolute,
   actingClient,
 } from "./kit.js";
-import { must } from "../must.js";
 
 
 export type PostSort = "updated" | "published" | "title";
@@ -206,12 +205,12 @@ export async function loadPosts(source: ContentSource, query: PostQuery = {}): P
   const kinds = [...new Set(rows.map((r) => r.kind))].sort();
   const authors = [...new Set(rows.flatMap((r) => r.authors ?? []))].sort();
   if (query.kind && !onSite.kind) rows = rows.filter((r) => r.kind === query.kind);
-  if (query.tag && !onSite.tag) rows = rows.filter((r) => (r.tags ?? []).some((t) => sameTag(t, must(query.tag))));
+  if (query.tag && !onSite.tag) rows = rows.filter((r) => (r.tags ?? []).some((t) => sameTag(t, query.tag!)));
   // A site that sorted says so (v0.6.0); otherwise the kit sorts the page it has and says that.
   const sortedOnPage = query.sort !== undefined && list.sorted === undefined;
   if (sortedOnPage) {
     const dir = query.dir ?? (query.sort === "title" ? "asc" : "desc");
-    rows = [...rows].sort((a, b) => (dir === (query.sort === "title" ? "asc" : "desc") ? 1 : -1) * BY[must(query.sort)](a, b));
+    rows = [...rows].sort((a, b) => (dir === (query.sort === "title" ? "asc" : "desc") ? 1 : -1) * BY[query.sort!](a, b));
   }
   // Where the site counts (v0.6.0), each status tab gets its count for the same search, and the Trash its own.
   let counts: PostsData["counts"];
@@ -223,7 +222,7 @@ export async function loadPosts(source: ContentSource, query: PostQuery = {}): P
       trash ? source.client.list({ limit: 1, ...search, trashed: true }) : null,
     ]);
     counts = { all: query.status || query.trashed ? totals.reduce((n, t) => n + (t.total ?? 0), 0) : list.total };
-    statuses.forEach((status, i) => (must(counts)[status] = must(totals[i]).total ?? 0));
+    statuses.forEach((status, i) => (counts![status] = totals[i]!.total ?? 0));
     if (binned?.total !== undefined) counts.trash = binned.total;
   }
   if (source.notes && rows.length > 0) {
@@ -391,7 +390,7 @@ export async function runPostsIntent(source: ContentSource, input: IntentInput):
       items: targets.map((t) => t.id),
       fields: { ids: targets.map((t) => t.id), versions: targets.map((t) => t.version ?? "") },
     });
-    if (ask) return backlinks.length > 0 ? { ...ask, confirm: { ...must(ask.confirm), backlinks } } : ask;
+    if (ask) return backlinks.length > 0 ? { ...ask, confirm: { ...ask.confirm!, backlinks } } : ask;
   }
   // A trash can be undone, so it asks only when other posts link to one of them.
   if (intent === "trash" && targets.length > 0) {
@@ -405,7 +404,7 @@ export async function runPostsIntent(source: ContentSource, input: IntentInput):
         items: targets.map((t) => t.id),
         fields: { ids: targets.map((t) => t.id), versions: targets.map((t) => t.version ?? "") },
       });
-      if (ask) return { ...ask, confirm: { ...must(ask.confirm), backlinks } };
+      if (ask) return { ...ask, confirm: { ...ask.confirm!, backlinks } };
     }
   }
 
@@ -435,14 +434,14 @@ export async function runPostsIntent(source: ContentSource, input: IntentInput):
         const parts = splitSource(doc.source);
         if (!viaRoute && parts.front === null) return { id, ok: false, message: "This post has no frontmatter, so it has no tags to change." };
         const tags = viaRoute ? (doc.tags ?? []) : tagsOf(parts.front);
-        const has = tags.some((t) => sameTag(t, must(tag)));
+        const has = tags.some((t) => sameTag(t, tag!));
         if (intent === "tag-add" && has) return { id, ok: true, message: `Already tagged "${tag}". Not changed.` };
         if (intent === "tag-remove" && !has) return { id, ok: true, message: `Did not have the tag "${tag}". Not changed.` };
-        const next = intent === "tag-add" ? [...tags, must(tag)] : tags.filter((t) => !sameTag(t, must(tag)));
+        const next = intent === "tag-add" ? [...tags, tag!] : tags.filter((t) => !sameTag(t, tag!));
         const change = changeId();
         const written = viaRoute
           ? await client.setTags(id, { tags: next, expectedVersion: doc.version, changeId: change })
-          : await client.saveDraft(id, { source: joinSource({ ...parts, front: setTags(must(parts.front), next) }), expectedVersion: doc.version, changeId: change });
+          : await client.saveDraft(id, { source: joinSource({ ...parts, front: setTags(parts.front!, next) }), expectedVersion: doc.version, changeId: change });
         undoIds.push(id);
         undoVersions.push(written.version);
         const note = await recordDone(source, `post-${intent}`, id, change);
@@ -502,7 +501,7 @@ export async function runPostsIntent(source: ContentSource, input: IntentInput):
       }
       case "reschedule": {
         const doc = await read(id, version);
-        const publishAt = must(newTime(id));
+        const publishAt = newTime(id)!;
         const change = changeId();
         let before: string;
         let written;

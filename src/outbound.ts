@@ -1,5 +1,3 @@
-import { must } from "./must.js";
-
 // The one outbound-address guard (v0.22.0), for every fetch the package makes to an address a stranger chose: the
 // webmention sender (targets and their endpoints) and the media import. Before v0.22.0 each had its own copy, and both
 // judged the host name alone, so a name that resolves to a private address (127.0.0.1.nip.io) got through.
@@ -34,12 +32,12 @@ export interface OutboundOptions {
 
 /** True for an IPv4 address (four numbers) that a public fetch may reach. */
 function publicIPv4([a, b, c]: number[]): boolean {
-  if (a === 0 || a === 10 || a === 127 || must(a) >= 224) return false;
+  if (a === 0 || a === 10 || a === 127 || a! >= 224) return false;
   // CGNAT, 100.64.0.0/10.
-  if (a === 100 && must(b) >= 64 && must(b) <= 127) return false;
+  if (a === 100 && b! >= 64 && b! <= 127) return false;
   // Link-local, which holds the cloud metadata address 169.254.169.254.
   if (a === 169 && b === 254) return false;
-  if (a === 172 && must(b) >= 16 && must(b) <= 31) return false;
+  if (a === 172 && b! >= 16 && b! <= 31) return false;
   if (a === 192 && (b === 168 || (b === 0 && (c === 0 || c === 2)))) return false;
   // Benchmarking (198.18.0.0/15) and the documentation ranges.
   if ((a === 198 && (b === 18 || b === 19 || (b === 51 && c === 100))) || (a === 203 && b === 0 && c === 113)) return false;
@@ -68,13 +66,13 @@ function publicIPv6(host: string): boolean {
   const zero = (from: number, to: number) => g.slice(from, to).every((x) => x === 0);
   // An IPv4 address carried inside IPv6 is judged as that address: compatible (::a.b.c.d, which covers :: and ::1),
   // mapped (::ffff:a.b.c.d), translated (::ffff:0:a.b.c.d), NAT64 (64:ff9b::a.b.c.d) and 6to4 (2002:aabb:ccdd::).
-  if (zero(0, 6) || (zero(0, 5) && g[5] === 0xffff) || (zero(0, 4) && g[4] === 0xffff && g[5] === 0)) return v4(must(g[6]), must(g[7]));
-  if (g[0] === 0x64 && g[1] === 0xff9b && zero(2, 6)) return v4(must(g[6]), must(g[7]));
-  if (g[0] === 0x2002) return v4(must(g[1]), must(g[2]));
+  if (zero(0, 6) || (zero(0, 5) && g[5] === 0xffff) || (zero(0, 4) && g[4] === 0xffff && g[5] === 0)) return v4(g[6]!, g[7]!);
+  if (g[0] === 0x64 && g[1] === 0xff9b && zero(2, 6)) return v4(g[6]!, g[7]!);
+  if (g[0] === 0x2002) return v4(g[1]!, g[2]!);
   // NAT64 local use (64:ff9b:1::/48), discard (100::/64), Teredo (2001::/32, which hides its IPv4) and documentation (2001:db8::/32).
   if ((g[0] === 0x64 && g[1] === 0xff9b) || (g[0] === 0x100 && zero(1, 4)) || (g[0] === 0x2001 && (g[1] === 0 || g[1] === 0xdb8))) return false;
   // fc00::/7 unique local, fe80::/10 link-local, fec0::/10 site-local, ff00::/8 multicast.
-  const first = must(g[0]);
+  const first = g[0]!;
   return !((first & 0xfe00) === 0xfc00 || (first & 0xff80) === 0xfe80 || (first & 0xffc0) === 0xfec0 || (first & 0xff00) === 0xff00);
 }
 

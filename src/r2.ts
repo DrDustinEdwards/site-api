@@ -8,7 +8,6 @@
 import { FOCUS_METADATA, focusOf } from "@dustinedwards/site-runtime/image";
 
 import { NotFoundError, RefusedError } from "./adapter.js";
-import { must } from "./must.js";
 
 /** The parts of an R2 object these read. */
 export interface R2ObjectLike {
@@ -59,7 +58,7 @@ export async function writeFocus(bucket: R2BucketLike, key: string, focus: strin
 export async function replaceObject(bucket: R2BucketLike, key: string, input: { bytes: Uint8Array; contentType: string }): Promise<R2ObjectLike> {
   const object = await bucket.head(key);
   if (!object) throw new NotFoundError("No such media.");
-  const held = must((object.httpMetadata?.contentType ?? "").split(";")[0]).trim().toLowerCase();
+  const held = (object.httpMetadata?.contentType ?? "").split(";")[0]!.trim().toLowerCase();
   if (held && held !== input.contentType) throw new RefusedError(`This file is ${held}, and the replacement is ${input.contentType}. Upload it as a new file instead.`);
   const { [FOCUS_METADATA]: _old, ...rest } = object.customMetadata ?? {};
   const written = await bucket.put(key, input.bytes, {

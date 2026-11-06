@@ -34,7 +34,6 @@ import {
 } from "../contract.js";
 import { missingAltFields, splitSource } from "../frontmatter.js";
 import { BadRequest, BASE_HEADERS, ContractBreach, ID, checked, fail, json, pathParam, readBody, readQuery, type Route } from "./http.js";
-import { must } from "../must.js";
 
 /** A DELETE's `actorName` (v0.22.0) as the `actor` every other write hands the adapter. */
 function withActor<T extends { actorName?: string | undefined }>(query: T): Omit<T, "actorName"> & { actor?: { name: string } } {
@@ -242,7 +241,7 @@ export function contentRoutes(adapter: SiteAdapter, options: { store: boolean; h
         const contentId = id(m);
         if (!hasContentTrash(adapter)) return fail("not-implemented", "This site has no content trash.");
         const input = await readBody(request, ContentTrashInput);
-        return json(200, checked(WriteResult, await must(adapter.content[op]).call(adapter.content, contentId, input), `content ${op}`));
+        return json(200, checked(WriteResult, await adapter.content[op]!(contentId, input), `content ${op}`));
       },
     })),
     {

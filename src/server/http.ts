@@ -5,7 +5,6 @@ import type { z } from "zod";
 import { MediaInUseError, NotFoundError, RefusedError, VersionConflictError } from "../adapter.js";
 import type { ErrorBody, ErrorCode, MediaUse } from "../contract.js";
 import { readCapped } from "@dustinedwards/site-runtime/body";
-import { must } from "../must.js";
 
 /** Four million bytes: two million characters of source can take that much as UTF-8 JSON. */
 export const MAX_BODY_BYTES = 4_000_000;
@@ -173,7 +172,7 @@ export const ID = "([^/]+)";
 export function pathParam(raw: string | undefined, shape: z.ZodType, what: string): string {
   let value: string;
   try {
-    value = decodeURIComponent(must(raw));
+    value = decodeURIComponent(raw!);
   } catch {
     throw new BadRequest("invalid", `The ${what} is not valid.`);
   }

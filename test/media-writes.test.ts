@@ -5,7 +5,6 @@ import { describe, expect, it } from "vitest";
 import { createSiteClient, SiteApiError } from "../src/client.js";
 import { memoryAdapter } from "../src/testing.js";
 import { KEY, ORIGIN, body, req, site } from "./helpers.js";
-import { must } from "../src/must.js";
 
 const PNG = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
@@ -30,13 +29,13 @@ describe("alt text", () => {
     const { client, add, adapter } = setup();
     const file = await add("a.png");
     expect(file.version).toBeTruthy();
-    const done = await client.media.setAlt(file.id, { alt: "A river at dusk", expectedVersion: must(file.version), changeId: "c1" });
+    const done = await client.media.setAlt(file.id, { alt: "A river at dusk", expectedVersion: file.version!, changeId: "c1" });
     expect(done).toEqual({ id: file.id, version: expect.any(String), changeId: "c1" });
     expect(done.version).not.toBe(file.version);
     expect(adapter.mediaStore.get(file.id)?.item.alt).toBe("A river at dusk");
     expect((await client.media.get(file.id)).version).toBe(done.version);
 
-    const stale = await refused(client.media.setAlt(file.id, { alt: "Lost update", expectedVersion: must(file.version), changeId: "c2" }));
+    const stale = await refused(client.media.setAlt(file.id, { alt: "Lost update", expectedVersion: file.version!, changeId: "c2" }));
     expect(stale.status).toBe(409);
     expect(stale.body).toMatchObject({ error: "version-conflict", currentVersion: done.version });
     expect(adapter.mediaStore.get(file.id)?.item.alt).toBe("A river at dusk");
@@ -55,7 +54,7 @@ describe("tags", () => {
     const { client, add } = setup();
     const a = await add("a.png");
     const b = await add("b.png");
-    const done = await client.media.setTags(a.id, { tags: ["river", "dusk", "river"], expectedVersion: must(a.version), changeId: "c1" });
+    const done = await client.media.setTags(a.id, { tags: ["river", "dusk", "river"], expectedVersion: a.version!, changeId: "c1" });
     expect((await client.media.get(a.id)).tags).toEqual(["dusk", "river"]);
     expect((await client.media.list({ tag: "dusk" })).items.map((i) => i.id)).toEqual([a.id]);
     expect((await client.media.list({ tag: "nothing" })).items).toEqual([]);
@@ -66,10 +65,10 @@ describe("tags", () => {
   it("refuses a stale version, a badly spelled tag and more than 12 tags, changing nothing", async () => {
     const { client, add, adapter, fetch } = setup();
     const a = await add("a.png");
-    await client.media.setTags(a.id, { tags: ["one"], expectedVersion: must(a.version), changeId: "c1" });
-    expect((await refused(client.media.setTags(a.id, { tags: ["two"], expectedVersion: must(a.version), changeId: "c2" }))).status).toBe(409);
+    await client.media.setTags(a.id, { tags: ["one"], expectedVersion: a.version!, changeId: "c1" });
+    expect((await refused(client.media.setTags(a.id, { tags: ["two"], expectedVersion: a.version!, changeId: "c2" }))).status).toBe(409);
     expect(adapter.mediaStore.get(a.id)?.item.tags).toEqual(["one"]);
-    const current = must(must(adapter.mediaStore.get(a.id)).item.version);
+    const current = adapter.mediaStore.get(a.id)!.item.version!;
     for (const tags of [["Upper Case"], Array.from({ length: 13 }, (_, i) => `t${i}`)]) {
       const response = await fetch(req(`/api/carrel/v1/media/${encodeURIComponent(a.id)}/tags`, { method: "PUT", ...body({ tags, expectedVersion: current, changeId: "c3" }) }));
       expect(response.status).toBe(400);
@@ -82,7 +81,7 @@ describe("trash, restore and empty", () => {
   it("hides a trashed file from the list, shows it in the trash, and brings it back on restore", async () => {
     const { client, add, adapter } = setup();
     const a = await add("a.png");
-    const trashed = await client.media.trash(a.id, { expectedVersion: must(a.version), changeId: "c1" });
+    const trashed = await client.media.trash(a.id, { expectedVersion: a.version!, changeId: "c1" });
     expect((await client.media.list()).items).toEqual([]);
     const inTrash = (await client.media.list({ trashed: "only" })).items;
     expect(inTrash.map((i) => i.id)).toEqual([a.id]);
@@ -90,7 +89,7 @@ describe("trash, restore and empty", () => {
     expect(adapter.mediaStore.has(a.id)).toBe(true);
     expect(adapter.deleted).toEqual([]);
 
-    expect((await refused(client.media.restore(a.id, { expectedVersion: must(a.version), changeId: "c2" }))).status).toBe(409);
+    expect((await refused(client.media.restore(a.id, { expectedVersion: a.version!, changeId: "c2" }))).status).toBe(409);
     const restored = await client.media.restore(a.id, { expectedVersion: trashed.version, changeId: "c3" });
     expect(restored.version).not.toBe(trashed.version);
     expect((await client.media.list()).items.map((i) => i.id)).toEqual([a.id]);
@@ -102,8 +101,8 @@ describe("trash, restore and empty", () => {
     const keep = await add("keep.png");
     const a = await add("a.png");
     const b = await add("b.png");
-    await client.media.trash(a.id, { expectedVersion: must(a.version), changeId: "t1" });
-    await client.media.trash(b.id, { expectedVersion: must(b.version), changeId: "t2" });
+    await client.media.trash(a.id, { expectedVersion: a.version!, changeId: "t1" });
+    await client.media.trash(b.id, { expectedVersion: b.version!, changeId: "t2" });
     const result = await client.media.emptyTrash({ changeId: "empty1" });
     expect(result.changeId).toBe("empty1");
     expect([...result.deleted].sort()).toEqual([a.id, b.id].sort());
@@ -118,8 +117,8 @@ describe("trash, restore and empty", () => {
     const used = await add("used.png");
     const spare = await add("spare.png");
     await adapter.content.saveDraft("a-post", { source: `# T\n\n![x](${used.url})\n`, expectedVersion: null, changeId: "d1" });
-    await client.media.trash(used.id, { expectedVersion: must(used.version), changeId: "t1" });
-    await client.media.trash(spare.id, { expectedVersion: must(spare.version), changeId: "t2" });
+    await client.media.trash(used.id, { expectedVersion: used.version!, changeId: "t1" });
+    await client.media.trash(spare.id, { expectedVersion: spare.version!, changeId: "t2" });
     const result = await client.media.emptyTrash({ changeId: "e" });
     expect(result.deleted).toEqual([spare.id]);
     expect(result.refused).toHaveLength(1);
@@ -131,9 +130,9 @@ describe("trash, restore and empty", () => {
     const { client, add, adapter } = setup();
     const a = await add("a.png");
     const b = await add("b.png");
-    await client.media.trash(a.id, { expectedVersion: must(a.version), changeId: "t1" });
-    await client.media.trash(b.id, { expectedVersion: must(b.version), changeId: "t2" });
-    const media = must(adapter.media);
+    await client.media.trash(a.id, { expectedVersion: a.version!, changeId: "t1" });
+    await client.media.trash(b.id, { expectedVersion: b.version!, changeId: "t2" });
+    const media = adapter.media!;
     const real = media.delete.bind(media);
     let calls = 0;
     media.delete = async (id, opts) => {
@@ -150,7 +149,7 @@ describe("trash, restore and empty", () => {
     const { client, adapter } = setup();
     for (let i = 0; i < 102; i++) {
       const f = await client.media.upload({ bytes: PNG, contentType: "image/png", filename: `f${i}.png`, alt: "A test picture", changeId: `u${i}` });
-      await client.media.trash(f.id, { expectedVersion: must(f.version), changeId: `t${i}` });
+      await client.media.trash(f.id, { expectedVersion: f.version!, changeId: `t${i}` });
     }
     const first = await client.media.emptyTrash({ changeId: "e1" });
     expect(first.deleted).toHaveLength(100);
@@ -164,14 +163,14 @@ describe("trash, restore and empty", () => {
   it("gives each deleted file its own change id, built from the request's", async () => {
     const { client, add, adapter } = setup();
     const seen: string[] = [];
-    const del = must(adapter.media).delete;
-    must(adapter.media).delete = (id, input) => {
+    const del = adapter.media!.delete;
+    adapter.media!.delete = (id, input) => {
       seen.push(input.changeId);
       return del(id, input);
     };
     for (const name of ["a.png", "b.png"]) {
       const f = await add(name);
-      await client.media.trash(f.id, { expectedVersion: must(f.version), changeId: `t-${name.slice(0, 1)}` });
+      await client.media.trash(f.id, { expectedVersion: f.version!, changeId: `t-${name.slice(0, 1)}` });
     }
     await client.media.emptyTrash({ changeId: "base" });
     expect(seen).toEqual(["base-1", "base-2"]);
@@ -186,7 +185,7 @@ describe("bulk", () => {
     const result = await client.media.bulk({
       op: "trash",
       items: [
-        { id: a.id, expectedVersion: must(a.version), changeId: "b1" },
+        { id: a.id, expectedVersion: a.version!, changeId: "b1" },
         { id: b.id, expectedVersion: "stale", changeId: "b2" },
         { id: "ghost.png", expectedVersion: "m1", changeId: "b3" },
         { id: a.id, changeId: "b4" },
@@ -207,27 +206,27 @@ describe("bulk", () => {
     const { client, add, adapter } = setup();
     const a = await add("a.png");
     const b = await add("b.png");
-    const a2 = await client.media.setTags(a.id, { tags: ["keep", "old"], expectedVersion: must(a.version), changeId: "s1" });
+    const a2 = await client.media.setTags(a.id, { tags: ["keep", "old"], expectedVersion: a.version!, changeId: "s1" });
     const added = await client.media.bulk({
       op: "add-tags",
       tags: ["new"],
       items: [
         { id: a.id, expectedVersion: a2.version, changeId: "b1" },
-        { id: b.id, expectedVersion: must(b.version), changeId: "b2" },
+        { id: b.id, expectedVersion: b.version!, changeId: "b2" },
       ],
     });
     expect(added.results.every((r) => r.ok)).toBe(true);
     expect(adapter.mediaStore.get(a.id)?.item.tags).toEqual(["keep", "new", "old"]);
     expect(adapter.mediaStore.get(b.id)?.item.tags).toEqual(["new"]);
 
-    const va = must(must(adapter.mediaStore.get(a.id)).item.version);
+    const va = adapter.mediaStore.get(a.id)!.item.version!;
     const removed = await client.media.bulk({ op: "remove-tags", tags: ["old", "absent"], items: [{ id: a.id, expectedVersion: va, changeId: "b3" }] });
     expect(removed.results[0]?.ok).toBe(true);
     expect(adapter.mediaStore.get(a.id)?.item.tags).toEqual(["keep", "new"]);
 
     const full = await client.media.setTags(b.id, {
       tags: Array.from({ length: 12 }, (_, i) => `t${i}`),
-      expectedVersion: must(must(adapter.mediaStore.get(b.id)).item.version),
+      expectedVersion: adapter.mediaStore.get(b.id)!.item.version!,
       changeId: "s2",
     });
     const over = await client.media.bulk({
@@ -235,7 +234,7 @@ describe("bulk", () => {
       tags: ["extra"],
       items: [
         { id: b.id, expectedVersion: full.version, changeId: "b4" },
-        { id: a.id, expectedVersion: must(must(adapter.mediaStore.get(a.id)).item.version), changeId: "b5" },
+        { id: a.id, expectedVersion: adapter.mediaStore.get(a.id)!.item.version!, changeId: "b5" },
       ],
     });
     expect(over.results.map((r) => r.ok)).toEqual([false, true]);
@@ -325,7 +324,7 @@ describe("a site without the writes", () => {
     expect(caps).toMatchObject({ mediaTrash: true, mediaAlt: true });
     expect(caps.mediaTags ?? false).toBe(false);
     const f = await add("a.png");
-    const input = { id: f.id, expectedVersion: must(f.version), changeId: "c" };
+    const input = { id: f.id, expectedVersion: f.version!, changeId: "c" };
     expect((await refused(client.media.bulk({ op: "add-tags", tags: ["x"], items: [input] }))).status).toBe(501);
     expect((await client.media.bulk({ op: "trash", items: [input] })).results[0]?.ok).toBe(true);
   });

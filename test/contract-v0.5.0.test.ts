@@ -11,7 +11,6 @@ import * as contract from "../src/contract.js";
 import { additiveOnly, added, now, widened, type JsonSchema } from "./additive.js";
 import { V0170_CODES, V0170_ROUTES, V0170_SCHEMAS, V0170_WIDEN, V0220_ROUTES, withV0170, withV0220 } from "./v0.17.0.js";
 import { V0190_ROUTES, V0190_SCHEMAS, asOfV0190, withV0190 } from "./v0.19.0.js";
-import { must } from "../src/must.js";
 
 const V050 = JSON.parse(readFileSync(new URL("./fixtures/contract-v0.5.0.json", import.meta.url), "utf8")) as {
   version: string;
@@ -97,19 +96,19 @@ describe("the v0.5.0 contract", () => {
 
   for (const [name, props] of Object.entries(ADDED)) {
     it(`extends ${name} by optional properties only: ${props.join(", ") || "none of its own"}`, () => {
-      additiveOnly(must(V050.schemas[name]), now(name), name, V0170_WIDEN);
-      expect(added(must(V050.schemas[name]), now(name)).sort()).toEqual(props);
+      additiveOnly(V050.schemas[name]!, now(name), name, V0170_WIDEN);
+      expect(added(V050.schemas[name]!, now(name)).sort()).toEqual(props);
     });
   }
 
   it("widens the error codes by in-progress (v0.17.0) and unknown-field (v0.22.0), and nothing else", () => {
-    widened(must(V050.schemas.ErrorCode), now("ErrorCode"), V0170_CODES, "ErrorCode");
+    widened(V050.schemas.ErrorCode!, now("ErrorCode"), V0170_CODES, "ErrorCode");
   });
 
   it("widens the mention decision by reset, and nothing else", () => {
-    const before = must(V050.schemas[WIDENED]);
+    const before = V050.schemas[WIDENED]!;
     const after = now(WIDENED);
-    const decision = (s: JsonSchema) => (must(s.properties).decision as { enum: string[] }).enum;
+    const decision = (s: JsonSchema) => (s.properties!.decision as { enum: string[] }).enum;
     expect(decision(after)).toEqual([...decision(before), "reset"]);
     const strip = (s: JsonSchema) => ({ ...s, properties: { ...s.properties, decision: undefined, actor: undefined } });
     expect(added(before, after)).toEqual(["actor"]);

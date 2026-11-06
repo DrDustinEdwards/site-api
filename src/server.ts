@@ -19,7 +19,6 @@ import { mentionsRoutes } from "./server/mentions.js";
 import { page, PREVIEW_LINK_PATH, previewLinkRoutes, servePreviewLink } from "./server/preview-links.js";
 import { claim, REPLAY_DAYS, REPLAYED } from "./server/replay.js";
 import type { SiteApiStore } from "./store.js";
-import { must } from "./must.js";
 
 export type { D1SiteApiStore, HookRetry, PreviewLinkRow, SiteApiStore, StoredWrite } from "./store.js";
 export { goneResponse, gonePath, tombstoned } from "./store.js";
@@ -138,7 +137,7 @@ const MINUTE = 60 * 1000;
 function bearer(request: Request): string | null {
   const header = request.headers.get("authorization");
   const match = header?.match(/^Bearer[ ]+(\S+)\s*$/i);
-  return match ? must(match[1]) : null;
+  return match ? match[1]! : null;
 }
 
 export function createSiteApi(config: SiteApiConfig): SiteApi {
@@ -160,7 +159,7 @@ export function createSiteApi(config: SiteApiConfig): SiteApi {
           pattern: /^\/hooks\/recent$/,
           run: async (_m, url) => {
             const { changeId } = readQuery(url, HookRunsQuery);
-            return json(200, checked(HookRunList, { items: await must(store.hookRuns).call(store, changeId) }, "hook runs"));
+            return json(200, checked(HookRunList, { items: await store.hookRuns!(changeId) }, "hook runs"));
           },
         },
       ]
@@ -235,7 +234,7 @@ export function createSiteApi(config: SiteApiConfig): SiteApi {
       async (hook, error) => {
         if (!store) return;
         const { request: _r, ...kept } = event;
-        const nextAt = new Date(Date.now() + must(HOOK_BACKOFF_MINUTES[0]) * MINUTE).toISOString();
+        const nextAt = new Date(Date.now() + HOOK_BACKOFF_MINUTES[0]! * MINUTE).toISOString();
         await store.putHookRetry({ id: crypto.randomUUID(), hook: hook.name, event: JSON.stringify(kept), attempts: 1, nextAt, lastError: error });
       },
       async (hook, ok) => {
@@ -287,14 +286,14 @@ export function createSiteApi(config: SiteApiConfig): SiteApi {
         for (const item of page.items) {
           if (emptied >= limit) return emptied;
           // Only a contract timestamp past 30 days deletes: Date.parse reads "1 Oct" as 2001, so it is never asked alone.
-          if (!Timestamp.safeParse(item.trashedAt).success || Date.parse(must(item.trashedAt)) > before) continue;
+          if (!Timestamp.safeParse(item.trashedAt).success || Date.parse(item.trashedAt!) > before) continue;
           if (!item.version) {
             log({ siteApi: "trash-empty-skipped", id: item.id, reason: "the list gives no version" });
             continue;
           }
           const changeId = `trash-expired-${item.id}`.replace(/[^A-Za-z0-9_-]/g, "-").slice(0, 128);
           try {
-            await must(content.delete).call(content, item.id, { expectedVersion: item.version, changeId });
+            await content.delete!(item.id, { expectedVersion: item.version, changeId });
             emptied++;
           } catch (error) {
             log({ siteApi: "trash-empty-failed", id: item.id, error: error instanceof Error ? error.message : String(error) });
@@ -402,7 +401,7 @@ export function createSiteApi(config: SiteApiConfig): SiteApi {
 
     const write = (hooks.length > 0 || store?.markGone) && request.method !== "GET" ? PAGE_WRITE.exec(path) : null;
     const action = write ? ACTION[`${request.method} ${write[2] ?? ""}`] : undefined;
-    const id = write ? decodeURIComponent(must(write[1])) : "";
+    const id = write ? decodeURIComponent(write[1]!) : "";
     let finish: ((response: Response) => Promise<void>) | undefined;
     let response: Response;
     try {

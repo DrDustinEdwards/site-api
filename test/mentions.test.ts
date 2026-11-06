@@ -7,7 +7,6 @@ import { RefusedError } from "../src/adapter.js";
 import { createSiteClient, SiteApiError } from "../src/client.js";
 import { memoryAdapter } from "../src/testing.js";
 import { KEY, ORIGIN, body, req, site } from "./helpers.js";
-import { must } from "../src/must.js";
 
 const DAY = 24 * 60 * 60 * 1000;
 
@@ -51,14 +50,14 @@ describe("mentions list", () => {
     const first = await c.mentions.list({ limit: 4 });
     expect(first.items).toHaveLength(4);
     expect(first.nextCursor).toBe("4");
-    const second = await c.mentions.list({ limit: 4, cursor: must(first.nextCursor) });
+    const second = await c.mentions.list({ limit: 4, cursor: first.nextCursor! });
     expect(second.items).toHaveLength(2);
     expect(second.nextCursor).toBeNull();
   });
 
   it("PLANT: refuses an unknown status or an out of range limit before the adapter runs", async () => {
     const adapter = seededAdapter().adapter;
-    const spy = vi.spyOn(must(adapter.mentions), "list");
+    const spy = vi.spyOn(adapter.mentions!, "list");
     const { api } = site(adapter);
     for (const query of ["status=nope", "limit=0", "limit=201", "limit=abc"]) {
       expect((await api.handle(req(`/api/carrel/v1/mentions?${query}`))).status, query).toBe(400);
@@ -71,12 +70,12 @@ describe("mentions decide", () => {
   it("approves a pending mention at the version the caller saw, and reports status, version and the purge", async () => {
     const { adapter, ids } = seededAdapter();
     const { client: c } = client(adapter);
-    const before = must((await c.mentions.list({ status: "pending" })).items[0]);
+    const before = (await c.mentions.list({ status: "pending" })).items[0]!;
     const result = await c.mentions.decide(ids.pending, { decision: "approve", expectedVersion: before.version, changeId: "c1" });
     expect(result).toMatchObject({ id: ids.pending, status: "approved", changeId: "c1", purged: true });
     expect(result.version).not.toBe(before.version);
     expect(adapter.purged).toEqual(["first-post"]);
-    const after = must((await c.mentions.list({ status: "approved" })).items[0]);
+    const after = (await c.mentions.list({ status: "approved" })).items[0]!;
     expect(after).toMatchObject({ id: ids.pending, status: "approved", version: result.version });
     expect(after.decidedAt).not.toBeNull();
   });
@@ -84,7 +83,7 @@ describe("mentions decide", () => {
   it("changes a decision: an approved mention can be rejected, at its new version", async () => {
     const { adapter, ids } = seededAdapter();
     const { client: c } = client(adapter);
-    const v1 = must(adapter.mentionStore.get(ids.pending)).version;
+    const v1 = adapter.mentionStore.get(ids.pending)!.version;
     const approved = await c.mentions.decide(ids.pending, { decision: "approve", expectedVersion: v1, changeId: "c1" });
     const rejected = await c.mentions.decide(ids.pending, { decision: "reject", expectedVersion: approved.version, changeId: "c2" });
     expect(rejected.status).toBe("rejected");
@@ -93,7 +92,7 @@ describe("mentions decide", () => {
   it("resets a decision (v0.6.0): an approved mention goes back to pending, undecided, at a new version", async () => {
     const { adapter, ids } = seededAdapter();
     const { client: c } = client(adapter);
-    const approved = await c.mentions.decide(ids.pending, { decision: "approve", expectedVersion: must(adapter.mentionStore.get(ids.pending)).version, changeId: "c1" });
+    const approved = await c.mentions.decide(ids.pending, { decision: "approve", expectedVersion: adapter.mentionStore.get(ids.pending)!.version, changeId: "c1" });
     const reset = await c.mentions.decide(ids.pending, { decision: "reset", expectedVersion: approved.version, changeId: "c2" });
     expect(reset).toMatchObject({ id: ids.pending, status: "pending", changeId: "c2", purged: true });
     expect(reset.version).not.toBe(approved.version);
@@ -106,7 +105,7 @@ describe("mentions decide", () => {
     const { client: c } = client(adapter);
     const before = snapshot(adapter);
     for (const id of [ids.pending, ids.unverified]) {
-      const error = await c.mentions.decide(id, { decision: "reset", expectedVersion: must(adapter.mentionStore.get(id)).version, changeId: "c1" }).catch((e) => e);
+      const error = await c.mentions.decide(id, { decision: "reset", expectedVersion: adapter.mentionStore.get(id)!.version, changeId: "c1" }).catch((e) => e);
       expect(error.status, id).toBe(422);
       expect(error.body.message).toContain("no decision to take back");
     }
@@ -117,24 +116,24 @@ describe("mentions decide", () => {
     const adapter = memoryAdapter({ mentionReset: false });
     const id = adapter.receiveMention({ sourceUrl: "https://a.example/1", targetId: "p", status: "approved" });
     const { client: c } = client(adapter);
-    const error = await c.mentions.decide(id, { decision: "reset", expectedVersion: must(adapter.mentionStore.get(id)).version, changeId: "c1" }).catch((e) => e);
+    const error = await c.mentions.decide(id, { decision: "reset", expectedVersion: adapter.mentionStore.get(id)!.version, changeId: "c1" }).catch((e) => e);
     expect(error.status).toBe(501);
-    expect(must(adapter.mentionStore.get(id)).status).toBe("approved");
+    expect(adapter.mentionStore.get(id)!.status).toBe("approved");
     expect((await c.meta()).capabilities.mentionReset).toBeUndefined();
-    expect((await c.mentions.decide(id, { decision: "reject", expectedVersion: must(adapter.mentionStore.get(id)).version, changeId: "c2" })).status).toBe("rejected");
+    expect((await c.mentions.decide(id, { decision: "reject", expectedVersion: adapter.mentionStore.get(id)!.version, changeId: "c2" })).status).toBe("rejected");
   });
 
   it("PLANT: refuses a stale version with 409 and the current version, and changes nothing", async () => {
     const { adapter, ids } = seededAdapter();
     const { client: c } = client(adapter);
-    const stale = must(adapter.mentionStore.get(ids.pending)).version;
+    const stale = adapter.mentionStore.get(ids.pending)!.version;
     await c.mentions.decide(ids.pending, { decision: "approve", expectedVersion: stale, changeId: "c1" });
     const before = snapshot(adapter);
     const purges = adapter.purged.length;
     const error = await c.mentions.decide(ids.pending, { decision: "reject", expectedVersion: stale, changeId: "c2" }).catch((e) => e);
     expect(error).toBeInstanceOf(SiteApiError);
     expect(error.status).toBe(409);
-    expect(error.body).toMatchObject({ error: "version-conflict", currentVersion: must(adapter.mentionStore.get(ids.pending)).version });
+    expect(error.body).toMatchObject({ error: "version-conflict", currentVersion: adapter.mentionStore.get(ids.pending)!.version });
     expect(snapshot(adapter)).toEqual(before);
     expect(adapter.purged).toHaveLength(purges);
   });
@@ -154,7 +153,7 @@ describe("mentions decide", () => {
     const { client: c } = client(adapter);
     const before = snapshot(adapter);
     for (const id of [ids.unverified, ids.failedNew]) {
-      const error = await c.mentions.decide(id, { decision: "approve", expectedVersion: must(adapter.mentionStore.get(id)).version, changeId: "c1" }).catch((e) => e);
+      const error = await c.mentions.decide(id, { decision: "approve", expectedVersion: adapter.mentionStore.get(id)!.version, changeId: "c1" }).catch((e) => e);
       expect(error.status, id).toBe(422);
       expect(error.body.error).toBe("refused");
     }
@@ -163,7 +162,7 @@ describe("mentions decide", () => {
 
   it("PLANT: a refusal the adapter words itself reaches the caller as 422 with those words", async () => {
     const { adapter, ids } = seededAdapter();
-    must(adapter.mentions).decide = async () => {
+    adapter.mentions!.decide = async () => {
       throw new RefusedError("The cache could not be reached.");
     };
     const { client: c } = client(adapter);
@@ -181,7 +180,7 @@ describe("mentions decide", () => {
 
   it("PLANT: refuses without the key, with a wrong one, or with an invalid body or id, before the adapter runs", async () => {
     const { adapter, ids } = seededAdapter();
-    const spy = vi.spyOn(must(adapter.mentions), "decide");
+    const spy = vi.spyOn(adapter.mentions!, "decide");
     const { api } = site(adapter);
     const good = { decision: "approve", expectedVersion: "m1", changeId: "c1" };
     for (const key of [null, `${KEY}x`]) {
@@ -206,7 +205,7 @@ describe("mentions delete", () => {
   it("deletes a mention at the version the caller saw, and reports the change id and the purge", async () => {
     const { adapter, ids } = seededAdapter();
     const { client: c } = client(adapter);
-    const version = must(adapter.mentionStore.get(ids.failedNew)).version;
+    const version = adapter.mentionStore.get(ids.failedNew)!.version;
     expect(await c.mentions.delete(ids.failedNew, { expectedVersion: version, changeId: "c1" })).toEqual({ id: ids.failedNew, deleted: true, changeId: "c1", purged: true });
     expect(adapter.mentionStore.has(ids.failedNew)).toBe(false);
   });
@@ -214,11 +213,11 @@ describe("mentions delete", () => {
   it("PLANT: refuses a stale version with 409, and the mention stays", async () => {
     const { adapter, ids } = seededAdapter();
     const { client: c } = client(adapter);
-    const stale = must(adapter.mentionStore.get(ids.pending)).version;
+    const stale = adapter.mentionStore.get(ids.pending)!.version;
     await c.mentions.decide(ids.pending, { decision: "approve", expectedVersion: stale, changeId: "c1" });
     const error = await c.mentions.delete(ids.pending, { expectedVersion: stale, changeId: "c2" }).catch((e) => e);
     expect(error.status).toBe(409);
-    expect(error.body).toMatchObject({ error: "version-conflict", currentVersion: must(adapter.mentionStore.get(ids.pending)).version });
+    expect(error.body).toMatchObject({ error: "version-conflict", currentVersion: adapter.mentionStore.get(ids.pending)!.version });
     expect(adapter.mentionStore.has(ids.pending)).toBe(true);
   });
 
@@ -231,7 +230,7 @@ describe("mentions delete", () => {
 
   it("PLANT: refuses without the key, or with no version or change id, before the adapter runs", async () => {
     const { adapter, ids } = seededAdapter();
-    const spy = vi.spyOn(must(adapter.mentions), "delete");
+    const spy = vi.spyOn(adapter.mentions!, "delete");
     const { api } = site(adapter);
     for (const key of [null, `${KEY}x`]) {
       expect((await api.handle(req(`/api/carrel/v1/mentions/${ids.pending}?expectedVersion=m1&changeId=c1`, { method: "DELETE", key }))).status).toBe(401);
@@ -254,7 +253,7 @@ describe("mentions sweep", () => {
 
   it("PLANT: refused without the key, or with no change id, before the adapter runs, and nothing is removed", async () => {
     const { adapter } = seededAdapter();
-    const spy = vi.spyOn(must(adapter.mentions), "sweep");
+    const spy = vi.spyOn(adapter.mentions!, "sweep");
     const { api } = site(adapter);
     const before = snapshot(adapter);
     for (const key of [null, `${KEY}x`]) {
@@ -275,7 +274,7 @@ describe("mentions sweep", () => {
 
   it("PLANT: does not read the sweep path as a mention id: a delete of 'sweep' is a missing mention, not a sweep", async () => {
     const { adapter } = seededAdapter();
-    const spy = vi.spyOn(must(adapter.mentions), "sweep");
+    const spy = vi.spyOn(adapter.mentions!, "sweep");
     const { api } = site(adapter);
     const response = await api.handle(req("/api/carrel/v1/mentions/sweep?expectedVersion=m1&changeId=c1", { method: "DELETE" }));
     expect(response.status).toBe(404);
@@ -298,7 +297,7 @@ describe("mentions capability", () => {
 
   it("PLANT: a site that answers a mention outside the contract is a site failure, and the body is not passed on", async () => {
     const adapter = seededAdapter().adapter;
-    must(adapter.mentions).list = async () => ({ items: [{ id: "1", sourceUrl: "x" }], nextCursor: null }) as never;
+    adapter.mentions!.list = async () => ({ items: [{ id: "1", sourceUrl: "x" }], nextCursor: null }) as never;
     const { api, logs } = site(adapter);
     const response = await api.handle(req("/api/carrel/v1/mentions"));
     expect(response.status).toBe(500);

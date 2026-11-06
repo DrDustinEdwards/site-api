@@ -7,7 +7,6 @@ import { createSiteApi, indexNowHook, type PublishEvent, type PublishHook } from
 import { d1SiteApiStore, goneResponse, SITE_API_STORE_SQL, SITE_API_STORE_SQL_V0_22, tombstoned } from "../src/store.js";
 import { d1 } from "./d1.js";
 import { KEY, ORIGIN, allow, site } from "./helpers.js";
-import { must } from "../src/must.js";
 
 function client(adapter = memoryAdapter()) {
   const s = site(adapter);
@@ -207,7 +206,7 @@ describe("the acting person, backlinks and the feature image (v0.22.0, C2, F4, A
   it("keeps the actor as the revision's author, lists backlinks, and refuses a feature image with no alt unless decorative", async () => {
     const { c } = stored();
     const a = await c.saveDraft("a", { source: "# A\n", expectedVersion: null, changeId: "c1", actor: { name: "Ada Example" } });
-    expect(must((await c.revisions("a")).items[0]).author).toBe("Ada Example");
+    expect((await c.revisions("a")).items[0]!.author).toBe("Ada Example");
     await c.saveDraft("b", { source: "# B\n\nSee [A](/blog/a).\n", expectedVersion: null, changeId: "c2" });
     expect((await c.backlinks("a")).items).toEqual([{ id: "b", title: "B", path: null }]);
     await expect(c.backlinks("missing")).rejects.toMatchObject({ status: 404 });

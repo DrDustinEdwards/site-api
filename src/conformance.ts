@@ -5,7 +5,6 @@
 
 import { BacklinkList, ContentDoc, HookRunList, MEDIA_LENSES, MediaBulkResult, ContentList, ErrorBody, PreviewLink, PreviewLinkList, RenameResult, RevisionList, RevisionSource, MediaDeleteResult, MediaDetail, MediaItem, MediaList, MentionList, Meta, NotFoundReport, PREFIX, WriteResult, schemaHash, type Meta as MetaType } from "./contract.js";
 import { postFieldsOf, searchFieldsOf, setPostFields, setSearchFields, splitSource, type PostValues, type SearchValues } from "./frontmatter.js";
-import { must } from "./must.js";
 
 export interface ConformanceConfig {
   baseUrl: string;
@@ -688,7 +687,7 @@ export async function runConformance(config: ConformanceConfig): Promise<Conform
       for (const name of names) skip(name, why);
       return;
     }
-    const caps = must(capabilities);
+    const caps = capabilities!;
     const json = (method: string, path: string, body?: unknown) =>
       doFetch(`${origin}${PREFIX}${path}`, {
         method,
@@ -794,7 +793,7 @@ export async function runConformance(config: ConformanceConfig): Promise<Conform
       });
 
       await step(names[5], !live ? "the probe post did not publish" : caps.hooks?.length ? null : "the site declares no hooks it keeps runs of", async () => {
-        const wanted = must(caps.hooks);
+        const wanted = caps.hooks!;
         const until = Date.now() + (config.hookWaitMs ?? 5000);
         for (;;) {
           const runs = (await ok(await json("GET", `/hooks/recent?changeId=${published}`), HookRunList, "hook runs")).items;

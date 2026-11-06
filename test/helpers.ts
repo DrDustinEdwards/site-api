@@ -1,6 +1,5 @@
 import { createSiteApi, type RateLimiter, type SiteAdapter } from "../src/index.js";
 import { memoryAdapter } from "../src/testing.js";
-import { must } from "../src/must.js";
 
 export const KEY = "k".repeat(24) + "-test-key-0123456789";
 export const ORIGIN = "https://site.example";
@@ -64,7 +63,7 @@ export function withDns(fetch: typeof globalThis.fetch, names: Record<string, st
   return (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(String(input instanceof Request ? input.url : input));
     if (url.origin !== "https://cloudflare-dns.com") return fetch(input, init);
-    const name = must(url.searchParams.get("name"));
+    const name = url.searchParams.get("name")!;
     const ip = names[name] ?? "93.184.216.34";
     const v6 = ip.includes(":");
     const type = url.searchParams.get("type") === "AAAA" ? 28 : 1;

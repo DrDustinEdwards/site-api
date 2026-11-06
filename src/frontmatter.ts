@@ -4,7 +4,6 @@
 // site API's own fields on top. Exported as `@dustinedwards/site-api/frontmatter`.
 
 import { readKey, readList, setBlock, setRawKey, splitSource } from "@drdustinedwards/site-helpers/frontmatter";
-import { must } from "./must.js";
 
 export { joinSource, readKey, readList, setBlock, setRawKey, splitSource, type Split } from "@drdustinedwards/site-helpers/frontmatter";
 
@@ -203,7 +202,7 @@ export function jsonSource<F extends Record<string, JsonFieldKind>>(fields: F, o
         if (!m || !key) problems.push(`This front matter line is not "key: value": ${line.slice(0, 80)}`);
         else if (!Object.hasOwn(fields, key)) problems.push(`${key} is not a field. The fields are ${keys.join(", ")}.`);
         else if (key in values) problems.push(`${key} appears twice.`);
-        else values[key] = jsonValue(key, must(fields[key]), must(m[2]).trim(), problems);
+        else values[key] = jsonValue(key, fields[key]!, m[2]!.trim(), problems);
       }
       for (const key of required) {
         const v = values[key];

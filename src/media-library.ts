@@ -36,7 +36,6 @@ import {
 import { kindOf, orientationOf, sha256Hex, transformFocus, turnsSize } from "./media.js";
 import { mediaRev, mediaVersion, toArrayBuffer } from "./media-kit.js";
 import { placeholderAndColor, prepareUpload, type UploadImages } from "./media-upload.js";
-import { must } from "./must.js";
 
 // ---------- What a site gives the library
 
@@ -308,7 +307,7 @@ const positive = (n: number | null): number | null => (n !== null && n > 0 ? n :
 /** The whole media group over the site's store and bucket. */
 export function mediaLibrary(options: MediaLibraryOptions): MediaAdapter {
   const { store, bucket, images, resize } = options;
-  const keyOf = options.key ? (file: MediaKeyInput, attempt: number) => must(options.key).call(options, file, attempt) : datedKey("uploads/");
+  const keyOf = options.key ? (file: MediaKeyInput, attempt: number) => options.key!(file, attempt) : datedKey("uploads/");
   const historyBucket = options.history?.bucket ?? bucket;
   const historyPrefix = options.history?.prefix ?? "history/";
   const historyServed = historyBucket === bucket;
@@ -820,7 +819,7 @@ export function mediaLibrary(options: MediaLibraryOptions): MediaAdapter {
         const created = await storeFile({
           bytes,
           contentType: record.contentType,
-          filename: record.filename ?? must(id.split("/").pop()),
+          filename: record.filename ?? id.split("/").pop()!,
           uploadSha256: sha256,
           sha256,
           width,
@@ -908,7 +907,7 @@ export function mediaLibrary(options: MediaLibraryOptions): MediaAdapter {
           return record ? [itemOf(record, options.usage ? (uses ?? new Map()) : undefined)] : [];
         }),
         removed: taken.filter((c) => !records.has(c.key)).map((c) => c.key),
-        cursor: String(more ? must(taken[taken.length - 1]).seq : head),
+        cursor: String(more ? taken[taken.length - 1]!.seq : head),
         more,
       };
     },
@@ -923,13 +922,13 @@ export function mediaLibrary(options: MediaLibraryOptions): MediaAdapter {
             const object = await bucket.get(id);
             if (!object) return null;
             try {
-              return await must(options.suggest).call(options, object.body, id);
+              return await options.suggest!(object.body, id);
             } catch (error) {
               throw new RefusedError(`No suggestion was made: ${error instanceof Error ? error.message : String(error)}`);
             }
           },
           async suggestFile({ bytes }: { bytes: Uint8Array; contentType: string }) {
-            return must(options.suggest).call(options, must(new Response(toArrayBuffer(bytes)).body));
+            return options.suggest!(new Response(toArrayBuffer(bytes)).body!);
           },
         }
       : {}),

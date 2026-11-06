@@ -8,7 +8,6 @@ import { PREVIEW_LINK_DEFAULT_HOURS, PreviewLink, PreviewLinkInput, PreviewLinkL
 import { sha256Hex } from "../media.js";
 import type { SiteApiStore } from "../store.js";
 import { BadRequest, ContractBreach, checked, json, readBody, readQuery, type Route } from "./http.js";
-import { must } from "../must.js";
 
 /** Where a site serves its preview links, outside the API's prefix: `GET {origin}/preview/<token>`. */
 export const PREVIEW_LINK_PATH = "/preview/";
@@ -52,7 +51,7 @@ export function previewLinkRoutes(adapter: SiteAdapter, store: SiteApiStore): Ro
       query: true,
       pattern: /^\/preview-links\/([^/]+)$/,
       run: async (m, url) => {
-        const linkId = must(m[1]);
+        const linkId = m[1]!;
         if (!LINK_ID.test(linkId)) throw new BadRequest("invalid", "The link id is not valid.");
         const { changeId } = readQuery(url, PreviewLinkRevokeQuery);
         if (!(await store.revokePreviewLink(linkId, new Date().toISOString()))) throw new NotFoundError("No such preview link.");

@@ -12,11 +12,10 @@ import { RefusedError, type MediaUpload } from "./adapter.js";
 import { MediaPlaceholder, type MediaResize, type MediaUploadLimits } from "./contract.js";
 import { checkUpload } from "./media.js";
 import { toArrayBuffer } from "./media-kit.js";
-import { must } from "./must.js";
 
 const ascii = (b: Uint8Array, from: number, length: number) => String.fromCharCode(...b.subarray(from, from + length));
-const u32be = (b: Uint8Array, at: number) => ((must(b[at]) << 24) | (must(b[at + 1]) << 16) | (must(b[at + 2]) << 8) | must(b[at + 3])) >>> 0;
-const u32le = (b: Uint8Array, at: number) => (must(b[at]) | (must(b[at + 1]) << 8) | (must(b[at + 2]) << 16) | (must(b[at + 3]) << 24)) >>> 0;
+const u32be = (b: Uint8Array, at: number) => ((b[at]! << 24) | (b[at + 1]! << 16) | (b[at + 2]! << 8) | b[at + 3]!) >>> 0;
+const u32le = (b: Uint8Array, at: number) => (b[at]! | (b[at + 1]! << 8) | (b[at + 2]! << 16) | (b[at + 3]! << 24)) >>> 0;
 
 // ---------- Embedded metadata
 
@@ -126,14 +125,14 @@ function jpegSegments(b: Uint8Array): { segments: Segment[]; scan: number } {
   const segments: Segment[] = [];
   let at = 2;
   while (at + 4 <= b.length && b[at] === 0xff) {
-    const marker = must(b[at + 1]);
+    const marker = b[at + 1]!;
     if (marker === 0xda) return { segments, scan: at };
     // A fill byte before a marker.
     if (marker === 0xff) {
       at += 1;
       continue;
     }
-    const end = at + 2 + ((must(b[at + 2]) << 8) | must(b[at + 3]));
+    const end = at + 2 + ((b[at + 2]! << 8) | b[at + 3]!);
     segments.push({ marker, at, end, data: b.subarray(at + 4, end) });
     at = end;
   }
@@ -257,9 +256,9 @@ function heifItems(b: Uint8Array): HeifItem[] {
   if (!iinf || !iloc) return [];
   const kinds = new Map<number, HeifItem["kind"]>();
   for (const infe of boxes(b, iinf.start + (b[iinf.start] === 0 ? 6 : 8), iinf.end)) {
-    const version = must(b[infe.start]);
+    const version = b[infe.start]!;
     if (infe.type !== "infe" || version < 2) continue;
-    const id = version === 2 ? (must(b[infe.start + 4]) << 8) | must(b[infe.start + 5]) : u32be(b, infe.start + 4);
+    const id = version === 2 ? (b[infe.start + 4]! << 8) | b[infe.start + 5]! : u32be(b, infe.start + 4);
     const typeAt = infe.start + 4 + (version === 2 ? 2 : 4) + 2;
     const type = ascii(b, typeAt, 4);
     // A mime item: its name, then its content type, each ending in NUL.
@@ -270,12 +269,12 @@ function heifItems(b: Uint8Array): HeifItem[] {
   }
   if (kinds.size === 0) return [];
 
-  const version = must(b[iloc.start]);
+  const version = b[iloc.start]!;
   let at = iloc.start + 4;
-  const [offsetSize, lengthSize, baseSize, indexSize] = [must(b[at]) >> 4, must(b[at]) & 15, must(b[at + 1]) >> 4, version > 0 ? must(b[at + 1]) & 15 : 0];
+  const [offsetSize, lengthSize, baseSize, indexSize] = [b[at]! >> 4, b[at]! & 15, b[at + 1]! >> 4, version > 0 ? b[at + 1]! & 15 : 0];
   at += 2;
   const read = (size: number) => {
-    const value = size === 8 ? u32be(b, at) * 2 ** 32 + u32be(b, at + 4) : size === 4 ? u32be(b, at) : size === 2 ? (must(b[at]) << 8) | must(b[at + 1]) : 0;
+    const value = size === 8 ? u32be(b, at) * 2 ** 32 + u32be(b, at + 4) : size === 4 ? u32be(b, at) : size === 2 ? (b[at]! << 8) | b[at + 1]! : 0;
     at += size;
     return value;
   };
@@ -297,8 +296,8 @@ function heifItems(b: Uint8Array): HeifItem[] {
     const kind = kinds.get(item);
     // Method 2 (another item's bytes) is not used for metadata.
     if (!kind || !first || method > 1 || (method === 1 && !idat)) continue;
-    const start = (method === 1 ? must(idat).start : 0) + base + first.offset;
-    const end = first.length ? start + first.length : method === 1 ? must(idat).end : b.length;
+    const start = (method === 1 ? idat!.start : 0) + base + first.offset;
+    const end = first.length ? start + first.length : method === 1 ? idat!.end : b.length;
     if (end <= b.length) items.push({ kind, data: b.subarray(start, end) });
   }
   return items;
@@ -412,8 +411,8 @@ function xmpValue(xmp: string, name: string): string | undefined {
   const items = [...inner.matchAll(/<rdf:li\b([^>]*)>([\s\S]*?)<\/rdf:li>/g)];
   const plain = (s: string) => unxml(s.replace(/<[^>]+>/g, "")).trim();
   if (items.length === 0) return plain(inner);
-  if (/<rdf:Alt\b/.test(inner)) return plain(must((items.find((i) => /xml:lang\s*=\s*["']x-default/.test(must(i[1]))) ?? must(items[0]))[2]));
-  return items.map((i) => plain(must(i[2]))).filter(Boolean).join(", ");
+  if (/<rdf:Alt\b/.test(inner)) return plain((items.find((i) => /xml:lang\s*=\s*["']x-default/.test(i[1]!)) ?? items[0]!)[2]!);
+  return items.map((i) => plain(i[2]!)).filter(Boolean).join(", ");
 }
 
 /** The IPTC Photo Metadata properties in XMP: Dublin Core, Photoshop, XMP Rights and PLUS. */
@@ -439,16 +438,16 @@ function fromIptc(resources: Uint8Array): Facts {
   const found = new Map<number, string[]>();
   let at = 0;
   while (at + 12 <= resources.length && ascii(resources, at, 4) === "8BIM") {
-    const id = (must(resources[at + 4]) << 8) | must(resources[at + 5]);
+    const id = (resources[at + 4]! << 8) | resources[at + 5]!;
     // A Pascal string name, its length byte included, padded to an even size.
-    const sizeAt = at + 6 + ((must(resources[at + 6]) + 2) & ~1);
+    const sizeAt = at + 6 + ((resources[at + 6]! + 2) & ~1);
     const size = u32be(resources, sizeAt);
     const data = resources.subarray(sizeAt + 4, sizeAt + 4 + size);
     for (let i = 0; id === 0x0404 && i + 5 <= data.length && data[i] === 0x1c; ) {
-      const length = (must(data[i + 3]) << 8) | must(data[i + 4]);
+      const length = (data[i + 3]! << 8) | data[i + 4]!;
       // An extended length (the top bit) is only for large binary data sets, never these.
       if (length & 0x8000) break;
-      if (data[i + 1] === 2) found.set(must(data[i + 2]), [...(found.get(must(data[i + 2])) ?? []), utf8(data.subarray(i + 5, i + 5 + length))]);
+      if (data[i + 1] === 2) found.set(data[i + 2]!, [...(found.get(data[i + 2]!) ?? []), utf8(data.subarray(i + 5, i + 5 + length))]);
       i += 5 + length;
     }
     at = sizeAt + 4 + size + (size % 2);
@@ -606,11 +605,11 @@ function jpegEnd(b: Uint8Array, scan: number): number {
       at += 1;
       continue;
     }
-    const marker = must(b[at + 1]);
+    const marker = b[at + 1]!;
     if (marker === 0xd9) return at + 2;
     // Stuffed bytes, restart markers and fill bytes lie inside the entropy-coded data; any other marker is a segment.
     if (marker === 0x00 || marker === 0xff || (marker >= 0xd0 && marker <= 0xd7)) at += marker === 0xff ? 1 : 2;
-    else at += 2 + ((must(b[at + 2]) << 8) | must(b[at + 3]));
+    else at += 2 + ((b[at + 2]! << 8) | b[at + 3]!);
   }
   return b.length;
 }
@@ -652,7 +651,7 @@ function pngChunk(type: string, data: Uint8Array): Uint8Array {
   chunk.set(bytesOf(type), 4);
   chunk.set(data, 8);
   let crc = 0xffffffff;
-  for (const byte of chunk.subarray(4, 8 + data.length)) crc = must(CRC_TABLE[(crc ^ byte) & 0xff]) ^ (crc >>> 8);
+  for (const byte of chunk.subarray(4, 8 + data.length)) crc = CRC_TABLE[(crc ^ byte) & 0xff]! ^ (crc >>> 8);
   view.setUint32(8 + data.length, (crc ^ 0xffffffff) >>> 0);
   return chunk;
 }
@@ -708,7 +707,7 @@ function cleanWebp(b: Uint8Array): Uint8Array {
   for (const c of chunks) if (RIFF_KEPT.has(c.fourcc)) parts.push(c.fourcc === "VP8X" ? b.slice(c.at, c.end) : b.subarray(c.at, c.end));
   if (tiff) parts.push(riffChunk("EXIF", tiff));
   if (xmp) parts.push(riffChunk("XMP ", xmp));
-  if (extended) must(parts[1])[8] = (must(must(parts[1])[8]) & ~0x0c) | (tiff ? 0x08 : 0) | (xmp ? 0x04 : 0);
+  if (extended) parts[1]![8] = (parts[1]![8]! & ~0x0c) | (tiff ? 0x08 : 0) | (xmp ? 0x04 : 0);
   const out = concat(parts);
   // The RIFF size counts everything after its own eight bytes.
   new DataView(out.buffer).setUint32(4, out.length - 8, true);
@@ -747,7 +746,7 @@ const PLACEHOLDER_OUTPUT = { format: "image/webp", quality: 60, anim: false };
 /** The bytes of one transform through the binding, or null where it failed. */
 async function transformed(images: ImagesLike, bytes: Uint8Array, transform: object, output: { format: string; quality?: number }): Promise<Uint8Array | null> {
   try {
-    const result = await images.input(must(new Response(toArrayBuffer(bytes)).body)).transform(transform).output(output);
+    const result = await images.input(new Response(toArrayBuffer(bytes)).body!).transform(transform).output(output);
     return new Uint8Array(await result.response().arrayBuffer());
   } catch {
     return null;
@@ -761,7 +760,7 @@ async function transformed(images: ImagesLike, bytes: Uint8Array, transform: obj
  */
 async function pngColor(b: Uint8Array): Promise<string | null> {
   if (u32be(b, 0) !== 0x89504e47 || ascii(b, 12, 4) !== "IHDR") return null;
-  const [depth, type] = [must(b[24]), must(b[25])];
+  const [depth, type] = [b[24]!, b[25]!];
   const idat: Uint8Array[] = [];
   let palette: Uint8Array | undefined;
   let alphas: Uint8Array | undefined;
@@ -776,14 +775,14 @@ async function pngColor(b: Uint8Array): Promise<string | null> {
   const row = new Uint8Array(await new Response(new Blob([toArrayBuffer(concat(idat))]).stream().pipeThrough(new DecompressionStream("deflate"))).arrayBuffer());
   // A sample is its first byte (the high one of a 16-bit sample), or for a smaller depth the top bits of that byte.
   const step = depth === 16 ? 2 : 1;
-  const sample = (i: number) => (depth < 8 ? must(row[1]) >> (8 - depth) : must(row[1 + i * step]));
+  const sample = (i: number) => (depth < 8 ? row[1]! >> (8 - depth) : row[1 + i * step]!);
   const scale = (v: number) => (depth < 8 ? Math.round((v * 255) / (2 ** depth - 1)) : v);
   let rgb: number[];
   let alpha = 255;
   if (type === 3) {
     const i = sample(0);
     if (!palette || palette.length < i * 3 + 3) return null;
-    rgb = [must(palette[i * 3]), must(palette[i * 3 + 1]), must(palette[i * 3 + 2])];
+    rgb = [palette[i * 3]!, palette[i * 3 + 1]!, palette[i * 3 + 2]!];
     alpha = alphas?.[i] ?? 255;
   } else if (type === 0 || type === 4) {
     rgb = Array(3).fill(scale(sample(0)));
@@ -922,7 +921,7 @@ export interface PreparedUpload {
 /** The picture's width and height by the binding; null when it reports none or cannot read the file. */
 async function measure(images: UploadImages, bytes: Uint8Array): Promise<{ width: number; height: number } | null> {
   try {
-    const info = (await images.info(must(new Response(toArrayBuffer(bytes)).body))) as { width?: unknown; height?: unknown };
+    const info = (await images.info(new Response(toArrayBuffer(bytes)).body!)) as { width?: unknown; height?: unknown };
     return typeof info.width === "number" && typeof info.height === "number" && info.width > 0 && info.height > 0 ? { width: info.width, height: info.height } : null;
   } catch {
     return null;
