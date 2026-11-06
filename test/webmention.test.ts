@@ -64,6 +64,10 @@ describe("the outbound guard", () => {
     // The hop to the private name was refused before it was asked.
     expect(asked).toEqual(["https://hop.example/"]);
     expect((await guardedFetch(fetch, "https://public.example/")).response.status).toBe(200);
+    // The caller's own rule runs on every hop too: here a hop back onto the site itself.
+    const back = (async () => new Response(null, { status: 302, headers: { location: "https://self.example/" } })) as typeof globalThis.fetch;
+    const refuse = (url: string) => (new URL(url).host === "self.example" ? "back onto this site" : null);
+    await expect(guardedFetch(withDns(back, {}), "https://public.example/", {}, { refuse })).rejects.toThrow("back onto this site");
     const down = (async () => new Response("", { status: 503 })) as typeof globalThis.fetch;
     await expect(guardedFetch(down, "https://public.example/")).rejects.toBeInstanceOf(OutboundRefusal);
   });

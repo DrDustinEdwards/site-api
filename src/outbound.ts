@@ -150,20 +150,22 @@ export async function outboundRefusal(raw: string | URL, options: OutboundOption
 
 /**
  * A fetch of an address a stranger chose: the address checked first and again at every redirect, followed by hand at
- * most `maxRedirects` times (5 by default). Answers the final response, unread, and its address. Throws OutboundRefusal
- * for an address it would not fetch, or too many redirects; a network failure is thrown as the fetch threw it.
+ * most `maxRedirects` times (5 by default). `refuse` is the caller's own rule for each of those addresses, run before the
+ * guard's (a site refusing a hop back onto itself): a string refuses with it. Answers the final response, unread, and
+ * its address. Throws OutboundRefusal for an address it would not fetch, or too many redirects; a network failure is
+ * thrown as the fetch threw it.
  */
 export async function guardedFetch(
   doFetch: typeof fetch,
   address: string,
   init: RequestInit = {},
-  options: OutboundOptions & { maxRedirects?: number } = {},
+  options: OutboundOptions & { maxRedirects?: number; refuse?: (url: string) => string | null } = {},
 ): Promise<{ response: Response; url: string }> {
   const dnsFetch = options.dnsFetch ?? doFetch;
   const maxRedirects = options.maxRedirects ?? 5;
   let url = address;
   for (let hop = 0; ; hop++) {
-    const refusal = await outboundRefusal(url, { ...options, dnsFetch });
+    const refusal = options.refuse?.(url) ?? (await outboundRefusal(url, { ...options, dnsFetch }));
     if (refusal) throw new OutboundRefusal(refusal);
     const response = await doFetch(url, { ...init, redirect: "manual" });
     const location = response.headers.get("location");
