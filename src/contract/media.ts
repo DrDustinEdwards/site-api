@@ -14,7 +14,10 @@ export const MAX_MEDIA_BYTES = 25 * 1024 * 1024;
  */
 export const MediaUploadLimits = z.object({
   maxBytes: z.number().int().min(1).max(MAX_MEDIA_BYTES),
-  types: z.array(z.string().regex(/^[a-z]+\/[a-z0-9.+-]+$/)).min(1).max(50),
+  types: z
+    .array(z.string().regex(/^[a-z]+\/[a-z0-9.+-]+$/))
+    .min(1)
+    .max(50),
 });
 
 /**
@@ -23,7 +26,14 @@ export const MediaUploadLimits = z.object({
  * bytes are exactly another file's (by content hash, never a picture's likeness), files whose license has run out
  * (`licenseExpires` before today, in UTC), and pictures with an edge longer than the site's `mediaResize.maxEdge`.
  */
-export const MEDIA_LENSES = ["unattached", "no-alt", "large", "duplicates", "license-expired", "oversized"] as const;
+export const MEDIA_LENSES = [
+  "unattached",
+  "no-alt",
+  "large",
+  "duplicates",
+  "license-expired",
+  "oversized",
+] as const;
 export const MediaLens = z.enum(MEDIA_LENSES);
 export const LARGE_MEDIA_BYTES = 1024 * 1024;
 
@@ -35,7 +45,10 @@ export const MediaId = z
   .string()
   .max(300)
   .regex(/^[A-Za-z0-9][A-Za-z0-9._-]*(?:\/[A-Za-z0-9][A-Za-z0-9._-]*)*$/)
-  .refine((id) => !id.split("/").some((part) => part === "." || part === ".."), "An id segment may not be . or ..");
+  .refine(
+    (id) => !id.split("/").some((part) => part === "." || part === ".."),
+    "An id segment may not be . or ..",
+  );
 
 /** One place a file is used, as the site's own reference check found it. */
 export const MediaUse = z.object({
@@ -48,7 +61,11 @@ export const MediaUse = z.object({
 });
 
 /** A tag: lower case words joined by single hyphens, so the same tag is always spelled one way. */
-export const MediaTag = z.string().min(1).max(32).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/);
+export const MediaTag = z
+  .string()
+  .min(1)
+  .max(32)
+  .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/);
 
 /** A file's whole tag set (v0.4.0). The most any file carries is 12. */
 export const MediaTags = z.array(MediaTag).max(12);
@@ -61,13 +78,20 @@ export const MediaTags = z.array(MediaTag).max(12);
 export const MediaFocus = z
   .string()
   .max(20)
-  .refine((v) => focusOf(v) !== null, 'A focal point is "XxY", each from 0 to 1 with up to three decimals');
+  .refine(
+    (v) => focusOf(v) !== null,
+    'A focal point is "XxY", each from 0 to 1 with up to three decimals',
+  );
 
 /** A file's caption (v0.10.0): what a figure shows under it, beside its alt text. "" for none. */
 export const MediaCaption = z.string().max(2000);
 
 /** Where the site serves a file, or offers it: a path on the site, such as /media/2026/09/photo.webp, or a full https URL. */
-const MediaAddress = z.string().min(1).max(2000).refine((u) => u.startsWith("/") || u.startsWith("https://"), "A path or an https URL");
+const MediaAddress = z
+  .string()
+  .min(1)
+  .max(2000)
+  .refine((u) => u.startsWith("/") || u.startsWith("https://"), "A path or an https URL");
 
 /** The longest placeholder a file may carry (v0.13.0): a tiny blurred picture, never the picture itself. */
 export const MAX_PLACEHOLDER_CHARS = 2048;
@@ -79,7 +103,10 @@ export const MAX_PLACEHOLDER_CHARS = 2048;
 export const MediaPlaceholder = z
   .string()
   .max(MAX_PLACEHOLDER_CHARS)
-  .regex(/^data:image\/(png|jpeg|gif|webp|avif);base64,[A-Za-z0-9+/]+={0,2}$/, "A base64 data: URI of a png, jpeg, gif, webp or avif");
+  .regex(
+    /^data:image\/(png|jpeg|gif|webp|avif);base64,[A-Za-z0-9+/]+={0,2}$/,
+    "A base64 data: URI of a png, jpeg, gif, webp or avif",
+  );
 
 /** A file's main color (v0.13.0), as #rrggbb in lower case. */
 export const MediaColor = z.string().regex(/^#[0-9a-f]{6}$/, "A color as #rrggbb in lower case");
@@ -109,7 +136,15 @@ export const MediaOrientation = z.enum(MEDIA_ORIENTATIONS);
  * The fields a site may fill from a file's own embedded metadata (XMP, IPTC, EXIF) at upload (v0.13.0; the copyright notice
  * and the two license addresses v0.19.0).
  */
-export const MEDIA_EMBEDDED_FIELDS = ["credit", "license", "caption", "takenAt", "copyright", "licenseUrl", "acquireLicenseUrl"] as const;
+export const MEDIA_EMBEDDED_FIELDS = [
+  "credit",
+  "license",
+  "caption",
+  "takenAt",
+  "copyright",
+  "licenseUrl",
+  "acquireLicenseUrl",
+] as const;
 
 export const MediaItem = z.object({
   id: MediaId,
@@ -228,8 +263,12 @@ export const MediaList = z.object({
  */
 export const MediaUploadQuery = z.object({
   // A file name may not hold control characters, on purpose.
-  // oxlint-disable-next-line no-control-regex
-  filename: z.string().min(1).max(200).regex(/^[^/\\\u0000-\u001f]+$/, "A file name, with no path"),
+  filename: z
+    .string()
+    .min(1)
+    .max(200)
+    // oxlint-disable-next-line no-control-regex
+    .regex(/^[^/\\\u0000-\u001f]+$/, "A file name, with no path"),
   /**
    * Required (v0.19.0) unless `decorative=yes`: what the picture shows, at most MAX_ALT_CHARS, never its file name, a bare
    * "image" or an address. Before v0.19.0 it defaulted to "", which stored a picture with no alt and no one's choice.
@@ -253,7 +292,13 @@ export const MediaUploadResult = MediaItem.extend({
   /** The fields the site filled from the file's own embedded metadata (capabilities.mediaEmbedded). */
   embedded: z.array(z.enum(MEDIA_EMBEDDED_FIELDS)).optional(),
   /** The picture's size before the site shrank it (capabilities.mediaResize). */
-  resizedFrom: z.object({ width: z.number().int().min(1), height: z.number().int().min(1), bytes: z.number().int().min(0) }).optional(),
+  resizedFrom: z
+    .object({
+      width: z.number().int().min(1),
+      height: z.number().int().min(1),
+      bytes: z.number().int().min(0),
+    })
+    .optional(),
 });
 
 export const MediaDeleteQuery = z.object({
@@ -322,7 +367,11 @@ export const MediaCaptionInput = z.object({
  * A replace is the new bytes as the body, their type as Content-Type (the file's own type: the address names it), and
  * these as the query, like an upload.
  */
-export const MediaReplaceQuery = MediaUploadQuery.pick({ filename: true, changeId: true, actorName: true }).extend({
+export const MediaReplaceQuery = MediaUploadQuery.pick({
+  filename: true,
+  changeId: true,
+  actorName: true,
+}).extend({
   expectedVersion: Version,
 });
 
@@ -403,7 +452,9 @@ export const MediaTrashEmptyResult = z.object({
   /** The ids deleted for good. */
   deleted: z.array(MediaId),
   /** Trashed files the site would not delete (still used by a post, for one); they stay in the trash. */
-  refused: z.array(z.object({ id: MediaId, message: z.string(), usedBy: z.array(MediaUse).optional() })),
+  refused: z.array(
+    z.object({ id: MediaId, message: z.string(), usedBy: z.array(MediaUse).optional() }),
+  ),
   /** True when the trash held more than one request handles. */
   more: z.boolean(),
 });
@@ -420,8 +471,13 @@ export const MediaResize = z.object({
 export const MediaImportInput = z.object({
   url: z.url({ protocol: /^https$/ }).max(2000),
   /** The name to keep; the last segment of the address when left out. */
-  // oxlint-disable-next-line no-control-regex
-  filename: z.string().min(1).max(200).regex(/^[^/\\\u0000-\u001f]+$/, "A file name, with no path").optional(),
+  filename: z
+    .string()
+    .min(1)
+    .max(200)
+    // oxlint-disable-next-line no-control-regex
+    .regex(/^[^/\\\u0000-\u001f]+$/, "A file name, with no path")
+    .optional(),
   /** Required, or `decorative: true` (v0.19.0), as an upload's. */
   alt: z.string().max(2000).optional(),
   decorative: z.literal(true).optional(),
@@ -447,7 +503,13 @@ export const MediaCreditInput = z.object({
   actor: Actor.optional(),
 });
 
-export const MEDIA_TRANSFORMS = ["rotate-90", "rotate-180", "rotate-270", "flip-h", "flip-v"] as const;
+export const MEDIA_TRANSFORMS = [
+  "rotate-90",
+  "rotate-180",
+  "rotate-270",
+  "flip-h",
+  "flip-v",
+] as const;
 export const MediaTransformOp = z.enum(MEDIA_TRANSFORMS);
 
 /** A quarter turn clockwise (rotate-90), a half turn, three quarters, or a mirror left to right (flip-h) or top to bottom. */

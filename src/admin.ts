@@ -13,7 +13,16 @@
 
 export { localClient } from "./local.js";
 export { askFirst } from "./admin/kit.js";
-export type { Permissions, RowNote, ContentSource, Fields, IntentInput, Outcome, IntentResult, ConfirmRequest } from "./admin/kit.js";
+export type {
+  Permissions,
+  RowNote,
+  ContentSource,
+  Fields,
+  IntentInput,
+  Outcome,
+  IntentResult,
+  ConfirmRequest,
+} from "./admin/kit.js";
 export * from "./admin/posts.js";
 export * from "./admin/media.js";
 export * from "./admin/mentions.js";

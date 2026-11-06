@@ -8,7 +8,9 @@ import { memoryAdapter } from "../src/testing.js";
 import { KEY, ORIGIN, req, site } from "./helpers.js";
 
 const PNG = Uint8Array.from(
-  atob("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="),
+  atob(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
+  ),
   (c) => c.charCodeAt(0),
 );
 const JPEG = Uint8Array.from([0xff, 0xd8, 0xff, 0xe0, 0, 16, 0x4a, 0x46, 0x49, 0x46]);
@@ -32,28 +34,65 @@ function client(adapter = memoryAdapter()) {
   return { ...s, client: createSiteClient({ baseUrl: ORIGIN, key: KEY, fetch: s.fetch }) };
 }
 
-function upload(bytes: Uint8Array, type: string, filename = "photo.png", headers: Record<string, string> = {}) {
-  return req(`/api/carrel/v1/media?filename=${encodeURIComponent(filename)}&alt=A%20test%20picture&changeId=c1`, {
-    method: "POST",
-    body: new Blob([bytes as Uint8Array<ArrayBuffer>]),
-    headers: { "content-type": type, ...headers },
-  });
+function upload(
+  bytes: Uint8Array,
+  type: string,
+  filename = "photo.png",
+  headers: Record<string, string> = {},
+) {
+  return req(
+    `/api/carrel/v1/media?filename=${encodeURIComponent(filename)}&alt=A%20test%20picture&changeId=c1`,
+    {
+      method: "POST",
+      body: new Blob([bytes as Uint8Array<ArrayBuffer>]),
+      headers: { "content-type": type, ...headers },
+    },
+  );
 }
 
 describe("media round trip", () => {
   it("uploads, lists, searches, reads and deletes a file through the client", async () => {
     const { client: c, adapter } = client();
-    const item = await c.media.upload({ bytes: PNG, contentType: "image/png", filename: "Paluxy River.png", alt: "The river", changeId: "c1" });
-    expect(item).toMatchObject({ url: `/media/${item.id}`, filename: "Paluxy River.png", contentType: "image/png", bytes: PNG.byteLength, alt: "The river", deletable: true });
+    const item = await c.media.upload({
+      bytes: PNG,
+      contentType: "image/png",
+      filename: "Paluxy River.png",
+      alt: "The river",
+      changeId: "c1",
+    });
+    expect(item).toMatchObject({
+      url: `/media/${item.id}`,
+      filename: "Paluxy River.png",
+      contentType: "image/png",
+      bytes: PNG.byteLength,
+      alt: "The river",
+      deletable: true,
+    });
     expect(adapter.mediaStore.get(item.id)?.bytes).toEqual(PNG);
 
-    await c.media.upload({ bytes: JPEG, contentType: "image/jpeg", filename: "tracks.jpg", alt: "A test picture", changeId: "c2" });
-    expect((await c.media.list()).items.map((i) => i.filename)).toEqual(["tracks.jpg", "Paluxy River.png"]);
+    await c.media.upload({
+      bytes: JPEG,
+      contentType: "image/jpeg",
+      filename: "tracks.jpg",
+      alt: "A test picture",
+      changeId: "c2",
+    });
+    expect((await c.media.list()).items.map((i) => i.filename)).toEqual([
+      "tracks.jpg",
+      "Paluxy River.png",
+    ]);
     expect((await c.media.list({ q: "river" })).items.map((i) => i.id)).toEqual([item.id]);
-    expect(await c.media.list({ limit: 1 })).toMatchObject({ items: [{ filename: "tracks.jpg" }], nextCursor: "1" });
+    expect(await c.media.list({ limit: 1 })).toMatchObject({
+      items: [{ filename: "tracks.jpg" }],
+      nextCursor: "1",
+    });
 
     expect(await c.media.get(item.id)).toMatchObject({ id: item.id, usedBy: [] });
-    expect(await c.media.delete(item.id, "c3")).toEqual({ id: item.id, deleted: true, changeId: "c3" });
+    expect(await c.media.delete(item.id, "c3")).toEqual({
+      id: item.id,
+      deleted: true,
+      changeId: "c3",
+    });
     expect(adapter.deleted).toEqual([item.id]);
     await expect(c.media.get(item.id)).rejects.toMatchObject({ status: 404 });
   });
@@ -69,31 +108,60 @@ describe("media round trip", () => {
 describe("PLANT: deleting a file a post uses", () => {
   it("is refused with the post named, and deletes once the post stops using it", async () => {
     const { client: c, adapter } = client();
-    const item = await c.media.upload({ bytes: PNG, contentType: "image/png", filename: "cover.png", alt: "A test picture", changeId: "c1" });
+    const item = await c.media.upload({
+      bytes: PNG,
+      contentType: "image/png",
+      filename: "cover.png",
+      alt: "A test picture",
+      changeId: "c1",
+    });
     const saved = await adapter.content.saveDraft("river-post", {
       source: `---\ntitle: The river\n---\nIntro.\n\n![The river](${item.url})\n`,
       expectedVersion: null,
       changeId: "c2",
     });
 
-    expect(await c.media.get(item.id)).toMatchObject({ usedBy: [{ type: "post", id: "river-post", title: "The river", detail: "line 6" }] });
+    expect(await c.media.get(item.id)).toMatchObject({
+      usedBy: [{ type: "post", id: "river-post", title: "The river", detail: "line 6" }],
+    });
     const refused = await c.media.delete(item.id, "c3").catch((e: unknown) => e);
     expect(refused).toBeInstanceOf(SiteApiError);
     const error = refused as SiteApiError;
     expect(error.status).toBe(422);
-    expect(error.body).toMatchObject({ error: "refused", usedBy: [{ id: "river-post", title: "The river" }] });
+    expect(error.body).toMatchObject({
+      error: "refused",
+      usedBy: [{ id: "river-post", title: "The river" }],
+    });
     expect(error.body!.message).toContain("The river (line 6)");
     expect(adapter.mediaStore.has(item.id)).toBe(true);
     expect(adapter.deleted).toEqual([]);
 
-    await adapter.content.saveDraft("river-post", { source: "---\ntitle: The river\n---\nIntro.\n", expectedVersion: saved.version, changeId: "c4" });
-    expect(await c.media.delete(item.id, { changeId: "c5" })).toMatchObject({ deleted: true, changeId: "c5" });
+    await adapter.content.saveDraft("river-post", {
+      source: "---\ntitle: The river\n---\nIntro.\n",
+      expectedVersion: saved.version,
+      changeId: "c4",
+    });
+    expect(await c.media.delete(item.id, { changeId: "c5" })).toMatchObject({
+      deleted: true,
+      changeId: "c5",
+    });
   });
 
   it("names every post that uses it", async () => {
     const { client: c, adapter } = client();
-    const item = await c.media.upload({ bytes: PNG, contentType: "image/png", filename: "shared.png", alt: "A test picture", changeId: "c1" });
-    for (const id of ["one", "two"]) await adapter.content.saveDraft(id, { source: `# Post ${id}\n\n![](${item.url})\n`, expectedVersion: null, changeId: `s-${id}` });
+    const item = await c.media.upload({
+      bytes: PNG,
+      contentType: "image/png",
+      filename: "shared.png",
+      alt: "A test picture",
+      changeId: "c1",
+    });
+    for (const id of ["one", "two"])
+      await adapter.content.saveDraft(id, {
+        source: `# Post ${id}\n\n![](${item.url})\n`,
+        expectedVersion: null,
+        changeId: `s-${id}`,
+      });
     const error = (await c.media.delete(item.id, "c2").catch((e: unknown) => e)) as SiteApiError;
     expect(error.body?.usedBy?.map((u) => u.id)).toEqual(["one", "two"]);
   });
@@ -116,20 +184,30 @@ describe("PLANT: an upload the site does not accept", () => {
     const { adapter, calls } = spied({ media: { maxBytes: 100, types: ["image/png"] } });
     const { api } = site(adapter);
     let pulled = 0;
-    const body = new ReadableStream<Uint8Array>({
-      pull(controller) {
-        pulled += 1;
-        controller.enqueue(PNG);
-        controller.close();
+    const body = new ReadableStream<Uint8Array>(
+      {
+        pull(controller) {
+          pulled += 1;
+          controller.enqueue(PNG);
+          controller.close();
+        },
+        // No read-ahead: a pull happens only when someone reads.
       },
-      // No read-ahead: a pull happens only when someone reads.
-    }, { highWaterMark: 0 });
-    const request = new Request(`${ORIGIN}/api/carrel/v1/media?filename=a.png&alt=A%20test%20picture&changeId=c1`, {
-      method: "POST",
-      body,
-      headers: { authorization: `Bearer ${KEY}`, "content-type": "image/png", "content-length": "1000000" },
-      duplex: "half",
-    } as RequestInit);
+      { highWaterMark: 0 },
+    );
+    const request = new Request(
+      `${ORIGIN}/api/carrel/v1/media?filename=a.png&alt=A%20test%20picture&changeId=c1`,
+      {
+        method: "POST",
+        body,
+        headers: {
+          authorization: `Bearer ${KEY}`,
+          "content-type": "image/png",
+          "content-length": "1000000",
+        },
+        duplex: "half",
+      } as RequestInit,
+    );
     const response = await api.handle(request);
     expect(response.status).toBe(413);
     expect(pulled).toBe(0);
@@ -180,13 +258,18 @@ describe("PLANT: an upload the site does not accept", () => {
       '<svg xmlns="http://www.w3.org/2000/svg"><a href="&#106;avascript:alert(1)"/></svg>',
       '<svg xmlns="http://www.w3.org/2000/svg"><foreignObject><iframe src="/x"/></foreignObject></svg>',
     ]) {
-      const response = await api.handle(upload(new TextEncoder().encode(svg), "image/svg+xml", "x.svg"));
+      const response = await api.handle(
+        upload(new TextEncoder().encode(svg), "image/svg+xml", "x.svg"),
+      );
       expect(response.status, svg).toBe(400);
       expect((await response.json()).message, svg).toContain("holds script");
     }
     expect(calls).not.toHaveBeenCalled();
-    const plain = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><a href="#top"><rect width="10" height="10"/></a></svg>';
-    expect((await api.handle(upload(new TextEncoder().encode(plain), "image/svg+xml", "x.svg"))).status).toBe(201);
+    const plain =
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><a href="#top"><rect width="10" height="10"/></a></svg>';
+    expect(
+      (await api.handle(upload(new TextEncoder().encode(plain), "image/svg+xml", "x.svg"))).status,
+    ).toBe(201);
   });
 
   it("refuses an empty file, and a file name carrying a path", async () => {
@@ -215,7 +298,10 @@ describe("PLANT: a media id that climbs out", () => {
   it("refuses a delete with no changeId", async () => {
     const { adapter, calls } = spied();
     const { api } = site(adapter);
-    expect((await api.handle(req("/api/carrel/v1/media/uploads%2F1-a.png", { method: "DELETE" }))).status).toBe(400);
+    expect(
+      (await api.handle(req("/api/carrel/v1/media/uploads%2F1-a.png", { method: "DELETE" })))
+        .status,
+    ).toBe(400);
     expect(calls).not.toHaveBeenCalled();
   });
 });
@@ -223,11 +309,15 @@ describe("PLANT: a media id that climbs out", () => {
 describe("PLANT: a site answering outside the media contract", () => {
   it("is reported as a site failure, and its answer is never passed on", async () => {
     const adapter = memoryAdapter();
-    adapter.media!.list = async () => ({ items: [{ id: "../x", url: "javascript:alert(1)" }], nextCursor: null }) as never;
+    adapter.media!.list = async () =>
+      ({ items: [{ id: "../x", url: "javascript:alert(1)" }], nextCursor: null }) as never;
     const { api, logs } = site(adapter);
     const response = await api.handle(req("/api/carrel/v1/media"));
     expect(response.status).toBe(500);
-    expect(await response.json()).toMatchObject({ error: "internal", message: "The site answered outside the contract." });
+    expect(await response.json()).toMatchObject({
+      error: "internal",
+      message: "The site answered outside the contract.",
+    });
     expect(logs).toContainEqual(expect.objectContaining({ siteApi: "contract-breach" }));
   });
 });

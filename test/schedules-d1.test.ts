@@ -7,9 +7,22 @@ import { d1 } from "./d1.js";
 describe("d1ScheduledUpdates (v0.10.0)", () => {
   it("keeps one update per item in UTC, lists the due ones oldest first, and a matched remove keeps a reschedule", async () => {
     const store = d1ScheduledUpdates(d1(SCHEDULED_UPDATES_SQL));
-    await store.put("a", { source: "A2", publishAt: "2030-01-01T09:00:00-06:00", changeId: "c1", scheduledAt: new Date("2029-12-01T00:00:00Z") }).run();
+    await store
+      .put("a", {
+        source: "A2",
+        publishAt: "2030-01-01T09:00:00-06:00",
+        changeId: "c1",
+        scheduledAt: new Date("2029-12-01T00:00:00Z"),
+      })
+      .run();
     await store.put("b", { source: "B2", publishAt: "2030-01-01T12:00:00Z", changeId: "c2" }).run();
-    expect(await store.get("a")).toEqual({ id: "a", source: "A2", publishAt: "2030-01-01T15:00:00.000Z", changeId: "c1", scheduledAt: "2029-12-01T00:00:00.000Z" });
+    expect(await store.get("a")).toEqual({
+      id: "a",
+      source: "A2",
+      publishAt: "2030-01-01T15:00:00.000Z",
+      changeId: "c1",
+      scheduledAt: "2029-12-01T00:00:00.000Z",
+    });
 
     expect(await store.due(new Date("2030-01-01T15:00:00Z"), 10)).toEqual([
       { id: "b", kind: "update", publishAt: "2030-01-01T12:00:00.000Z", changeId: "c2" },

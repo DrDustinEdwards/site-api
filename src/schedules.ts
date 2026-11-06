@@ -59,18 +59,30 @@ export function d1ScheduledUpdates(db: D1Like) {
   return {
     /** The update waiting on an item, or null. */
     async get(id: string): Promise<ScheduledUpdate | null> {
-      const row = await db.prepare("SELECT * FROM scheduled_updates WHERE content_id = ?").bind(id).first<Row>();
+      const row = await db
+        .prepare("SELECT * FROM scheduled_updates WHERE content_id = ?")
+        .bind(id)
+        .first<Row>();
       return row ? toUpdate(row) : null;
     },
     /** Stores the update, replacing any already waiting (a reschedule). Run it in a batch with the item's version move. */
-    put(id: string, input: { source: string; publishAt: string; changeId: string; scheduledAt?: Date }): D1StatementLike {
+    put(
+      id: string,
+      input: { source: string; publishAt: string; changeId: string; scheduledAt?: Date },
+    ): D1StatementLike {
       return db
         .prepare(
           `INSERT INTO scheduled_updates (content_id, source, publish_at, change_id, scheduled_at) VALUES (?, ?, ?, ?, ?)
            ON CONFLICT (content_id) DO UPDATE SET source = excluded.source, publish_at = excluded.publish_at,
              change_id = excluded.change_id, scheduled_at = excluded.scheduled_at`,
         )
-        .bind(id, input.source, utc(input.publishAt), input.changeId, utc(input.scheduledAt ?? new Date()));
+        .bind(
+          id,
+          input.source,
+          utc(input.publishAt),
+          input.changeId,
+          utc(input.scheduledAt ?? new Date()),
+        );
     },
     /**
      * Drops the update: on a cancel, an unpublish, a publish now or a delete with no `match`; when a schedule applies,
@@ -78,16 +90,30 @@ export function d1ScheduledUpdates(db: D1Like) {
      */
     remove(id: string, match?: { publishAt: string; changeId: string }): D1StatementLike {
       return match
-        ? db.prepare("DELETE FROM scheduled_updates WHERE content_id = ? AND publish_at = ? AND change_id = ?").bind(id, utc(match.publishAt), match.changeId)
+        ? db
+            .prepare(
+              "DELETE FROM scheduled_updates WHERE content_id = ? AND publish_at = ? AND change_id = ?",
+            )
+            .bind(id, utc(match.publishAt), match.changeId)
         : db.prepare("DELETE FROM scheduled_updates WHERE content_id = ?").bind(id);
     },
     /** The updates due at `now`, oldest first, at most `limit`, as `SchedulesAdapter.due` lists them. */
-    async due(now: Date, limit: number): Promise<Array<{ id: string; kind: "update"; publishAt: string; changeId: string }>> {
+    async due(
+      now: Date,
+      limit: number,
+    ): Promise<Array<{ id: string; kind: "update"; publishAt: string; changeId: string }>> {
       const { results } = await db
-        .prepare("SELECT content_id, publish_at, change_id FROM scheduled_updates WHERE publish_at <= ? ORDER BY publish_at, content_id LIMIT ?")
+        .prepare(
+          "SELECT content_id, publish_at, change_id FROM scheduled_updates WHERE publish_at <= ? ORDER BY publish_at, content_id LIMIT ?",
+        )
         .bind(utc(now), limit)
         .all<Row>();
-      return results.map((row) => ({ id: row.content_id, kind: "update" as const, publishAt: row.publish_at, changeId: row.change_id }));
+      return results.map((row) => ({
+        id: row.content_id,
+        kind: "update" as const,
+        publishAt: row.publish_at,
+        changeId: row.change_id,
+      }));
     },
   };
 }

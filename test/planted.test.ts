@@ -174,7 +174,12 @@ describe("PLANT: an unknown route", () => {
   it("refuses a path inside the prefix that the contract does not name", async () => {
     const { adapter, calls } = spied();
     const { api } = site(adapter);
-    for (const path of ["/api/carrel/v1", "/api/carrel/v1/", "/api/carrel/v1/nope", "/api/carrel/v1/content/a/b/c"]) {
+    for (const path of [
+      "/api/carrel/v1",
+      "/api/carrel/v1/",
+      "/api/carrel/v1/nope",
+      "/api/carrel/v1/content/a/b/c",
+    ]) {
       const response = await api.handle(req(path));
       expect(response.status, path).toBe(404);
       expect((await response.json()).error).toBe("not-found");
@@ -247,7 +252,9 @@ describe("rate limit", () => {
         },
       },
     });
-    await api.handle(req("/api/carrel/v1/meta", { headers: { "cf-connecting-ip": "203.0.113.9" } }));
+    await api.handle(
+      req("/api/carrel/v1/meta", { headers: { "cf-connecting-ip": "203.0.113.9" } }),
+    );
     expect(keys).toEqual(["203.0.113.9"]);
   });
 });

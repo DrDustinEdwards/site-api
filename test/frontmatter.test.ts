@@ -3,7 +3,19 @@
 
 import { describe, expect, it } from "vitest";
 
-import { JsonSourceError, joinSource, jsonSource, missingAltFields, postFieldsOf, searchFieldsOf, setPostFields, setSearchFields, setTags, splitSource, tagsOf } from "../src/frontmatter.js";
+import {
+  JsonSourceError,
+  joinSource,
+  jsonSource,
+  missingAltFields,
+  postFieldsOf,
+  searchFieldsOf,
+  setPostFields,
+  setSearchFields,
+  setTags,
+  splitSource,
+  tagsOf,
+} from "../src/frontmatter.js";
 
 const SOURCE = [
   "---",
@@ -38,8 +50,13 @@ describe("reads", () => {
 
 describe("writes", () => {
   it("changes only the tags line and returns every other byte of the file as it was", () => {
-    const out = joinSource({ ...parts, front: setTags(parts.front!, ["cloudflare", "workers", "edge"]) });
-    expect(out).toBe(SOURCE.replace("tags: [cloudflare, workers]", "tags: [cloudflare, workers, edge]"));
+    const out = joinSource({
+      ...parts,
+      front: setTags(parts.front!, ["cloudflare", "workers", "edge"]),
+    });
+    expect(out).toBe(
+      SOURCE.replace("tags: [cloudflare, workers]", "tags: [cloudflare, workers, edge]"),
+    );
   });
 
   it("writes an emptied tag list as tags: [], leaves the same list alone, and adds the key when missing", () => {
@@ -49,7 +66,9 @@ describe("writes", () => {
   });
 
   it("turns a block-form list into the flow form and touches nothing else", () => {
-    expect(setTags("title: x\ntags:\n  - a\n  - b\nslug: y", ["a", "b", "c"])).toBe("title: x\ntags: [a, b, c]\nslug: y");
+    expect(setTags("title: x\ntags:\n  - a\n  - b\nslug: y", ["a", "b", "c"])).toBe(
+      "title: x\ntags: [a, b, c]\nslug: y",
+    );
   });
 });
 
@@ -60,27 +79,55 @@ describe("edge sources", () => {
   });
 
   it("quotes a tag that YAML would not read back as the same string", () => {
-    const written = setTags("title: x", ["News", "Field notes", "no", "true", "*", "{", "2026", "c#"]);
-    expect(written).toBe('title: x\ntags: [News, Field notes, "no", "true", "*", "{", "2026", "c#"]');
+    const written = setTags("title: x", [
+      "News",
+      "Field notes",
+      "no",
+      "true",
+      "*",
+      "{",
+      "2026",
+      "c#",
+    ]);
+    expect(written).toBe(
+      'title: x\ntags: [News, Field notes, "no", "true", "*", "{", "2026", "c#"]',
+    );
     expect(tagsOf(written)).toEqual(["News", "Field notes", "no", "true", "*", "{", "2026", "c#"]);
   });
 });
 
 describe("jsonSource", () => {
-  const post = jsonSource({ title: "text", slug: "text", tags: "list", featured: "flag" }, { required: ["title"] });
+  const post = jsonSource(
+    { title: "text", slug: "text", tags: "list", featured: "flag" },
+    { required: ["title"] },
+  );
 
   it("round-trips its fields as JSON lines and leaves an undefined one out", () => {
-    const source = post.write({ title: 'A "quoted" title', slug: null, tags: ["a", "b"], featured: true }, "Body\n");
-    expect(source).toBe('---\ntitle: "A \\"quoted\\" title"\nslug: null\ntags: ["a","b"]\nfeatured: true\n---\nBody\n');
-    expect(post.read(source)).toEqual({ values: { title: 'A "quoted" title', slug: null, tags: ["a", "b"], featured: true }, body: "Body\n" });
-    expect(jsonSource({ title: "text" }, { blankLine: true }).write({}, "B")).toBe("---\n\n---\n\nB");
-    expect(post.read("---\r\ntitle: Plain words\r\n---\r\n\r\nBody").values).toEqual({ title: "Plain words" });
+    const source = post.write(
+      { title: 'A "quoted" title', slug: null, tags: ["a", "b"], featured: true },
+      "Body\n",
+    );
+    expect(source).toBe(
+      '---\ntitle: "A \\"quoted\\" title"\nslug: null\ntags: ["a","b"]\nfeatured: true\n---\nBody\n',
+    );
+    expect(post.read(source)).toEqual({
+      values: { title: 'A "quoted" title', slug: null, tags: ["a", "b"], featured: true },
+      body: "Body\n",
+    });
+    expect(jsonSource({ title: "text" }, { blankLine: true }).write({}, "B")).toBe(
+      "---\n\n---\n\nB",
+    );
+    expect(post.read("---\r\ntitle: Plain words\r\n---\r\n\r\nBody").values).toEqual({
+      title: "Plain words",
+    });
   });
 
   it("names every problem at once", () => {
     let err: unknown;
     try {
-      post.read('---\nslug: "x\ntags: "x"\nfeatured: yes\nextra: 1\nslug: "b"\nno colon\n---\nBody');
+      post.read(
+        '---\nslug: "x\ntags: "x"\nfeatured: yes\nextra: 1\nslug: "b"\nno colon\n---\nBody',
+      );
     } catch (e) {
       err = e;
     }
@@ -97,45 +144,103 @@ describe("jsonSource", () => {
   });
 
   it("reads a source without front matter as all body, unless a field is required", () => {
-    expect(jsonSource({ title: "text" }).read("Just a body")).toEqual({ values: {}, body: "Just a body" });
+    expect(jsonSource({ title: "text" }).read("Just a body")).toEqual({
+      values: {},
+      body: "Just a body",
+    });
     expect(() => post.read("Just a body")).toThrow(JsonSourceError);
   });
 });
 
 describe("search fields", () => {
   it("round-trips through the frontmatter and a jsonSource site, and a blank removes the key", () => {
-    const front = setSearchFields(parts.front!, { searchTitle: 'Say "hi": a guide', description: "One line.", noindex: true, image: " " });
-    expect(searchFieldsOf(front)).toEqual({ searchTitle: 'Say "hi": a guide', description: "One line.", image: "", imageAlt: "", canonical: "", noindex: true });
-    expect(jsonSource({ searchTitle: "text", noindex: "flag" }).read(`---\n${readLines(front, ["searchTitle", "noindex"])}\n---\n`).values).toEqual({ searchTitle: 'Say "hi": a guide', noindex: true });
-    const cleared = setSearchFields(front, { searchTitle: "", description: "One table.", noindex: false });
+    const front = setSearchFields(parts.front!, {
+      searchTitle: 'Say "hi": a guide',
+      description: "One line.",
+      noindex: true,
+      image: " ",
+    });
+    expect(searchFieldsOf(front)).toEqual({
+      searchTitle: 'Say "hi": a guide',
+      description: "One line.",
+      image: "",
+      imageAlt: "",
+      canonical: "",
+      noindex: true,
+    });
+    expect(
+      jsonSource({ searchTitle: "text", noindex: "flag" }).read(
+        `---\n${readLines(front, ["searchTitle", "noindex"])}\n---\n`,
+      ).values,
+    ).toEqual({ searchTitle: 'Say "hi": a guide', noindex: true });
+    const cleared = setSearchFields(front, {
+      searchTitle: "",
+      description: "One table.",
+      noindex: false,
+    });
     expect(cleared).toBe(parts.front);
   });
 });
 
 describe("post fields (v0.17.0)", () => {
   it("keeps authors in order with a comma in a name, reads a hand-written list, and a blank or a bad part removes the key", () => {
-    const front = setPostFields(parts.front!, { authors: ["Smith, Jr.", " Ada "], excerpt: "Short.", series: "Notes", seriesPart: 2 });
-    expect(postFieldsOf(front)).toEqual({ authors: ["Smith, Jr.", "Ada"], excerpt: "Short.", series: "Notes", seriesPart: 2, featureImage: "", featureImageAlt: "", featureImageDecorative: false });
-    expect(jsonSource({ authors: "list" }).read(`---\n${readLines(front, ["authors"])}\n---\n`).values).toEqual({ authors: ["Smith, Jr.", "Ada"] });
-    expect(postFieldsOf("authors:\n  - Ada\n  - Grace\nseriesPart: 0").authors).toEqual(["Ada", "Grace"]);
+    const front = setPostFields(parts.front!, {
+      authors: ["Smith, Jr.", " Ada "],
+      excerpt: "Short.",
+      series: "Notes",
+      seriesPart: 2,
+    });
+    expect(postFieldsOf(front)).toEqual({
+      authors: ["Smith, Jr.", "Ada"],
+      excerpt: "Short.",
+      series: "Notes",
+      seriesPart: 2,
+      featureImage: "",
+      featureImageAlt: "",
+      featureImageDecorative: false,
+    });
+    expect(
+      jsonSource({ authors: "list" }).read(`---\n${readLines(front, ["authors"])}\n---\n`).values,
+    ).toEqual({ authors: ["Smith, Jr.", "Ada"] });
+    expect(postFieldsOf("authors:\n  - Ada\n  - Grace\nseriesPart: 0").authors).toEqual([
+      "Ada",
+      "Grace",
+    ]);
     expect(postFieldsOf("seriesPart: 0").seriesPart).toBeNull();
-    expect(setPostFields(front, { authors: [], excerpt: " ", series: "", seriesPart: null })).toBe(parts.front);
+    expect(setPostFields(front, { authors: [], excerpt: " ", series: "", seriesPart: null })).toBe(
+      parts.front,
+    );
   });
 
   // v0.22.0 (A2, D8): a feature or share image with no alt blocks, unless the post marks it decorative.
   it("names a feature or share image with no alt text, where the site renders it, and passes one marked decorative", () => {
-    const declared = { searchFields: ["image", "imageAlt"], postFields: ["featureImage", "featureImageAlt"] };
-    const bare = setSearchFields(setPostFields(parts.front!, { featureImage: "/media/a.png" }), { image: "/media/b.png" });
+    const declared = {
+      searchFields: ["image", "imageAlt"],
+      postFields: ["featureImage", "featureImageAlt"],
+    };
+    const bare = setSearchFields(setPostFields(parts.front!, { featureImage: "/media/a.png" }), {
+      image: "/media/b.png",
+    });
     expect(missingAltFields(bare, declared)).toEqual(["imageAlt", "featureImageAlt"]);
     expect(missingAltFields(bare, {})).toEqual([]);
     const decorative = setPostFields(bare, { featureImageDecorative: true });
     expect(missingAltFields(decorative, declared)).toEqual(["imageAlt"]);
-    const described = setPostFields(bare, { featureImageAlt: "A heron.", featureImageDecorative: false });
-    expect(postFieldsOf(described)).toMatchObject({ featureImage: "/media/a.png", featureImageAlt: "A heron.", featureImageDecorative: false });
+    const described = setPostFields(bare, {
+      featureImageAlt: "A heron.",
+      featureImageDecorative: false,
+    });
+    expect(postFieldsOf(described)).toMatchObject({
+      featureImage: "/media/a.png",
+      featureImageAlt: "A heron.",
+      featureImageDecorative: false,
+    });
     expect(missingAltFields(described, { postFields: declared.postFields })).toEqual([]);
   });
 });
 
 function readLines(front: string, keys: string[]): string {
-  return front.split("\n").filter((line) => keys.some((key) => line.startsWith(`${key}:`))).join("\n");
+  return front
+    .split("\n")
+    .filter((line) => keys.some((key) => line.startsWith(`${key}:`)))
+    .join("\n");
 }

@@ -1,7 +1,13 @@
 // What the host supplies, what an intent returns, and the plumbing the posts, media and mentions halves share.
 
 import { SiteApiError, type SiteClient } from "../client.js";
-import { Version, type Backlink, type ContentList, type ListQuery, type MediaUse } from "../contract.js";
+import {
+  Version,
+  type Backlink,
+  type ContentList,
+  type ListQuery,
+  type MediaUse,
+} from "../contract.js";
 
 // ---------- what the host supplies
 
@@ -155,7 +161,10 @@ export function text(input: IntentInput, name: string): string {
  * Asks before a step nothing can undo, unless the form already carries the answer: `confirm` equal to
  * the number of items, which the person typed. null means go on.
  */
-export function askFirst(input: IntentInput, ask: Omit<ConfirmRequest, "typeToConfirm">): IntentResult | null {
+export function askFirst(
+  input: IntentInput,
+  ask: Omit<ConfirmRequest, "typeToConfirm">,
+): IntentResult | null {
   const count = String(ask.items.length);
   if (text(input, "confirm").trim() === count) return null;
   return { ok: false, message: ask.title, confirm: { ...ask, typeToConfirm: count } };
@@ -174,17 +183,29 @@ export function changeId(): string {
 }
 
 function logOf(source: ContentSource) {
-  return (entry: Record<string, unknown>) => (source.log ? source.log(entry) : console.error(JSON.stringify(entry)));
+  return (entry: Record<string, unknown>) =>
+    source.log ? source.log(entry) : console.error(JSON.stringify(entry));
 }
 
 /** Records one done item. A record that cannot be written is said in the outcome, never hidden. */
-export async function recordDone(source: ContentSource, kind: string, id: string, change: string): Promise<string> {
+export async function recordDone(
+  source: ContentSource,
+  kind: string,
+  id: string,
+  change: string,
+): Promise<string> {
   if (!source.record) return "";
   try {
     await source.record({ kind, ids: [id], changeId: change });
     return "";
   } catch (error) {
-    logOf(source)({ contentKit: "record-failed", kind, id, changeId: change, error: String(error) });
+    logOf(source)({
+      contentKit: "record-failed",
+      kind,
+      id,
+      changeId: change,
+      error: String(error),
+    });
     return " The record of it could not be saved.";
   }
 }
@@ -197,7 +218,10 @@ export async function recordDone(source: ContentSource, kind: string, id: string
 export function targetsOf(
   input: IntentInput,
   shape: { safeParse(v: unknown): { success: boolean } },
-): { targets: Array<{ id: string; version: string | null; status: string | null }>; invalid: string[] } {
+): {
+  targets: Array<{ id: string; version: string | null; status: string | null }>;
+  invalid: string[];
+} {
   const ids = texts(input, "ids");
   const versions = texts(input, "versions");
   const statuses = texts(input, "statuses");
@@ -208,8 +232,10 @@ export function targetsOf(
     if (seen.has(id)) return;
     seen.add(id);
     const version = versions[i] ?? text(input, `version:${id}`);
-    if (!shape.safeParse(id).success || (version !== "" && !Version.safeParse(version).success)) invalid.push(id || "(no id)");
-    else targets.push({ id, version: version === "" ? null : version, status: statuses[i] || null });
+    if (!shape.safeParse(id).success || (version !== "" && !Version.safeParse(version).success))
+      invalid.push(id || "(no id)");
+    else
+      targets.push({ id, version: version === "" ? null : version, status: statuses[i] || null });
   });
   return { targets, invalid };
 }
@@ -225,11 +251,16 @@ export function summarize(outcomes: Outcome[], done: string, noun: string): stri
   const ok = outcomes.filter((o) => o.ok).length;
   const left = outcomes.length - ok;
   if (left === 0) return `${done} ${plural(ok, noun)}.`;
-  if (ok === 0) return `Nothing was changed: ${plural(left, noun)} left as ${left === 1 ? "it was" : "they were"}.`;
+  if (ok === 0)
+    return `Nothing was changed: ${plural(left, noun)} left as ${left === 1 ? "it was" : "they were"}.`;
   return `${done} ${plural(ok, noun)}; ${left} left as ${left === 1 ? "it was" : "they were"}.`;
 }
 
-export function result(outcomes: Outcome[], message: string, extra: Partial<IntentResult> = {}): IntentResult {
+export function result(
+  outcomes: Outcome[],
+  message: string,
+  extra: Partial<IntentResult> = {},
+): IntentResult {
   return { ok: outcomes.length > 0 && outcomes.every((o) => o.ok), message, outcomes, ...extra };
 }
 
@@ -238,7 +269,8 @@ export async function orNull<T>(read: Promise<T>): Promise<T | null> {
   try {
     return await read;
   } catch (error) {
-    if (error instanceof SiteApiError && (error.status === 404 || error.status === 400)) return null;
+    if (error instanceof SiteApiError && (error.status === 404 || error.status === 400))
+      return null;
     throw error;
   }
 }
@@ -250,20 +282,57 @@ export class Conflict extends Error {
 }
 
 /** What went wrong for one item, said plainly. Anything unexpected is logged and reported, never dropped. */
-export function failure(source: ContentSource, id: string, error: unknown, noun: string): Outcome & { currentVersion?: string | null } {
+export function failure(
+  source: ContentSource,
+  id: string,
+  error: unknown,
+  noun: string,
+): Outcome & { currentVersion?: string | null } {
   if (error instanceof Conflict) {
-    return { id, ok: false, message: `This ${noun} changed on the site since the page loaded. It was left as it was.`, currentVersion: error.currentVersion };
+    return {
+      id,
+      ok: false,
+      message: `This ${noun} changed on the site since the page loaded. It was left as it was.`,
+      currentVersion: error.currentVersion,
+    };
   }
   if (error instanceof SiteApiError) {
     if (error.body?.error === "version-conflict") {
-      return { id, ok: false, message: `This ${noun} changed on the site since the page loaded. It was left as it was.`, currentVersion: error.body.currentVersion ?? null };
+      return {
+        id,
+        ok: false,
+        message: `This ${noun} changed on the site since the page loaded. It was left as it was.`,
+        currentVersion: error.body.currentVersion ?? null,
+      };
     }
-    if (error.status === 404) return { id, ok: false, message: `The site does not have this ${noun}. It may have been deleted.` };
+    if (error.status === 404)
+      return {
+        id,
+        ok: false,
+        message: `The site does not have this ${noun}. It may have been deleted.`,
+      };
     if (error.status === 501) return { id, ok: false, message: "This site does not offer that." };
-    if (error.body?.error === "refused") return { id, ok: false, message: error.body.message, ...(error.body.usedBy ? { usedBy: error.body.usedBy } : {}) };
+    if (error.body?.error === "refused")
+      return {
+        id,
+        ok: false,
+        message: error.body.message,
+        ...(error.body.usedBy ? { usedBy: error.body.usedBy } : {}),
+      };
   }
-  logOf(source)({ contentKit: "item-failed", id, error: error instanceof SiteApiError ? `site ${error.status} ${error.body?.error ?? ""}` : String(error) });
-  return { id, ok: false, message: `The site did not accept this change. The ${noun} was left as it was.` };
+  logOf(source)({
+    contentKit: "item-failed",
+    id,
+    error:
+      error instanceof SiteApiError
+        ? `site ${error.status} ${error.body?.error ?? ""}`
+        : String(error),
+  });
+  return {
+    id,
+    ok: false,
+    message: `The site did not accept this change. The ${noun} was left as it was.`,
+  };
 }
 
 /** Runs each item in order. One failing never stops the rest; the first conflict is named on the result. */

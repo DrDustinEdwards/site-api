@@ -45,7 +45,10 @@ export function answerWrite(write: MediaWrite): { version: string } {
     case "missing":
       throw new NotFoundError("No such media.");
     case "stale":
-      throw new VersionConflictError(write.rev === null ? null : mediaVersion(write.rev), "The file changed since it was loaded.");
+      throw new VersionConflictError(
+        write.rev === null ? null : mediaVersion(write.rev),
+        "The file changed since it was loaded.",
+      );
     case "refused":
       throw new RefusedError(write.message);
   }
@@ -145,18 +148,29 @@ function promptFor(describe: string, rules: string[]): string {
  * named on each log entry. Undefined when the site has no gateway; a gateway set up wrong (a custom domain with no
  * AI_GATEWAY_ID, a malformed URL) is warned about and skipped, never thrown, so a suggestion still runs.
  */
-function gatewayOf(env: SuggestEnv, app: string): { id: string; collectLog: false; metadata: { app: string; feature: string } } | undefined {
+function gatewayOf(
+  env: SuggestEnv,
+  app: string,
+): { id: string; collectLog: false; metadata: { app: string; feature: string } } | undefined {
   let id: string | null;
   try {
-    const route = anthropicRoute({ AI_GATEWAY_BASE_URL: env.AI_GATEWAY_BASE_URL, AI_GATEWAY_ID: env.AI_GATEWAY_ID }, app, SUGGEST_FEATURE);
+    const route = anthropicRoute(
+      { AI_GATEWAY_BASE_URL: env.AI_GATEWAY_BASE_URL, AI_GATEWAY_ID: env.AI_GATEWAY_ID },
+      app,
+      SUGGEST_FEATURE,
+    );
     if (!route.gateway) return undefined;
     id = route.gatewayId;
   } catch (error) {
-    console.warn(`${app} media suggester: calling Workers AI without the gateway: ${error instanceof Error ? error.message : String(error)}`);
+    console.warn(
+      `${app} media suggester: calling Workers AI without the gateway: ${error instanceof Error ? error.message : String(error)}`,
+    );
     return undefined;
   }
   if (!id) {
-    console.warn(`${app} media suggester: AI_GATEWAY_BASE_URL names no gateway id and AI_GATEWAY_ID is unset; calling Workers AI without the gateway`);
+    console.warn(
+      `${app} media suggester: AI_GATEWAY_BASE_URL names no gateway id and AI_GATEWAY_ID is unset; calling Workers AI without the gateway`,
+    );
     return undefined;
   }
   return { id, collectLog: false, metadata: { app, feature: SUGGEST_FEATURE } };
@@ -167,7 +181,10 @@ function gatewayOf(env: SuggestEnv, app: string): { id: string; collectLog: fals
  * (prose around it included) is not the asked shape and reads as no suggestion, never as JSON cut out of free text.
  */
 export function readSuggestion(answer: unknown): { tags: string[]; alt: string | null } {
-  const body = typeof answer === "object" && answer !== null && "response" in answer ? (answer as { response: unknown }).response : answer;
+  const body =
+    typeof answer === "object" && answer !== null && "response" in answer
+      ? (answer as { response: unknown }).response
+      : answer;
   let parsed: unknown = body;
   if (typeof body === "string") {
     try {
@@ -178,7 +195,9 @@ export function readSuggestion(answer: unknown): { tags: string[]; alt: string |
   }
   const record = (parsed ?? {}) as { alt?: unknown; tags?: unknown };
   const alt = typeof record.alt === "string" && record.alt.trim() ? record.alt.trim() : null;
-  const tags = Array.isArray(record.tags) ? record.tags.filter((t): t is string => typeof t === "string") : [];
+  const tags = Array.isArray(record.tags)
+    ? record.tags.filter((t): t is string => typeof t === "string")
+    : [];
   return { tags, alt };
 }
 
@@ -190,11 +209,22 @@ export function readSuggestion(answer: unknown): { tags: string[]; alt: string |
  */
 export function mediaSuggester<E extends SuggestEnv>(options: MediaSuggesterOptions<E>) {
   const prompt = promptFor(options.describe, options.rules ?? []);
-  return async function suggest(env: E, picture: ReadableStream | { body: ReadableStream }, id?: string): Promise<MediaSuggestion> {
-    if (!env.AI) throw new Error("This site has no Workers AI binding (AI), so it cannot suggest tags or alt text.");
+  return async function suggest(
+    env: E,
+    picture: ReadableStream | { body: ReadableStream },
+    id?: string,
+  ): Promise<MediaSuggestion> {
+    if (!env.AI)
+      throw new Error(
+        "This site has no Workers AI binding (AI), so it cannot suggest tags or alt text.",
+      );
     await options.beforeCall?.(env, id);
     const stream = "getReader" in picture ? picture : picture.body;
-    const view = await editImage(env.IMAGES, stream, { maxEdge: VIEW_EDGE, format: "image/jpeg", quality: 80 });
+    const view = await editImage(env.IMAGES, stream, {
+      maxEdge: VIEW_EDGE,
+      format: "image/jpeg",
+      quality: 80,
+    });
     const image = `data:image/jpeg;base64,${toBase64(await view.arrayBuffer())}`;
     const gateway = gatewayOf(env, options.app);
     const answer = await env.AI.run(
@@ -216,14 +246,27 @@ export function mediaSuggester<E extends SuggestEnv>(options: MediaSuggesterOpti
       { ...(gateway ? { gateway } : {}), signal: AbortSignal.timeout(SUGGEST_TIMEOUT_MS) },
     );
     if (options.afterCall) {
-      const usage = (answer as { usage?: { prompt_tokens?: number; completion_tokens?: number } } | null)?.usage;
-      await options.afterCall(env, { model: SUGGEST_MODEL, promptTokens: usage?.prompt_tokens ?? 0, completionTokens: usage?.completion_tokens ?? 0 }, id);
+      const usage = (
+        answer as { usage?: { prompt_tokens?: number; completion_tokens?: number } } | null
+      )?.usage;
+      await options.afterCall(
+        env,
+        {
+          model: SUGGEST_MODEL,
+          promptTokens: usage?.prompt_tokens ?? 0,
+          completionTokens: usage?.completion_tokens ?? 0,
+        },
+        id,
+      );
     }
     const { tags, alt } = readSuggestion(answer);
     // Alt text with a high or critical prose finding (a refusal, a cutoff note, a blank, citation markup) is not offered.
     // checkProse is told the model, so the word lists seen only in Claude's output are left out for Llama's text (W4).
     const flagged =
-      alt !== null && checkProse(alt, { model: SUGGEST_MODEL }).some((issue) => issue.severity === "high" || issue.severity === "critical");
+      alt !== null &&
+      checkProse(alt, { model: SUGGEST_MODEL }).some(
+        (issue) => issue.severity === "high" || issue.severity === "critical",
+      );
     return { tags, alt: flagged ? null : alt, model: SUGGEST_MODEL };
   };
 }
@@ -257,9 +300,14 @@ export function previewDocument(input: PreviewDocumentInput): string {
     .map(([name, value]) => ` ${name.replace(/[^\w:-]/g, "")}="${escapeHtml(value)}"`)
     .join("");
   const css = (input.stylesheets ?? [])
-    .map((href) => `<link rel="stylesheet" href="${escapeHtml(input.origin ? new URL(href, input.origin).href : href)}">`)
+    .map(
+      (href) =>
+        `<link rel="stylesheet" href="${escapeHtml(input.origin ? new URL(href, input.origin).href : href)}">`,
+    )
     .join("");
-  const style = input.style ? `<style>${input.style.replace(/<\/style/gi, "<\\/style")}</style>` : "";
+  const style = input.style
+    ? `<style>${input.style.replace(/<\/style/gi, "<\\/style")}</style>`
+    : "";
   return (
     `<!doctype html><html lang="${escapeHtml(input.lang ?? "en")}"${attributes}><head><meta charset="utf-8">` +
     `<meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex">` +

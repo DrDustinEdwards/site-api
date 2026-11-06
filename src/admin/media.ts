@@ -50,7 +50,6 @@ import {
   absolute,
 } from "./kit.js";
 
-
 export interface MediaQuery {
   q?: string;
   tag?: string;
@@ -75,9 +74,16 @@ export interface MediaQuery {
  */
 export type MediaRow = MediaItem & { src: string; orientation?: MediaOrientation };
 
-function rowOf<T extends MediaItem>(source: ContentSource, item: T): T & { src: string; orientation?: MediaOrientation } {
+function rowOf<T extends MediaItem>(
+  source: ContentSource,
+  item: T,
+): T & { src: string; orientation?: MediaOrientation } {
   const orientation = orientationOf(item.width, item.height);
-  return { ...item, src: absolute(source.site.origin, item.url), ...(orientation ? { orientation } : {}) };
+  return {
+    ...item,
+    src: absolute(source.site.origin, item.url),
+    ...(orientation ? { orientation } : {}),
+  };
 }
 
 /**
@@ -106,7 +112,14 @@ export interface MediaData {
    * The file in the inspector with every place it is used; null when the site has no such file. v0.13.0: its earlier bytes
    * where offers.history, and the model's suggestions where the query asked for them.
    */
-  detail?: (MediaDetail & { src: string; orientation?: MediaOrientation; history?: MediaRevision[]; suggestions?: MediaSuggestionView | null }) | null;
+  detail?:
+    | (MediaDetail & {
+        src: string;
+        orientation?: MediaOrientation;
+        history?: MediaRevision[];
+        suggestions?: MediaSuggestionView | null;
+      })
+    | null;
   offers: {
     /** False on a site with no media manager: every other offer is then false. */
     media: boolean;
@@ -167,7 +180,9 @@ export function readMediaQuery(search: URLSearchParams): MediaQuery {
   return {
     ...(q ? { q } : {}),
     ...(lens.success ? { lens: lens.data } : {}),
-    ...(sort && (MEDIA_SORTS as readonly string[]).includes(sort) ? { sort: sort as MediaSort } : {}),
+    ...(sort && (MEDIA_SORTS as readonly string[]).includes(sort)
+      ? { sort: sort as MediaSort }
+      : {}),
     ...(dir === "asc" || dir === "desc" ? { dir } : {}),
     ...(tag && MediaTag.safeParse(tag).success ? { tag } : {}),
     ...(search.get("view") === "trash" ? { view: "trash" as const } : {}),
@@ -192,7 +207,8 @@ function mediaOffers(capabilities: Capabilities): MediaData["offers"] {
     focus: media && capabilities.mediaFocus === true,
     caption: media && capabilities.mediaCaption === true,
     replace: media && capabilities.mediaReplace === true,
-    replaceKeepsSize: media && capabilities.mediaReplace === true && capabilities.mediaReplaceKeepsSize === true,
+    replaceKeepsSize:
+      media && capabilities.mediaReplace === true && capabilities.mediaReplaceKeepsSize === true,
     duplicates: media && capabilities.mediaDuplicates === true,
     usage: media && capabilities.mediaUsage === true,
     filters: media && capabilities.mediaFilters === true,
@@ -202,7 +218,8 @@ function mediaOffers(capabilities: Capabilities): MediaData["offers"] {
     history: media && capabilities.mediaHistory === true,
     live: media && capabilities.mediaChanges === true,
     resize: media ? (capabilities.mediaResize ?? null) : null,
-    resizePass: media && capabilities.mediaResize !== undefined && capabilities.mediaResizePass === true,
+    resizePass:
+      media && capabilities.mediaResize !== undefined && capabilities.mediaResizePass === true,
     embedded: media && capabilities.mediaEmbedded === true,
     suggestions: media && capabilities.mediaSuggestions === true,
     uploadSuggestions: media && capabilities.mediaUploadSuggestions === true,
@@ -219,7 +236,12 @@ const MEDIA_BY: Record<MediaSort, (a: MediaItem, b: MediaItem) => number> = {
 /** One page of one site's media library, as MediaLibrary renders it. */
 export async function loadMedia(source: ContentSource, query: MediaQuery = {}): Promise<MediaData> {
   const offers = mediaOffers((await source.client.meta()).capabilities);
-  const base = { site: { id: source.site.id, name: source.site.name }, query, offers, can: source.can };
+  const base = {
+    site: { id: source.site.id, name: source.site.name },
+    query,
+    offers,
+    can: source.can,
+  };
   if (!offers.media) return { ...base, rows: [], page: { nextCursor: null } };
   const list = await source.client.media.list({
     limit: PER_PAGE,
@@ -228,7 +250,9 @@ export async function loadMedia(source: ContentSource, query: MediaQuery = {}): 
     ...(query.view === "trash" && offers.trash ? { trashed: "only" as const } : {}),
     ...(query.lens && offers.lenses.includes(query.lens) ? { lens: query.lens } : {}),
     // A site that does not count uses would refuse the used sort; the kit sorts the page by what the rows carry instead.
-    ...(query.sort && (query.sort !== "used" || offers.usage) ? { sort: query.sort, ...(query.dir ? { dir: query.dir } : {}) } : {}),
+    ...(query.sort && (query.sort !== "used" || offers.usage)
+      ? { sort: query.sort, ...(query.dir ? { dir: query.dir } : {}) }
+      : {}),
     ...(query.orientation && offers.filters ? { orientation: query.orientation } : {}),
     ...(query.kind && offers.filters ? { kind: query.kind } : {}),
     ...(query.cursor ? { cursor: query.cursor } : {}),
@@ -265,7 +289,10 @@ export async function loadMedia(source: ContentSource, query: MediaQuery = {}): 
 }
 
 /** The model's suggestions for one file, less what it already has; null when the site could not answer. */
-async function suggestionsFor(source: ContentSource, file: MediaDetail): Promise<MediaSuggestionView | null> {
+async function suggestionsFor(
+  source: ContentSource,
+  file: MediaDetail,
+): Promise<MediaSuggestionView | null> {
   try {
     const found = await source.client.media.suggestions(file.id);
     const held = file.tags ?? [];
@@ -292,7 +319,10 @@ export interface MediaChangesData {
  * included, so the screen moves each into or out of its view. `{ reload: true }` when the site can no longer answer from
  * that cursor, or does not offer live updates: the screen loads its page again.
  */
-export async function loadMediaChanges(source: ContentSource, cursor: string): Promise<MediaChangesData | { reload: true }> {
+export async function loadMediaChanges(
+  source: ContentSource,
+  cursor: string,
+): Promise<MediaChangesData | { reload: true }> {
   try {
     const changes = await source.client.media.changes(cursor, PER_PAGE);
     return {
@@ -308,19 +338,43 @@ export async function loadMediaChanges(source: ContentSource, cursor: string): P
 }
 
 const MEDIA_INTENTS = [
-  "upload", "alt", "tags", "tag-add", "tag-remove", "trash", "restore", "delete", "empty-trash", "focus", "caption", "replace",
-  "import", "credit", "transform", "revert", "resize", "suggest",
+  "upload",
+  "alt",
+  "tags",
+  "tag-add",
+  "tag-remove",
+  "trash",
+  "restore",
+  "delete",
+  "empty-trash",
+  "focus",
+  "caption",
+  "replace",
+  "import",
+  "credit",
+  "transform",
+  "revert",
+  "resize",
+  "suggest",
 ] as const;
 export type MediaIntent = (typeof MEDIA_INTENTS)[number];
 
 /** A typed list of tags (commas between them) as a tag set: each in the site's spelling, unique, at most 12. */
-export function parseMediaTags(raw: string | string[]): { ok: true; tags: string[] } | { ok: false; message: string } {
+export function parseMediaTags(
+  raw: string | string[],
+): { ok: true; tags: string[] } | { ok: false; message: string } {
   const tags: string[] = [];
   for (const part of (Array.isArray(raw) ? raw : [raw]).flatMap((r) => r.split(/[,\n]+/))) {
     if (part.trim() === "") continue;
-    const tag = part.trim().toLowerCase().replace(/[\s_]+/g, "-");
+    const tag = part
+      .trim()
+      .toLowerCase()
+      .replace(/[\s_]+/g, "-");
     if (!MediaTag.safeParse(tag).success) {
-      return { ok: false, message: `"${part.trim()}" cannot be a tag. A tag is lower case words and numbers joined by hyphens, up to 32 characters.` };
+      return {
+        ok: false,
+        message: `"${part.trim()}" cannot be a tag. A tag is lower case words and numbers joined by hyphens, up to 32 characters.`,
+      };
     }
     if (!tags.includes(tag)) tags.push(tag);
   }
@@ -329,7 +383,9 @@ export function parseMediaTags(raw: string | string[]): { ok: true; tags: string
 }
 
 function megabytes(bytes: number): string {
-  return bytes >= 1024 * 1024 ? `${(bytes / (1024 * 1024)).toFixed(1).replace(/\.0$/, "")} MB` : `${Math.ceil(bytes / 1024)} KB`;
+  return bytes >= 1024 * 1024
+    ? `${(bytes / (1024 * 1024)).toFixed(1).replace(/\.0$/, "")} MB`
+    : `${Math.ceil(bytes / 1024)} KB`;
 }
 
 /** The most rounds one empty-trash intent sends; each round deletes up to the site's limit. */
@@ -339,14 +395,27 @@ const EMPTY_ROUNDS = 20;
  * Runs one posted intent on one site's media library. Bulk intents go to the site as one bulk
  * request; the site answers file by file, and every file gets an outcome.
  */
-export async function runMediaIntent(source: ContentSource, input: IntentInput): Promise<IntentResult> {
+export async function runMediaIntent(
+  source: ContentSource,
+  input: IntentInput,
+): Promise<IntentResult> {
   const intent = text(input, "intent") as MediaIntent;
-  if (!MEDIA_INTENTS.includes(intent)) return refused("That is not something the media library can do.");
+  if (!MEDIA_INTENTS.includes(intent))
+    return refused("That is not something the media library can do.");
   // A replace changes every live page that uses the file and the old bytes are gone, so it is the Owner's, like a delete.
   // A transform, a revert and a resize change every live page that uses the file too (v0.13.0), so they are the Owner's.
-  const bytes = intent === "replace" || intent === "transform" || intent === "revert" || intent === "resize";
-  const need: keyof Permissions = intent === "delete" || intent === "empty-trash" || bytes ? "deleteMedia" : "edit";
-  if (!source.can[need]) return refused(intent === "replace" ? "Replacing a file is the Owner's step." : bytes ? "Changing a file's picture is the Owner's step." : NOT_YOURS[need]);
+  const bytes =
+    intent === "replace" || intent === "transform" || intent === "revert" || intent === "resize";
+  const need: keyof Permissions =
+    intent === "delete" || intent === "empty-trash" || bytes ? "deleteMedia" : "edit";
+  if (!source.can[need])
+    return refused(
+      intent === "replace"
+        ? "Replacing a file is the Owner's step."
+        : bytes
+          ? "Changing a file's picture is the Owner's step."
+          : NOT_YOURS[need],
+    );
   const offers = mediaOffers((await source.client.meta()).capabilities);
   if (!offers.media) return refused("This site has no media library.");
   const lacking =
@@ -369,11 +438,14 @@ export async function runMediaIntent(source: ContentSource, input: IntentInput):
   if (intent === "import") return importOne(source, input);
   if (intent === "empty-trash") {
     const trash = await source.client.media.list({ trashed: "only", limit: 200 });
-    if (trash.items.length === 0) return { ok: true, message: "The trash was already empty.", outcomes: [] };
+    if (trash.items.length === 0)
+      return { ok: true, message: "The trash was already empty.", outcomes: [] };
     const ask = askFirst(input, {
       intent,
       title: `Delete ${plural(trash.items.length, "file")} in the trash for good?`,
-      lead: "Each file leaves the site's storage, and nothing can bring it back. A file a page still uses stays in the trash." + (trash.nextCursor ? " The trash holds more than these; empty it again for the rest." : ""),
+      lead:
+        "Each file leaves the site's storage, and nothing can bring it back. A file a page still uses stays in the trash." +
+        (trash.nextCursor ? " The trash holds more than these; empty it again for the rest." : ""),
       action: "Empty the trash",
       items: trash.items.map((i) => i.filename ?? i.id),
       fields: {},
@@ -384,14 +456,33 @@ export async function runMediaIntent(source: ContentSource, input: IntentInput):
   const { targets, invalid } = targetsOf(input, MediaId);
   const tooMany = checkCount(targets.length + invalid.length, "file");
   if (tooMany) return tooMany;
-  const early: Outcome[] = invalid.map((id) => ({ id, ok: false, message: "That is not a file id, so it was not sent to the site." }));
+  const early: Outcome[] = invalid.map((id) => ({
+    id,
+    ok: false,
+    message: "That is not a file id, so it was not sent to the site.",
+  }));
   // A write needs the version the person saw; without one the site could not tell a stale write from a fresh one.
   const sendable = targets.filter((t) => intent === "delete" || t.version !== null);
   for (const t of targets) {
-    if (!sendable.includes(t)) early.push({ id: t.id, ok: false, message: "The page did not say which version of this file you saw, so nothing was sent. Reload and try again." });
+    if (!sendable.includes(t))
+      early.push({
+        id: t.id,
+        ok: false,
+        message:
+          "The page did not say which version of this file you saw, so nothing was sent. Reload and try again.",
+      });
   }
 
-  if (intent === "alt" || intent === "tags" || intent === "focus" || intent === "caption" || intent === "replace" || intent === "credit" || intent === "transform" || intent === "revert") {
+  if (
+    intent === "alt" ||
+    intent === "tags" ||
+    intent === "focus" ||
+    intent === "caption" ||
+    intent === "replace" ||
+    intent === "credit" ||
+    intent === "transform" ||
+    intent === "revert"
+  ) {
     if (sendable.length !== 1 || targets.length !== 1) return result(early, "Choose one file.");
     const file = { id: sendable[0]!.id, version: sendable[0]!.version! };
     if (intent === "alt") return setAlt(source, file, text(input, "alt"), decorativeOf(input));
@@ -417,26 +508,57 @@ export async function runMediaIntent(source: ContentSource, input: IntentInput):
   // (so Undo touches only those), and, on a site with a trash, that a delete is from the trash.
   const before = new Map<string, MediaDetail>();
   const plan: Array<{ id: string; version: string | null }> = [];
-  const { outcomes: checks, conflict: staleRead } = await eachItem(source, sendable, "file", async (t): Promise<Outcome> => {
-    if (intent === "tag-add" || intent === "tag-remove" || (intent === "delete" && offers.trash)) {
-      const detail = await source.client.media.get(t.id);
-      if (t.version !== null && detail.version !== t.version) throw new Conflict(detail.version ?? null);
-      before.set(t.id, detail);
-      if (intent === "delete" && !detail.trashedAt) {
-        return { id: t.id, ok: false, message: "Move this file to the trash first: files are deleted for good only from the trash." };
+  const { outcomes: checks, conflict: staleRead } = await eachItem(
+    source,
+    sendable,
+    "file",
+    async (t): Promise<Outcome> => {
+      if (
+        intent === "tag-add" ||
+        intent === "tag-remove" ||
+        (intent === "delete" && offers.trash)
+      ) {
+        const detail = await source.client.media.get(t.id);
+        if (t.version !== null && detail.version !== t.version)
+          throw new Conflict(detail.version ?? null);
+        before.set(t.id, detail);
+        if (intent === "delete" && !detail.trashedAt) {
+          return {
+            id: t.id,
+            ok: false,
+            message:
+              "Move this file to the trash first: files are deleted for good only from the trash.",
+          };
+        }
+        if (intent === "tag-add" || intent === "tag-remove") {
+          const held = detail.tags ?? [];
+          const changes =
+            intent === "tag-add"
+              ? tags.some((g) => !held.includes(g))
+              : tags.some((g) => held.includes(g));
+          if (!changes)
+            return {
+              id: t.id,
+              ok: true,
+              message:
+                intent === "tag-add"
+                  ? "Already had those tags. Not changed."
+                  : "Had none of those tags. Not changed.",
+            };
+        }
       }
-      if (intent === "tag-add" || intent === "tag-remove") {
-        const held = detail.tags ?? [];
-        const changes = intent === "tag-add" ? tags.some((g) => !held.includes(g)) : tags.some((g) => held.includes(g));
-        if (!changes) return { id: t.id, ok: true, message: intent === "tag-add" ? "Already had those tags. Not changed." : "Had none of those tags. Not changed." };
-      }
-    }
-    plan.push(t);
-    return { id: t.id, ok: true, message: "" };
-  });
+      plan.push(t);
+      return { id: t.id, ok: true, message: "" };
+    },
+  );
   const settled = checks.filter((c) => !c.ok || c.message !== "");
   const all: Outcome[] = [...early, ...settled];
-  if (plan.length === 0) return result(all, summarize(all, MEDIA_DONE[intent], "file"), staleRead ? { conflict: staleRead } : {});
+  if (plan.length === 0)
+    return result(
+      all,
+      summarize(all, MEDIA_DONE[intent], "file"),
+      staleRead ? { conflict: staleRead } : {},
+    );
 
   if (intent === "delete") {
     // Asked once the kit knows which files would really go: none still in the library, none refused above.
@@ -457,7 +579,11 @@ export async function runMediaIntent(source: ContentSource, input: IntentInput):
   const answer = await source.client.media.bulk({
     op,
     ...(tags.length > 0 ? { tags } : {}),
-    items: sent.map((s) => ({ id: s.id, changeId: s.changeId, ...(op !== "delete" && s.version ? { expectedVersion: s.version } : {}) })),
+    items: sent.map((s) => ({
+      id: s.id,
+      changeId: s.changeId,
+      ...(op !== "delete" && s.version ? { expectedVersion: s.version } : {}),
+    })),
   });
   const undoIds: string[] = [];
   const undoVersions: string[] = [];
@@ -471,14 +597,20 @@ export async function runMediaIntent(source: ContentSource, input: IntentInput):
         undoIds.push(outcome.id);
         undoVersions.push(outcome.version);
         const held = before.get(outcome.id)?.tags ?? [];
-        for (const g of tags) if (intent === "tag-add" ? !held.includes(g) : held.includes(g)) undoTags.add(`${outcome.id}\u0000${g}`);
+        for (const g of tags)
+          if (intent === "tag-add" ? !held.includes(g) : held.includes(g))
+            undoTags.add(`${outcome.id}\u0000${g}`);
       }
     } else {
-      if (outcome.error === "version-conflict" && !conflict) conflict = { id: outcome.id, currentVersion: outcome.currentVersion ?? null };
+      if (outcome.error === "version-conflict" && !conflict)
+        conflict = { id: outcome.id, currentVersion: outcome.currentVersion ?? null };
       all.push({
         id: outcome.id,
         ok: false,
-        message: outcome.error === "version-conflict" ? "This file changed on the site since the page loaded. It was left as it was." : outcome.message,
+        message:
+          outcome.error === "version-conflict"
+            ? "This file changed on the site since the page loaded. It was left as it was."
+            : outcome.message,
         ...(outcome.usedBy && outcome.usedBy.length > 0 ? { usedBy: outcome.usedBy } : {}),
       });
     }
@@ -486,14 +618,24 @@ export async function runMediaIntent(source: ContentSource, input: IntentInput):
   const extra: Partial<IntentResult> = conflict ? { conflict } : {};
   let tail = "";
   if (undoIds.length > 0 && (intent === "trash" || intent === "restore")) {
-    extra.undo = { intent: intent === "trash" ? "restore" : "trash", fields: { ids: undoIds, versions: undoVersions } };
+    extra.undo = {
+      intent: intent === "trash" ? "restore" : "trash",
+      fields: { ids: undoIds, versions: undoVersions },
+    };
   } else if (undoIds.length > 0 && (intent === "tag-add" || intent === "tag-remove")) {
     // Undo applies the inverse to the files that changed, and only those: one bulk request when every
     // file changed by the same tags, which a single tag always does.
-    const changed = undoIds.map((id) => tags.filter((g) => undoTags.has(`${id}\u0000${g}`)).join(","));
+    const changed = undoIds.map((id) =>
+      tags.filter((g) => undoTags.has(`${id}\u0000${g}`)).join(","),
+    );
     if (changed.every((c) => c === changed[0])) {
-      extra.undo = { intent: intent === "tag-add" ? "tag-remove" : "tag-add", fields: { ids: undoIds, versions: undoVersions, tags: changed[0]!.split(",") } };
-    } else tail = " The files changed by different tags, so there is no single Undo; change them one at a time to reverse it.";
+      extra.undo = {
+        intent: intent === "tag-add" ? "tag-remove" : "tag-add",
+        fields: { ids: undoIds, versions: undoVersions, tags: changed[0]!.split(",") },
+      };
+    } else
+      tail =
+        " The files changed by different tags, so there is no single Undo; change them one at a time to reverse it.";
   }
   return result(all, summarize(all, MEDIA_DONE[intent], "file") + tail, extra);
 }
@@ -544,15 +686,24 @@ const MEDIA_DONE_ONE: Record<MediaIntent, string> = {
  * Uploads one file. The kit checks the site's own limits first, so a file the site would refuse is
  * not sent at all; the site API checks them again, and the bytes, before the site's code.
  */
-async function uploadOne(source: ContentSource, input: IntentInput, limits: MediaUploadLimits): Promise<IntentResult> {
+async function uploadOne(
+  source: ContentSource,
+  input: IntentInput,
+  limits: MediaUploadLimits,
+): Promise<IntentResult> {
   const file = fieldOf(input, "file").find((v): v is Blob => typeof v !== "string");
   if (!file) return refused("Choose a file to upload.");
   const name = (file as Blob & { name?: string }).name || "upload";
   const type = file.type.split(";")[0]!.trim().toLowerCase();
   if (!limits.types.includes(type)) {
-    return refused(`${name} is ${type || "an unknown type"}; this site accepts ${limits.types.map((t) => t.split("/")[1]).join(", ")}.`);
+    return refused(
+      `${name} is ${type || "an unknown type"}; this site accepts ${limits.types.map((t) => t.split("/")[1]).join(", ")}.`,
+    );
   }
-  if (file.size > limits.maxBytes) return refused(`${name} is ${megabytes(file.size)}; this site accepts files up to ${megabytes(limits.maxBytes)}.`);
+  if (file.size > limits.maxBytes)
+    return refused(
+      `${name} is ${megabytes(file.size)}; this site accepts files up to ${megabytes(limits.maxBytes)}.`,
+    );
   if (file.size === 0) return refused(`${name} is empty.`);
   const alt = altOf(input, name);
   if (!alt.ok) return refused(`${name}: ${alt.message}`);
@@ -569,7 +720,8 @@ async function uploadOne(source: ContentSource, input: IntentInput, limits: Medi
     if (item.duplicateOf) return stored(source, item, `${name} is already in the library`, change);
     return stored(source, item, `Uploaded ${name}`, change, "media-upload");
   } catch (error) {
-    if (error instanceof SiteApiError && error.body) return refused(`The site refused ${name}: ${error.body.message}`);
+    if (error instanceof SiteApiError && error.body)
+      return refused(`The site refused ${name}: ${error.body.message}`);
     throw error;
   }
 }
@@ -585,14 +737,20 @@ const EMBEDDED_WORDS: Record<string, string> = {
 };
 
 /** A form's "decorative" box (v0.19.0), checked. */
-const decorativeOf = (input: IntentInput) => ["yes", "on", "1", "true"].includes(text(input, "decorative"));
+const decorativeOf = (input: IntentInput) =>
+  ["yes", "on", "1", "true"].includes(text(input, "decorative"));
 
 /** The alt an upload or an import sends, or decorative (v0.19.0): one of them, checked as the site checks it. */
-function altOf(input: IntentInput, filename: string | null): { ok: true; fields: { alt: string } | { decorative: true } } | { ok: false; message: string } {
+function altOf(
+  input: IntentInput,
+  filename: string | null,
+): { ok: true; fields: { alt: string } | { decorative: true } } | { ok: false; message: string } {
   const alt = text(input, "alt").trim();
   const decorative = decorativeOf(input);
   const wrong = altRefusal(alt, decorative, filename);
-  return wrong ? { ok: false, message: wrong } : { ok: true, fields: decorative ? { decorative: true } : { alt } };
+  return wrong
+    ? { ok: false, message: wrong }
+    : { ok: true, fields: decorative ? { decorative: true } : { alt } };
 }
 
 /**
@@ -602,15 +760,24 @@ function altOf(input: IntentInput, filename: string | null): { ok: true; fields:
 async function suggestFor(source: ContentSource, input: IntentInput): Promise<IntentResult> {
   const file = fieldOf(input, "file").find((v): v is Blob => typeof v !== "string");
   const url = text(input, "url").trim();
-  if (!file && !/^https:\/\//i.test(url)) return refused("Choose a file, or give its https address.");
+  if (!file && !/^https:\/\//i.test(url))
+    return refused("Choose a file, or give its https address.");
   try {
     const found = await source.client.media.suggestFile(
-      file ? { bytes: new Uint8Array(await file.arrayBuffer()), contentType: file.type.split(";")[0]!.trim().toLowerCase() } : { url },
+      file
+        ? {
+            bytes: new Uint8Array(await file.arrayBuffer()),
+            contentType: file.type.split(";")[0]!.trim().toLowerCase(),
+          }
+        : { url },
     );
-    const message = found.alt ? "Suggested alt text. Check it says what matters here, then upload." : "The model had no alt text to suggest. Say what the picture shows.";
+    const message = found.alt
+      ? "Suggested alt text. Check it says what matters here, then upload."
+      : "The model had no alt text to suggest. Say what the picture shows.";
     return { ok: true, message, suggestion: found };
   } catch (error) {
-    if (error instanceof SiteApiError && error.body) return refused(`The site did not suggest alt text: ${error.body.message}`);
+    if (error instanceof SiteApiError && error.body)
+      return refused(`The site did not suggest alt text: ${error.body.message}`);
     throw error;
   }
 }
@@ -621,7 +788,15 @@ async function suggestFor(source: ContentSource, input: IntentInput): Promise<In
  */
 async function stored(
   source: ContentSource,
-  item: { id: string; filename: string | null; duplicateOf?: string; embedded?: string[]; resizedFrom?: { width: number; height: number }; width: number | null; height: number | null },
+  item: {
+    id: string;
+    filename: string | null;
+    duplicateOf?: string;
+    embedded?: string[];
+    resizedFrom?: { width: number; height: number };
+    width: number | null;
+    height: number | null;
+  },
   lead: string,
   change: string,
   kind?: string,
@@ -631,12 +806,19 @@ async function stored(
     return result([{ id: item.id, ok: true, message, duplicate: true }], message);
   }
   const notes = [
-    item.resizedFrom && item.width && item.height ? ` Shrunk from ${item.resizedFrom.width}x${item.resizedFrom.height} to ${item.width}x${item.height}.` : "",
-    item.embedded && item.embedded.length > 0 ? ` Filled in from the file: ${item.embedded.map((f) => EMBEDDED_WORDS[f] ?? f).join(", ")}.` : "",
+    item.resizedFrom && item.width && item.height
+      ? ` Shrunk from ${item.resizedFrom.width}x${item.resizedFrom.height} to ${item.width}x${item.height}.`
+      : "",
+    item.embedded && item.embedded.length > 0
+      ? ` Filled in from the file: ${item.embedded.map((f) => EMBEDDED_WORDS[f] ?? f).join(", ")}.`
+      : "",
   ].join("");
   const note = await recordDone(source, kind!, item.id, change);
   const done = kind === "media-import" ? "Imported." : "Uploaded.";
-  return result([{ id: item.id, ok: true, message: done + notes + note }], `${lead}.` + notes + note);
+  return result(
+    [{ id: item.id, ok: true, message: done + notes + note }],
+    `${lead}.` + notes + note,
+  );
 }
 
 /** Has the site fetch a file from the web into its own storage (v0.13.0): `url`, and optional `filename` and `alt`. */
@@ -655,19 +837,34 @@ async function importOne(source: ContentSource, input: IntentInput): Promise<Int
       changeId: change,
       ...(text(input, "resize") === "no" ? { resize: "no" as const } : {}),
     });
-    return stored(source, item, item.duplicateOf ? "That file is already in the library" : `Imported ${item.filename ?? item.id}`, change, "media-import");
+    return stored(
+      source,
+      item,
+      item.duplicateOf
+        ? "That file is already in the library"
+        : `Imported ${item.filename ?? item.id}`,
+      change,
+      "media-import",
+    );
   } catch (error) {
-    if (error instanceof SiteApiError && error.body) return refused(`The site did not import it: ${error.body.message}`);
+    if (error instanceof SiteApiError && error.body)
+      return refused(`The site did not import it: ${error.body.message}`);
     throw error;
   }
 }
 
 /** Saves a file's credit, license, source address and license end (v0.13.0), each the whole value after it. */
-async function setCredit(source: ContentSource, input: IntentInput, file: { id: string; version: string }): Promise<IntentResult> {
+async function setCredit(
+  source: ContentSource,
+  input: IntentInput,
+  file: { id: string; version: string },
+): Promise<IntentResult> {
   const sourceUrl = text(input, "sourceUrl").trim();
-  if (sourceUrl !== "" && !MediaSourceUrl.safeParse(sourceUrl).success) return refused("The source is not a web address.");
+  if (sourceUrl !== "" && !MediaSourceUrl.safeParse(sourceUrl).success)
+    return refused("The source is not a web address.");
   const licenseExpires = text(input, "licenseExpires").trim();
-  if (licenseExpires !== "" && !/^\d{4}-\d{2}-\d{2}$/.test(licenseExpires)) return refused("The license end is not a date.");
+  if (licenseExpires !== "" && !/^\d{4}-\d{2}-\d{2}$/.test(licenseExpires))
+    return refused("The license end is not a date.");
   const { outcomes, conflict } = await eachItem(source, [file], "file", async ({ id, version }) => {
     const change = changeId();
     const written = await source.client.media.setCredit(id, {
@@ -678,7 +875,12 @@ async function setCredit(source: ContentSource, input: IntentInput, file: { id: 
       expectedVersion: version,
       changeId: change,
     });
-    return { id, ok: true, version: written.version, message: "Credit saved." + (await recordDone(source, "media-credit", id, change)) };
+    return {
+      id,
+      ok: true,
+      version: written.version,
+      message: "Credit saved." + (await recordDone(source, "media-credit", id, change)),
+    };
   });
   return result(outcomes, outcomes[0]!.message, conflict ? { conflict } : {});
 }
@@ -696,53 +898,113 @@ const INVERSE: Record<TransformOp, TransformOp> = {
  * history (a revert, so nothing is encoded twice), else turns it back. A quarter turn the site saves as a new file has no
  * Undo: the old file is as it was, and the message says so.
  */
-async function transformFile(source: ContentSource, input: IntentInput, file: { id: string; version: string }, history: boolean): Promise<IntentResult> {
+async function transformFile(
+  source: ContentSource,
+  input: IntentInput,
+  file: { id: string; version: string },
+  history: boolean,
+): Promise<IntentResult> {
   const op = MediaTransformOp.safeParse(text(input, "op"));
   if (!op.success) return refused("Choose a turn or a mirror.");
   let undo: IntentResult["undo"];
   const { outcomes, conflict } = await eachItem(source, [file], "file", async ({ id, version }) => {
-    const before = history ? (await source.client.media.history(id)).revisions.find((r) => r.current)?.rev : undefined;
+    const before = history
+      ? (await source.client.media.history(id)).revisions.find((r) => r.current)?.rev
+      : undefined;
     const change = changeId();
-    const done = await source.client.media.transform(id, { op: op.data, expectedVersion: version, changeId: change });
+    const done = await source.client.media.transform(id, {
+      op: op.data,
+      expectedVersion: version,
+      changeId: change,
+    });
     const note = await recordDone(source, "media-transform", done.id, change);
     if (done.asNewFile) {
-      return { id, ok: true, copyId: done.id, message: `Saved the turned picture as a new file, ${done.filename ?? done.id}, since this site's addresses carry the size. The pages that use the old one still show it.` + note };
+      return {
+        id,
+        ok: true,
+        copyId: done.id,
+        message:
+          `Saved the turned picture as a new file, ${done.filename ?? done.id}, since this site's addresses carry the size. The pages that use the old one still show it.` +
+          note,
+      };
     }
     undo = before
       ? { intent: "revert", fields: { ids: [id], versions: [done.version!], to: before } }
-      : { intent: "transform", fields: { ids: [id], versions: [done.version!], op: INVERSE[op.data] } };
-    const stale = done.sizesNeedPurge ? " The site's cache may still serve sizes of the old picture until they are purged." : "";
-    return { id, ok: true, ...(done.version ? { version: done.version } : {}), message: "Turned. Every page that uses it shows the new picture." + stale + note };
+      : {
+          intent: "transform",
+          fields: { ids: [id], versions: [done.version!], op: INVERSE[op.data] },
+        };
+    const stale = done.sizesNeedPurge
+      ? " The site's cache may still serve sizes of the old picture until they are purged."
+      : "";
+    return {
+      id,
+      ok: true,
+      ...(done.version ? { version: done.version } : {}),
+      message: "Turned. Every page that uses it shows the new picture." + stale + note,
+    };
   });
-  return result(outcomes, outcomes[0]!.message, { ...(conflict ? { conflict } : {}), ...(undo ? { undo } : {}) });
+  return result(outcomes, outcomes[0]!.message, {
+    ...(conflict ? { conflict } : {}),
+    ...(undo ? { undo } : {}),
+  });
 }
 
 /** Puts a file's earlier bytes back (v0.13.0), `to` a revision from the inspector's history. Undo puts back the bytes it had. */
-async function revertFile(source: ContentSource, file: { id: string; version: string }, to: string): Promise<IntentResult> {
+async function revertFile(
+  source: ContentSource,
+  file: { id: string; version: string },
+  to: string,
+): Promise<IntentResult> {
   if (to.trim() === "") return refused("Choose the version to go back to.");
   let undo: IntentResult["undo"];
   const { outcomes, conflict } = await eachItem(source, [file], "file", async ({ id, version }) => {
     const before = (await source.client.media.history(id)).revisions.find((r) => r.current)?.rev;
     const change = changeId();
-    const done = await source.client.media.revert(id, { to: to.trim(), expectedVersion: version, changeId: change });
-    if (before && done.version) undo = { intent: "revert", fields: { ids: [id], versions: [done.version], to: before } };
-    const stale = done.sizesNeedPurge ? " The site's cache may still serve sizes of the newer picture until they are purged." : "";
-    return { id, ok: true, ...(done.version ? { version: done.version } : {}), message: "Reverted. Every page that uses it shows that version; set its focal point again if it had one." + stale + (await recordDone(source, "media-revert", id, change)) };
+    const done = await source.client.media.revert(id, {
+      to: to.trim(),
+      expectedVersion: version,
+      changeId: change,
+    });
+    if (before && done.version)
+      undo = { intent: "revert", fields: { ids: [id], versions: [done.version], to: before } };
+    const stale = done.sizesNeedPurge
+      ? " The site's cache may still serve sizes of the newer picture until they are purged."
+      : "";
+    return {
+      id,
+      ok: true,
+      ...(done.version ? { version: done.version } : {}),
+      message:
+        "Reverted. Every page that uses it shows that version; set its focal point again if it had one." +
+        stale +
+        (await recordDone(source, "media-revert", id, change)),
+    };
   });
-  return result(outcomes, outcomes[0]!.message, { ...(conflict ? { conflict } : {}), ...(undo ? { undo } : {}) });
+  return result(outcomes, outcomes[0]!.message, {
+    ...(conflict ? { conflict } : {}),
+    ...(undo ? { undo } : {}),
+  });
 }
 
 /**
  * Shrinks the chosen stored pictures to the site's size (v0.13.0), after asking: each changes every page that uses it. Sent
  * in requests of the site's limit, each file with its own change id; one file's refusal is its own outcome.
  */
-async function resizeFiles(source: ContentSource, input: IntentInput, files: Array<{ id: string; version: string | null }>, early: Outcome[]): Promise<IntentResult> {
+async function resizeFiles(
+  source: ContentSource,
+  input: IntentInput,
+  files: Array<{ id: string; version: string | null }>,
+  early: Outcome[],
+): Promise<IntentResult> {
   if (files.length === 0) return result(early, summarize(early, MEDIA_DONE.resize, "file"));
   const ids = files.map((f) => f.id);
   const ask = askFirst(input, {
     intent: "resize",
     title: `Shrink ${plural(ids.length, "picture")} to this site's size?`,
-    lead: "Each picture is stored again at the smaller size, and every page that uses it shows the smaller one." + " Where the site keeps a file's history, the inspector can put the original back.",
+    lead:
+      "Each picture is stored again at the smaller size, and every page that uses it shows the smaller one." +
+      " Where the site keeps a file's history, the inspector can put the original back.",
     action: "Shrink",
     items: ids,
     fields: { ids, versions: files.map((f) => f.version!) },
@@ -751,28 +1013,62 @@ async function resizeFiles(source: ContentSource, input: IntentInput, files: Arr
   const all: Outcome[] = [...early];
   let conflict: IntentResult["conflict"];
   for (let at = 0; at < files.length; at += MAX_RESIZE_PASS) {
-    const sent = files.slice(at, at + MAX_RESIZE_PASS).map((f) => ({ id: f.id, expectedVersion: f.version!, changeId: changeId() }));
+    const sent = files
+      .slice(at, at + MAX_RESIZE_PASS)
+      .map((f) => ({ id: f.id, expectedVersion: f.version!, changeId: changeId() }));
     const answer = await source.client.media.resizePass({ items: sent });
     for (const outcome of answer.results) {
       if (outcome.ok) {
-        const note = outcome.resized ? await recordDone(source, "media-resize", outcome.id, outcome.changeId) : "";
-        all.push({ id: outcome.id, ok: true, ...(outcome.version ? { version: outcome.version } : {}), message: outcome.resized ? `Shrunk to ${outcome.width}x${outcome.height}.` + note : "Already within the size. Not changed." });
+        const note = outcome.resized
+          ? await recordDone(source, "media-resize", outcome.id, outcome.changeId)
+          : "";
+        all.push({
+          id: outcome.id,
+          ok: true,
+          ...(outcome.version ? { version: outcome.version } : {}),
+          message: outcome.resized
+            ? `Shrunk to ${outcome.width}x${outcome.height}.` + note
+            : "Already within the size. Not changed.",
+        });
       } else {
-        if (outcome.error === "version-conflict" && !conflict) conflict = { id: outcome.id, currentVersion: outcome.currentVersion ?? null };
-        all.push({ id: outcome.id, ok: false, message: outcome.error === "version-conflict" ? "This file changed on the site since the page loaded. It was left as it was." : outcome.message });
+        if (outcome.error === "version-conflict" && !conflict)
+          conflict = { id: outcome.id, currentVersion: outcome.currentVersion ?? null };
+        all.push({
+          id: outcome.id,
+          ok: false,
+          message:
+            outcome.error === "version-conflict"
+              ? "This file changed on the site since the page loaded. It was left as it was."
+              : outcome.message,
+        });
       }
     }
   }
   return result(all, summarize(all, MEDIA_DONE.resize, "file"), conflict ? { conflict } : {});
 }
 
-async function setAlt(source: ContentSource, file: { id: string; version: string }, alt: string, decorative: boolean): Promise<IntentResult> {
+async function setAlt(
+  source: ContentSource,
+  file: { id: string; version: string },
+  alt: string,
+  decorative: boolean,
+): Promise<IntentResult> {
   const wrong = altRefusal(alt, decorative, null);
   if (wrong) return refused(wrong);
   const { outcomes, conflict } = await eachItem(source, [file], "file", async ({ id, version }) => {
     const change = changeId();
-    const written = await source.client.media.setAlt(id, { alt: decorative ? "" : alt.trim(), ...(decorative ? { decorative: true as const } : {}), expectedVersion: version, changeId: change });
-    return { id, ok: true, version: written.version, message: "Alt text saved." + (await recordDone(source, "media-alt", id, change)) };
+    const written = await source.client.media.setAlt(id, {
+      alt: decorative ? "" : alt.trim(),
+      ...(decorative ? { decorative: true as const } : {}),
+      expectedVersion: version,
+      changeId: change,
+    });
+    return {
+      id,
+      ok: true,
+      version: written.version,
+      message: "Alt text saved." + (await recordDone(source, "media-alt", id, change)),
+    };
   });
   return result(outcomes, outcomes[0]!.message, conflict ? { conflict } : {});
 }
@@ -794,22 +1090,50 @@ function focusField(input: IntentInput): string {
 }
 
 /** Sets the point a file's crops are cut around: `focus` is "XxY", each 0 to 1 from the top left, or "" to clear it. */
-async function setFocus(source: ContentSource, file: { id: string; version: string }, raw: string): Promise<IntentResult> {
+async function setFocus(
+  source: ContentSource,
+  file: { id: string; version: string },
+  raw: string,
+): Promise<IntentResult> {
   const focus = raw.trim() === "" ? null : focusOf(raw);
   if (raw.trim() !== "" && focus === null) return refused("That is not a point on the picture.");
   const { outcomes, conflict } = await eachItem(source, [file], "file", async ({ id, version }) => {
     const change = changeId();
-    const written = await source.client.media.setFocus(id, { focus, expectedVersion: version, changeId: change });
-    return { id, ok: true, version: written.version, message: (focus ? "Focal point saved." : "Focal point cleared.") + (await recordDone(source, "media-focus", id, change)) };
+    const written = await source.client.media.setFocus(id, {
+      focus,
+      expectedVersion: version,
+      changeId: change,
+    });
+    return {
+      id,
+      ok: true,
+      version: written.version,
+      message:
+        (focus ? "Focal point saved." : "Focal point cleared.") +
+        (await recordDone(source, "media-focus", id, change)),
+    };
   });
   return result(outcomes, outcomes[0]!.message, conflict ? { conflict } : {});
 }
 
-async function setCaption(source: ContentSource, file: { id: string; version: string }, caption: string): Promise<IntentResult> {
+async function setCaption(
+  source: ContentSource,
+  file: { id: string; version: string },
+  caption: string,
+): Promise<IntentResult> {
   const { outcomes, conflict } = await eachItem(source, [file], "file", async ({ id, version }) => {
     const change = changeId();
-    const written = await source.client.media.setCaption(id, { caption: caption.trim().slice(0, 2000), expectedVersion: version, changeId: change });
-    return { id, ok: true, version: written.version, message: "Caption saved." + (await recordDone(source, "media-caption", id, change)) };
+    const written = await source.client.media.setCaption(id, {
+      caption: caption.trim().slice(0, 2000),
+      expectedVersion: version,
+      changeId: change,
+    });
+    return {
+      id,
+      ok: true,
+      version: written.version,
+      message: "Caption saved." + (await recordDone(source, "media-caption", id, change)),
+    };
   });
   return result(outcomes, outcomes[0]!.message, conflict ? { conflict } : {});
 }
@@ -818,13 +1142,24 @@ async function setCaption(source: ContentSource, file: { id: string; version: st
  * New bytes for one file under its own id and address, checked against the site's limits first as an upload is. Alt,
  * caption and tags stay; the focal point is cleared. Says so when the site's cache may still serve the old sizes.
  */
-async function replaceFile(source: ContentSource, input: IntentInput, file: { id: string; version: string }, limits: MediaUploadLimits): Promise<IntentResult> {
+async function replaceFile(
+  source: ContentSource,
+  input: IntentInput,
+  file: { id: string; version: string },
+  limits: MediaUploadLimits,
+): Promise<IntentResult> {
   const upload = fieldOf(input, "file").find((v): v is Blob => typeof v !== "string");
   if (!upload) return refused("Choose the new file.");
   const name = (upload as Blob & { name?: string }).name || "upload";
   const type = upload.type.split(";")[0]!.trim().toLowerCase();
-  if (!limits.types.includes(type)) return refused(`${name} is ${type || "an unknown type"}; this site accepts ${limits.types.map((t) => t.split("/")[1]).join(", ")}.`);
-  if (upload.size > limits.maxBytes) return refused(`${name} is ${megabytes(upload.size)}; this site accepts files up to ${megabytes(limits.maxBytes)}.`);
+  if (!limits.types.includes(type))
+    return refused(
+      `${name} is ${type || "an unknown type"}; this site accepts ${limits.types.map((t) => t.split("/")[1]).join(", ")}.`,
+    );
+  if (upload.size > limits.maxBytes)
+    return refused(
+      `${name} is ${megabytes(upload.size)}; this site accepts files up to ${megabytes(limits.maxBytes)}.`,
+    );
   if (upload.size === 0) return refused(`${name} is empty.`);
   const { outcomes, conflict } = await eachItem(source, [file], "file", async ({ id, version }) => {
     const change = changeId();
@@ -835,14 +1170,28 @@ async function replaceFile(source: ContentSource, input: IntentInput, file: { id
       expectedVersion: version,
       changeId: change,
     });
-    const stale = done.sizesNeedPurge ? " The site's cache may still serve sizes of the old picture until they are purged." : "";
-    return { id, ok: true, ...(done.version ? { version: done.version } : {}), message: "Replaced. Every page that uses it shows the new file; set its focal point again if it had one." + stale + (await recordDone(source, "media-replace", id, change)) };
+    const stale = done.sizesNeedPurge
+      ? " The site's cache may still serve sizes of the old picture until they are purged."
+      : "";
+    return {
+      id,
+      ok: true,
+      ...(done.version ? { version: done.version } : {}),
+      message:
+        "Replaced. Every page that uses it shows the new file; set its focal point again if it had one." +
+        stale +
+        (await recordDone(source, "media-replace", id, change)),
+    };
   });
   return result(outcomes, outcomes[0]!.message, conflict ? { conflict } : {});
 }
 
 /** Sets a file's whole tag set. Undo sets back the set it held, at the version this write made. */
-async function setFileTags(source: ContentSource, file: { id: string; version: string }, raw: string[]): Promise<IntentResult> {
+async function setFileTags(
+  source: ContentSource,
+  file: { id: string; version: string },
+  raw: string[],
+): Promise<IntentResult> {
   const parsed = parseMediaTags(raw);
   if (!parsed.ok) return refused(parsed.message);
   let undo: IntentResult["undo"];
@@ -850,11 +1199,26 @@ async function setFileTags(source: ContentSource, file: { id: string; version: s
     const detail = await source.client.media.get(id);
     if (detail.version !== version) throw new Conflict(detail.version ?? null);
     const change = changeId();
-    const written = await source.client.media.setTags(id, { tags: parsed.tags, expectedVersion: version, changeId: change });
-    undo = { intent: "tags", fields: { ids: [id], versions: [written.version], tags: (detail.tags ?? []).join(", ") } };
-    return { id, ok: true, version: written.version, message: "Tags saved." + (await recordDone(source, "media-tags", id, change)) };
+    const written = await source.client.media.setTags(id, {
+      tags: parsed.tags,
+      expectedVersion: version,
+      changeId: change,
+    });
+    undo = {
+      intent: "tags",
+      fields: { ids: [id], versions: [written.version], tags: (detail.tags ?? []).join(", ") },
+    };
+    return {
+      id,
+      ok: true,
+      version: written.version,
+      message: "Tags saved." + (await recordDone(source, "media-tags", id, change)),
+    };
   });
-  return result(outcomes, outcomes[0]!.message, { ...(conflict ? { conflict } : {}), ...(undo ? { undo } : {}) });
+  return result(outcomes, outcomes[0]!.message, {
+    ...(conflict ? { conflict } : {}),
+    ...(undo ? { undo } : {}),
+  });
 }
 
 /**
@@ -869,18 +1233,30 @@ async function emptyTrash(source: ContentSource): Promise<IntentResult> {
   for (let round = 0; round < EMPTY_ROUNDS; round++) {
     // The site records file n under `<change id>-<n>` in the order it lists the trash, refused files
     // included, so the kit lists the same trash first to record the same ids.
-    const order = source.record ? (await source.client.media.list({ trashed: "only", limit: 200 })).items.map((i) => i.id) : [];
+    const order = source.record
+      ? (await source.client.media.list({ trashed: "only", limit: 200 })).items.map((i) => i.id)
+      : [];
     const change = changeId();
     const answer = await source.client.media.emptyTrash({ changeId: change });
     for (const id of answer.deleted) {
       const n = order.indexOf(id);
-      const note = await recordDone(source, "media-delete", id, n >= 0 ? `${change}-${n + 1}` : `${change}:${id}`);
+      const note = await recordDone(
+        source,
+        "media-delete",
+        id,
+        n >= 0 ? `${change}-${n + 1}` : `${change}:${id}`,
+      );
       outcomes.push({ id, ok: true, message: "Deleted from the site." + note });
     }
     for (const r of answer.refused) {
       if (refusedIds.has(r.id)) continue;
       refusedIds.add(r.id);
-      outcomes.push({ id: r.id, ok: false, message: r.message, ...(r.usedBy && r.usedBy.length > 0 ? { usedBy: r.usedBy } : {}) });
+      outcomes.push({
+        id: r.id,
+        ok: false,
+        message: r.message,
+        ...(r.usedBy && r.usedBy.length > 0 ? { usedBy: r.usedBy } : {}),
+      });
     }
     more = answer.more;
     if (!answer.more || answer.deleted.length === 0) break;
@@ -890,7 +1266,9 @@ async function emptyTrash(source: ContentSource): Promise<IntentResult> {
   const kept = outcomes.length - deleted;
   const message =
     `Deleted ${plural(deleted, "file")} from the trash for good.` +
-    (kept > 0 ? ` ${plural(kept, "file")} ${kept === 1 ? "is" : "are"} still used and stayed in the trash.` : "") +
+    (kept > 0
+      ? ` ${plural(kept, "file")} ${kept === 1 ? "is" : "are"} still used and stayed in the trash.`
+      : "") +
     (more ? " More remain; empty the trash again." : "");
   return { ok: kept === 0 && !more, message, outcomes };
 }

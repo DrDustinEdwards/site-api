@@ -3,7 +3,14 @@
 // the bytes must look like the declared type where the type has a signature. The site's own checks
 // (measuring an image, its storage) come after these, never instead of them.
 
-import { MAX_ALT_CHARS, type MediaItem, type MediaKind, type MediaOrientation, type MediaTransformOp, type MediaUploadLimits } from "./contract.js";
+import {
+  MAX_ALT_CHARS,
+  type MediaItem,
+  type MediaKind,
+  type MediaOrientation,
+  type MediaTransformOp,
+  type MediaUploadLimits,
+} from "./contract.js";
 import { guardedFetch, OutboundRefusal } from "./outbound.js";
 
 /** The media type without parameters, lower case: "image/png; x=1" is "image/png". */
@@ -21,10 +28,14 @@ export async function readUpload(
   request: { headers: Headers; body: ReadableStream<Uint8Array> | null },
   limits: MediaUploadLimits,
 ): Promise<{ ok: true; bytes: Uint8Array } | { ok: false; refusal: UploadRefusal }> {
-  const tooLarge: UploadRefusal = { code: "too-large", message: `The file is larger than this site accepts (${limits.maxBytes} bytes).` };
+  const tooLarge: UploadRefusal = {
+    code: "too-large",
+    message: `The file is larger than this site accepts (${limits.maxBytes} bytes).`,
+  };
   const declared = Number(request.headers.get("content-length") ?? "0");
   if (declared > limits.maxBytes) return { ok: false, refusal: tooLarge };
-  if (!request.body) return { ok: false, refusal: { code: "invalid", message: "The upload is empty." } };
+  if (!request.body)
+    return { ok: false, refusal: { code: "invalid", message: "The upload is empty." } };
 
   const reader = request.body.getReader();
   const chunks: Uint8Array[] = [];
@@ -39,7 +50,8 @@ export async function readUpload(
     }
     chunks.push(value);
   }
-  if (total === 0) return { ok: false, refusal: { code: "invalid", message: "The upload is empty." } };
+  if (total === 0)
+    return { ok: false, refusal: { code: "invalid", message: "The upload is empty." } };
   const bytes = new Uint8Array(total);
   let at = 0;
   for (const chunk of chunks) {
@@ -49,7 +61,8 @@ export async function readUpload(
   return { ok: true, bytes };
 }
 
-const ascii = (bytes: Uint8Array, from: number, length: number) => String.fromCharCode(...bytes.subarray(from, from + length));
+const ascii = (bytes: Uint8Array, from: number, length: number) =>
+  String.fromCharCode(...bytes.subarray(from, from + length));
 
 /**
  * The signature each known type's bytes must carry. A type with no entry here is the site's to
@@ -63,7 +76,8 @@ const SIGNATURES: Record<string, (b: Uint8Array) => boolean> = {
   "image/avif": (b) => ascii(b, 4, 4) === "ftyp" && /avi[fs]/.test(ascii(b, 8, 24)),
   // v0.15.0: an ISO media file whose major or compatible brands name HEVC pictures (HEIC) or any HEIF picture (mif1, msf1).
   "image/heic": (b) => ascii(b, 4, 4) === "ftyp" && /he(i[cxms]|v[cx])/.test(ascii(b, 8, 24)),
-  "image/heif": (b) => ascii(b, 4, 4) === "ftyp" && /he(i[cxms]|v[cx])|m[is]f1/.test(ascii(b, 8, 24)),
+  "image/heif": (b) =>
+    ascii(b, 4, 4) === "ftyp" && /he(i[cxms]|v[cx])|m[is]f1/.test(ascii(b, 8, 24)),
   "application/pdf": (b) => ascii(b, 0, 5) === "%PDF-",
   // Text, so no magic number: no NUL byte in the head, and an <svg element near the start.
   "image/svg+xml": (b) => {
@@ -79,20 +93,37 @@ const SIGNATURES: Record<string, (b: Uint8Array) => boolean> = {
  */
 const ACTIVE: Record<string, (b: Uint8Array) => boolean> = {
   "image/svg+xml": (b) =>
-    /<script\b|[\s/"']on[a-z]+\s*=|<foreignObject\b|<(iframe|embed|object)\b|javascript:|href\s*=\s*["']\s*&#/i.test(new TextDecoder().decode(b)),
+    /<script\b|[\s/"']on[a-z]+\s*=|<foreignObject\b|<(iframe|embed|object)\b|javascript:|href\s*=\s*["']\s*&#/i.test(
+      new TextDecoder().decode(b),
+    ),
   "application/pdf": (b) => /\/(JS|JavaScript)\b/.test(new TextDecoder().decode(b)),
 };
 
 /** Refuses a type the site does not accept, and bytes that are not what the type claims. */
-export function checkUpload(contentType: string, bytes: Uint8Array | null, limits: MediaUploadLimits): UploadRefusal | null {
+export function checkUpload(
+  contentType: string,
+  bytes: Uint8Array | null,
+  limits: MediaUploadLimits,
+): UploadRefusal | null {
   const types = limits.types.map((t) => t.toLowerCase());
   if (!types.includes(contentType)) {
-    return { code: "invalid", message: `This site does not accept ${contentType || "a file with no type"}. It accepts ${types.join(", ")}.` };
+    return {
+      code: "invalid",
+      message: `This site does not accept ${contentType || "a file with no type"}. It accepts ${types.join(", ")}.`,
+    };
   }
   if (bytes) {
     const signed = SIGNATURES[contentType];
-    if (signed && !signed(bytes)) return { code: "invalid", message: `The file is not a ${contentType}: its bytes do not match the type it was sent as.` };
-    if (ACTIVE[contentType]?.(bytes)) return { code: "invalid", message: `The ${contentType} file holds script or an embedded page, which would run on the site. Export it without them.` };
+    if (signed && !signed(bytes))
+      return {
+        code: "invalid",
+        message: `The file is not a ${contentType}: its bytes do not match the type it was sent as.`,
+      };
+    if (ACTIVE[contentType]?.(bytes))
+      return {
+        code: "invalid",
+        message: `The ${contentType} file holds script or an embedded page, which would run on the site. Export it without them.`,
+      };
   }
   return null;
 }
@@ -106,24 +137,55 @@ export function checkUpload(contentType: string, bytes: Uint8Array | null, limit
 export { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 
 /** Alt text that names a kind of file rather than what it shows. */
-const EMPTY_ALT = new Set(["image", "img", "photo", "picture", "pic", "graphic", "screenshot", "untitled", "alt", "alt text", "placeholder", "figure"]);
+const EMPTY_ALT = new Set([
+  "image",
+  "img",
+  "photo",
+  "picture",
+  "pic",
+  "graphic",
+  "screenshot",
+  "untitled",
+  "alt",
+  "alt text",
+  "placeholder",
+  "figure",
+]);
 
-const words = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+const words = (s: string) =>
+  s
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim();
 
 /**
  * Why an alt text cannot be stored (v0.19.0, checklist B2 and B3), or null: an upload, an import and an alt write need
  * alt or an explicit decorative choice, never both; and an alt is at most MAX_ALT_CHARS, and is not the file's name, an
  * address, or a word such as "image" or "photo".
  */
-export function altRefusal(alt: string | undefined, decorative: boolean, filename: string | null): string | null {
+export function altRefusal(
+  alt: string | undefined,
+  decorative: boolean,
+  filename: string | null,
+): string | null {
   const text = (alt ?? "").trim();
-  if (decorative) return text ? "A decorative picture has no alt text: send the alt text or mark it decorative, not both." : null;
-  if (!text) return "Say what the picture shows in its alt text, or mark it decorative if it adds nothing a reader would miss.";
-  if (text.length > MAX_ALT_CHARS) return `Alt text is at most ${MAX_ALT_CHARS} characters; put the rest in the caption.`;
+  if (decorative)
+    return text
+      ? "A decorative picture has no alt text: send the alt text or mark it decorative, not both."
+      : null;
+  if (!text)
+    return "Say what the picture shows in its alt text, or mark it decorative if it adds nothing a reader would miss.";
+  if (text.length > MAX_ALT_CHARS)
+    return `Alt text is at most ${MAX_ALT_CHARS} characters; put the rest in the caption.`;
   const said = words(text);
   const stem = filename ? words(filename.replace(/\.[^.]+$/, "")) : "";
-  if (/^(?:https?:\/\/|www\.)\S*$/i.test(text) || /^\S+\.(?:jpe?g|png|webp|avif|gif|svg|heic|heif)$/i.test(text) || said === stem || EMPTY_ALT.has(said)) {
-    return "Alt text says what the picture shows, not its file name, its address or a word such as \"image\".";
+  if (
+    /^(?:https?:\/\/|www\.)\S*$/i.test(text) ||
+    /^\S+\.(?:jpe?g|png|webp|avif|gif|svg|heic|heif)$/i.test(text) ||
+    said === stem ||
+    EMPTY_ALT.has(said)
+  ) {
+    return 'Alt text says what the picture shows, not its file name, its address or a word such as "image".';
   }
   return null;
 }
@@ -133,13 +195,16 @@ export function altRefusal(alt: string | undefined, decorative: boolean, filenam
  * `license`, `acquireLicensePage`), each only where the file has it (v0.19.0), so a figure shows the stored credit and a
  * page's ImageObject carries it. `license` is the license page, else the license itself where it is an address.
  */
-export function imageRights(item: Pick<MediaItem, "credit" | "license" | "copyright" | "licenseUrl" | "acquireLicenseUrl">): {
+export function imageRights(
+  item: Pick<MediaItem, "credit" | "license" | "copyright" | "licenseUrl" | "acquireLicenseUrl">,
+): {
   creditText?: string;
   copyrightNotice?: string;
   license?: string;
   acquireLicensePage?: string;
 } {
-  const license = item.licenseUrl || (/^https?:\/\//i.test(item.license ?? "") ? item.license : undefined);
+  const license =
+    item.licenseUrl || (/^https?:\/\//i.test(item.license ?? "") ? item.license : undefined);
   return {
     ...(item.credit ? { creditText: item.credit } : {}),
     ...(item.copyright ? { copyrightNotice: item.copyright } : {}),
@@ -158,7 +223,10 @@ export function kindOf(contentType: string): MediaKind {
  * Which way a picture lies, for the list's `orientation` filter: square when its edges differ by at most 1% of the longer,
  * so a 4000x3990 photo is square. null for a file with no size.
  */
-export function orientationOf(width: number | null, height: number | null): MediaOrientation | null {
+export function orientationOf(
+  width: number | null,
+  height: number | null,
+): MediaOrientation | null {
   if (!width || !height) return null;
   if (Math.abs(width - height) <= Math.max(width, height) / 100) return "square";
   return width > height ? "landscape" : "portrait";
@@ -197,10 +265,18 @@ const IMPORT_REDIRECTS = 3;
  * local name or a private address, DNS answers included, each of at most three redirects checked as the first was.
  * Throws OutboundRefusal with words for the person; the response is the final one, unread, with its address.
  */
-export async function fetchImport(doFetch: typeof fetch, raw: string): Promise<{ response: Response; address: string }> {
+export async function fetchImport(
+  doFetch: typeof fetch,
+  raw: string,
+): Promise<{ response: Response; address: string }> {
   let found: { response: Response; url: string };
   try {
-    found = await guardedFetch(doFetch, raw, { signal: AbortSignal.timeout(IMPORT_TIMEOUT_MS), headers: { accept: "*/*" } }, { maxRedirects: IMPORT_REDIRECTS });
+    found = await guardedFetch(
+      doFetch,
+      raw,
+      { signal: AbortSignal.timeout(IMPORT_TIMEOUT_MS), headers: { accept: "*/*" } },
+      { maxRedirects: IMPORT_REDIRECTS },
+    );
   } catch (error) {
     if (error instanceof OutboundRefusal) throw error;
     throw new OutboundRefusal("The other site did not answer.");

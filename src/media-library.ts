@@ -18,7 +18,14 @@
 import { slugify } from "@drdustinedwards/site-helpers/slug";
 import { FOCUS_METADATA, editImage } from "@dustinedwards/site-runtime/image";
 
-import { MediaInUseError, NotFoundError, RefusedError, VersionConflictError, type MediaAdapter, type MediaUploaded } from "./adapter.js";
+import {
+  MediaInUseError,
+  NotFoundError,
+  RefusedError,
+  VersionConflictError,
+  type MediaAdapter,
+  type MediaUploaded,
+} from "./adapter.js";
 import {
   LARGE_MEDIA_BYTES,
   type MediaDetail,
@@ -97,7 +104,10 @@ export interface MediaRevisionRecord {
 }
 
 /** A versioned write's outcome: the row as written, no such file, or a stale version with the rev the row holds. */
-export type MediaRecordWrite = { ok: true; record: MediaRecord } | { ok: false; reason: "missing" } | { ok: false; reason: "stale"; rev: number };
+export type MediaRecordWrite =
+  | { ok: true; record: MediaRecord }
+  | { ok: false; reason: "missing" }
+  | { ok: false; reason: "stale"; rev: number };
 
 /** The site's index of its files. `d1MediaStore` is one for the network's standard tables (MEDIA_LIBRARY_SQL). */
 export interface MediaLibraryStore {
@@ -117,7 +127,11 @@ export interface MediaLibraryStore {
   /** Adds a file at rev 0. Throws when the key is taken. */
   insert(record: Omit<MediaRecord, "rev">): Promise<void>;
   /** Writes `fields` and moves the rev by one, only while the row is at `expectedRev`. */
-  writeAtRev(key: string, fields: MediaRecordFields, expectedRev: number): Promise<MediaRecordWrite>;
+  writeAtRev(
+    key: string,
+    fields: MediaRecordFields,
+    expectedRev: number,
+  ): Promise<MediaRecordWrite>;
   /** Columns that follow a byte change the caller has already claimed: written as they are, the rev left alone. */
   follow(key: string, fields: MediaRecordFields): Promise<MediaRecord>;
   /** Records a set of bytes the file has had, and answers its id. */
@@ -135,27 +149,46 @@ export interface MediaLibraryStore {
   /** Where the next poll of the change log starts: the newest entry's number, or 0 before the first. */
   changeCursor(): Promise<number>;
   /** Each file changed after `from` (up to `head`) once, at its latest change, oldest first; `limit + 1` at most. */
-  changedSince(from: number, head: number, limit: number): Promise<Array<{ key: string; seq: number }>>;
+  changedSince(
+    from: number,
+    head: number,
+    limit: number,
+  ): Promise<Array<{ key: string; seq: number }>>;
 }
 
 /** The parts of an R2 object the library reads: no index signature, so Workers' own R2Object fits it. */
 export interface MediaObject {
   etag: string;
-  httpMetadata?: { contentType?: string; cacheControl?: string; contentDisposition?: string; contentEncoding?: string; contentLanguage?: string };
+  httpMetadata?: {
+    contentType?: string;
+    cacheControl?: string;
+    contentDisposition?: string;
+    contentEncoding?: string;
+    contentLanguage?: string;
+  };
   customMetadata?: Record<string, string>;
 }
 
 /** The parts of an R2 bucket binding the library uses, so a site passes its binding straight in. */
 export interface MediaBucket {
   head(key: string): Promise<MediaObject | null>;
-  get(key: string): Promise<(MediaObject & { body: ReadableStream; arrayBuffer(): Promise<ArrayBuffer> }) | null>;
+  get(
+    key: string,
+  ): Promise<(MediaObject & { body: ReadableStream; arrayBuffer(): Promise<ArrayBuffer> }) | null>;
   put(
     key: string,
     value: ArrayBuffer | Uint8Array | ReadableStream,
-    options?: { httpMetadata?: MediaObject["httpMetadata"]; customMetadata?: Record<string, string>; onlyIf?: { etagMatches: string } },
+    options?: {
+      httpMetadata?: MediaObject["httpMetadata"];
+      customMetadata?: Record<string, string>;
+      onlyIf?: { etagMatches: string };
+    },
   ): Promise<MediaObject | null>;
   delete(keys: string | string[]): Promise<void>;
-  list(options: { prefix: string; cursor?: string }): Promise<{ objects: Array<{ key: string }>; truncated: boolean; cursor?: string }>;
+  list(options: {
+    prefix: string;
+    cursor?: string;
+  }): Promise<{ objects: Array<{ key: string }>; truncated: boolean; cursor?: string }>;
 }
 
 /** The new file a key is made for. */
@@ -175,7 +208,20 @@ export interface MediaKeyInput {
 
 /** One write the library made, for the site's audit or event log. */
 export interface MediaLibraryEvent {
-  op: "upload" | "delete" | "alt" | "tags" | "trash" | "restore" | "focus" | "caption" | "credit" | "replace" | "transform" | "revert" | "resize";
+  op:
+    | "upload"
+    | "delete"
+    | "alt"
+    | "tags"
+    | "trash"
+    | "restore"
+    | "focus"
+    | "caption"
+    | "credit"
+    | "replace"
+    | "transform"
+    | "revert"
+    | "resize";
   id: string;
   changeId: string;
   /** The file a turn stored as a new file. */
@@ -234,7 +280,10 @@ export interface MediaLibraryOptions {
   /** Runs after each write, for the site's audit or event log. A throw here fails the call. */
   onWrite?(event: MediaLibraryEvent): Promise<void> | void;
   /** The site's suggester (mediaSuggester's `suggest`), behind `suggest` and `suggestFile`. */
-  suggest?(picture: ReadableStream, id?: string): Promise<{ tags: string[]; alt: string | null; model: string }>;
+  suggest?(
+    picture: ReadableStream,
+    id?: string,
+  ): Promise<{ tags: string[]; alt: string | null; model: string }>;
   /** The fetch imports go through (capabilities.mediaImport). The package checks each address and redirect first. */
   importFetch?: typeof fetch;
   /** The clock, for tests. */
@@ -277,7 +326,12 @@ export function datedKey(prefix: string): (file: MediaKeyInput, attempt: number)
 
 // ---------- The library
 
-const LIBRARY_LENSES = ["no-alt", "large", "duplicates", "license-expired"] as const satisfies readonly MediaLens[];
+const LIBRARY_LENSES = [
+  "no-alt",
+  "large",
+  "duplicates",
+  "license-expired",
+] as const satisfies readonly MediaLens[];
 
 /** What the Images binding re-encodes in its own type. Not a GIF: it may be animated, and an edit keeps one frame. */
 type Encoded = "image/jpeg" | "image/png" | "image/webp" | "image/avif";
@@ -297,7 +351,8 @@ const TRANSFORMS: Record<MediaTransformOp, { rotate?: 90 | 180 | 270; flip?: "h"
 
 const OFFSET = /^(0|[1-9]\d{0,8})$/;
 const SEQ = /^(0|[1-9]\d{0,15})$/;
-const RACED = "The file changed on the site while this was being written, so its bytes were kept as they were. Reload it and try again.";
+const RACED =
+  "The file changed on the site while this was being written, so its bytes were kept as they were. Reload it and try again.";
 
 /** Every revision a delete or a revert looks through; the history panel shows the newest 100. */
 const ALL_REVISIONS = 10_000;
@@ -307,7 +362,9 @@ const positive = (n: number | null): number | null => (n !== null && n > 0 ? n :
 /** The whole media group over the site's store and bucket. */
 export function mediaLibrary(options: MediaLibraryOptions): MediaAdapter {
   const { store, bucket, images, resize } = options;
-  const keyOf = options.key ? (file: MediaKeyInput, attempt: number) => options.key!(file, attempt) : datedKey("uploads/");
+  const keyOf = options.key
+    ? (file: MediaKeyInput, attempt: number) => options.key!(file, attempt)
+    : datedKey("uploads/");
   const historyBucket = options.history?.bucket ?? bucket;
   const historyPrefix = options.history?.prefix ?? "history/";
   const historyServed = historyBucket === bucket;
@@ -317,7 +374,11 @@ export function mediaLibrary(options: MediaLibraryOptions): MediaAdapter {
   const now = () => (options.now ? options.now() : new Date());
   const deletable = (record: MediaRecord) => options.deletable?.(record) ?? true;
 
-  const lenses: MediaLens[] = [...(options.usage ? (["unattached"] as const) : []), ...LIBRARY_LENSES, ...(resize ? (["oversized"] as const) : [])];
+  const lenses: MediaLens[] = [
+    ...(options.usage ? (["unattached"] as const) : []),
+    ...LIBRARY_LENSES,
+    ...(resize ? (["oversized"] as const) : []),
+  ];
 
   /** The site's uses, or the refusal when its check cannot run. */
   async function usesOf(keys?: string[]): Promise<Map<string, MediaUse[]>> {
@@ -325,10 +386,13 @@ export function mediaLibrary(options: MediaLibraryOptions): MediaAdapter {
     try {
       if (!keys) return await options.usage();
       const uses = new Map<string, MediaUse[]>();
-      for (let n = 0; n < keys.length; n += 90) for (const [key, used] of await options.usage(keys.slice(n, n + 90))) uses.set(key, used);
+      for (let n = 0; n < keys.length; n += 90)
+        for (const [key, used] of await options.usage(keys.slice(n, n + 90))) uses.set(key, used);
       return uses;
     } catch (error) {
-      throw new RefusedError(`The site could not check where its files are used, so nothing was done (${error instanceof Error ? error.message : String(error)}).`);
+      throw new RefusedError(
+        `The site could not check where its files are used, so nothing was done (${error instanceof Error ? error.message : String(error)}).`,
+      );
     }
   }
 
@@ -358,9 +422,15 @@ export function mediaLibrary(options: MediaLibraryOptions): MediaAdapter {
       sourceUrl: record.sourceUrl,
       licenseExpires: record.licenseExpires,
       takenAt: record.takenAt,
-      ...(keepsDecorative && record.decorative !== undefined ? { decorative: record.decorative } : {}),
+      ...(keepsDecorative && record.decorative !== undefined
+        ? { decorative: record.decorative }
+        : {}),
       ...(keepsRights
-        ? { copyright: record.copyright ?? "", licenseUrl: record.licenseUrl ?? null, acquireLicenseUrl: record.acquireLicenseUrl ?? null }
+        ? {
+            copyright: record.copyright ?? "",
+            licenseUrl: record.licenseUrl ?? null,
+            acquireLicenseUrl: record.acquireLicenseUrl ?? null,
+          }
         : {}),
       ...(uses ? { usedCount: uses.get(record.key)?.length ?? 0 } : {}),
     };
@@ -375,19 +445,29 @@ export function mediaLibrary(options: MediaLibraryOptions): MediaAdapter {
   async function recordOf(id: string): Promise<MediaRecord> {
     const record = await store.record(id);
     if (!record) throw new NotFoundError("No such media.");
-    if (!deletable(record)) throw new RefusedError("This file is part of the site itself, so it is not changed or deleted here.");
+    if (!deletable(record))
+      throw new RefusedError(
+        "This file is part of the site itself, so it is not changed or deleted here.",
+      );
     return record;
   }
 
   /** Refuses a stale version before any costly work; the claim checks it again. */
   function atVersion(record: MediaRecord, expectedVersion: string): void {
-    if (record.rev !== mediaRev(expectedVersion)) throw new VersionConflictError(mediaVersion(record.rev), "The file changed since it was loaded.");
+    if (record.rev !== mediaRev(expectedVersion))
+      throw new VersionConflictError(
+        mediaVersion(record.rev),
+        "The file changed since it was loaded.",
+      );
   }
 
   function settle(written: MediaRecordWrite): MediaRecord {
     if (written.ok) return written.record;
     if (written.reason === "missing") throw new NotFoundError("No such media.");
-    throw new VersionConflictError(mediaVersion(written.rev), "The file changed since it was loaded.");
+    throw new VersionConflictError(
+      mediaVersion(written.rev),
+      "The file changed since it was loaded.",
+    );
   }
 
   /** Only the optional fields the store keeps. */
@@ -403,18 +483,30 @@ export function mediaLibrary(options: MediaLibraryOptions): MediaAdapter {
   }
 
   /** A metadata write at the version the editor loaded. */
-  async function write(op: MediaLibraryEvent["op"], id: string, input: { expectedVersion: string; changeId: string }, fields: MediaRecordFields): Promise<{ version: string }> {
+  async function write(
+    op: MediaLibraryEvent["op"],
+    id: string,
+    input: { expectedVersion: string; changeId: string },
+    fields: MediaRecordFields,
+  ): Promise<{ version: string }> {
     await recordOf(id);
-    const record = settle(await store.writeAtRev(id, kept(fields), mediaRev(input.expectedVersion)));
+    const record = settle(
+      await store.writeAtRev(id, kept(fields), mediaRev(input.expectedVersion)),
+    );
     await options.onWrite?.({ op, id, changeId: input.changeId });
     return { version: mediaVersion(record.rev) };
   }
 
   /** Trash and restore: a file already in the asked state, at the version it holds, answers that version unchanged. */
-  async function moveTrash(op: "trash" | "restore", id: string, input: { expectedVersion: string; changeId: string }): Promise<{ version: string }> {
+  async function moveTrash(
+    op: "trash" | "restore",
+    id: string,
+    input: { expectedVersion: string; changeId: string },
+  ): Promise<{ version: string }> {
     const record = await recordOf(id);
     atVersion(record, input.expectedVersion);
-    if ((record.trashedAt !== null) === (op === "trash")) return { version: mediaVersion(record.rev) };
+    if ((record.trashedAt !== null) === (op === "trash"))
+      return { version: mediaVersion(record.rev) };
     return write(op, id, input, { trashedAt: op === "trash" ? now().toISOString() : null });
   }
 
@@ -424,19 +516,42 @@ export function mediaLibrary(options: MediaLibraryOptions): MediaAdapter {
   }
 
   /** The object's custom metadata for a record: the site's fields, and the focal point when there is one. */
-  function objectMetadata(record: MediaRecord, held: Record<string, string> = {}): Record<string, string> {
+  function objectMetadata(
+    record: MediaRecord,
+    held: Record<string, string> = {},
+  ): Record<string, string> {
     const { [FOCUS_METADATA]: _old, ...rest } = held;
-    return { ...rest, ...options.customMetadata?.(record), ...(record.focus ? { [FOCUS_METADATA]: record.focus } : {}) };
+    return {
+      ...rest,
+      ...options.customMetadata?.(record),
+      ...(record.focus ? { [FOCUS_METADATA]: record.focus } : {}),
+    };
   }
 
   /** Bytes as the library stores them; a replace or a shrink is not an upload, so it has no alt and no duplicates key. */
-  const prepare = (bytes: Uint8Array, contentType: string, filename: string, changeId: string, shrink: boolean) =>
-    prepareUpload(images, { bytes, contentType, filename, alt: "", changeId, resize: shrink }, resize ? { resize } : {});
+  const prepare = (
+    bytes: Uint8Array,
+    contentType: string,
+    filename: string,
+    changeId: string,
+    shrink: boolean,
+  ) =>
+    prepareUpload(
+      images,
+      { bytes, contentType, filename, alt: "", changeId, resize: shrink },
+      resize ? { resize } : {},
+    );
 
   /** Refuses a picture the Images binding could not measure: its bytes are broken, and no page could size it. */
   function measured<T extends { contentType: string; width: number | null }>(prepared: T): T {
-    if (prepared.width === null && kindOf(prepared.contentType) === "image" && prepared.contentType !== "image/svg+xml") {
-      throw new RefusedError("Cloudflare Images could not read this picture, so it was not stored. Save it again from an image editor and upload that.");
+    if (
+      prepared.width === null &&
+      kindOf(prepared.contentType) === "image" &&
+      prepared.contentType !== "image/svg+xml"
+    ) {
+      throw new RefusedError(
+        "Cloudflare Images could not read this picture, so it was not stored. Save it again from an image editor and upload that.",
+      );
     }
     return prepared;
   }
@@ -445,7 +560,10 @@ export function mediaLibrary(options: MediaLibraryOptions): MediaAdapter {
    * Claims a key no row or object holds by inserting the file's row under it: the row's primary key is the lock, so two
    * uploads of the same file at once never share a key. Answers the key.
    */
-  async function claimKey(file: MediaKeyInput, record: Omit<MediaRecord, "rev" | "key">): Promise<string> {
+  async function claimKey(
+    file: MediaKeyInput,
+    record: Omit<MediaRecord, "rev" | "key">,
+  ): Promise<string> {
     for (let attempt = 1; attempt <= 50; attempt++) {
       const key = keyOf(file, attempt);
       if ((await store.record(key)) || (await bucket.head(key))) continue;
@@ -462,7 +580,12 @@ export function mediaLibrary(options: MediaLibraryOptions): MediaAdapter {
   }
 
   /** Keeps a set of bytes as a copy, and answers where. Content-addressed, so keeping the same bytes twice is one copy. */
-  async function keepCopy(key: string, sha256: string, body: ReadableStream | Uint8Array | ArrayBuffer, contentType: string): Promise<string> {
+  async function keepCopy(
+    key: string,
+    sha256: string,
+    body: ReadableStream | Uint8Array | ArrayBuffer,
+    contentType: string,
+  ): Promise<string> {
     const copyKey = `${historyPrefix}${key}/${sha256}`;
     await historyBucket.put(copyKey, body, { httpMetadata: { contentType } });
     return copyKey;
@@ -507,10 +630,24 @@ export function mediaLibrary(options: MediaLibraryOptions): MediaAdapter {
       trashedAt: null,
       ...kept(file.fields),
     };
-    const key = await claimKey({ filename: file.filename, contentType: file.contentType, sha256: file.uploadSha256, storedSha256: file.sha256, width: file.width, height: file.height, at }, record);
+    const key = await claimKey(
+      {
+        filename: file.filename,
+        contentType: file.contentType,
+        sha256: file.uploadSha256,
+        storedSha256: file.sha256,
+        width: file.width,
+        height: file.height,
+        at,
+      },
+      record,
+    );
     try {
       await bucket.put(key, file.bytes, {
-        httpMetadata: { ...options.httpMetadata?.({ ...record, key }), contentType: file.contentType },
+        httpMetadata: {
+          ...options.httpMetadata?.({ ...record, key }),
+          contentType: file.contentType,
+        },
         customMetadata: objectMetadata({ ...record, key, rev: 0 }),
       });
     } catch (error) {
@@ -522,10 +659,34 @@ export function mediaLibrary(options: MediaLibraryOptions): MediaAdapter {
       // The original kept as the revision the shrink replaced.
       const originalSha = await sha256Hex(file.original.bytes);
       const copyKey = await keepCopy(key, originalSha, file.original.bytes, file.contentType);
-      await store.addRevision(key, { at, bytes: file.original.bytes.byteLength, width: file.original.width, height: file.original.height, reason: file.reason, sha256: originalSha, copyKey });
-      await store.addRevision(key, { at, bytes: file.bytes.byteLength, width: file.width, height: file.height, reason: "resize", sha256: file.sha256, copyKey: null });
+      await store.addRevision(key, {
+        at,
+        bytes: file.original.bytes.byteLength,
+        width: file.original.width,
+        height: file.original.height,
+        reason: file.reason,
+        sha256: originalSha,
+        copyKey,
+      });
+      await store.addRevision(key, {
+        at,
+        bytes: file.bytes.byteLength,
+        width: file.width,
+        height: file.height,
+        reason: "resize",
+        sha256: file.sha256,
+        copyKey: null,
+      });
     } else {
-      await store.addRevision(key, { at, bytes: file.bytes.byteLength, width: file.width, height: file.height, reason: file.reason, sha256: file.sha256, copyKey: null });
+      await store.addRevision(key, {
+        at,
+        bytes: file.bytes.byteLength,
+        width: file.width,
+        height: file.height,
+        reason: file.reason,
+        sha256: file.sha256,
+        copyKey: null,
+      });
     }
     const stored = await store.record(key);
     if (!stored) throw new Error(`${key} was stored, but its row cannot be read`);
@@ -538,7 +699,12 @@ export function mediaLibrary(options: MediaLibraryOptions): MediaAdapter {
    */
   async function swapBytes(
     record: MediaRecord,
-    next: { bytes: Uint8Array; width: number | null; height: number | null; reason: MediaRevisionReason },
+    next: {
+      bytes: Uint8Array;
+      width: number | null;
+      height: number | null;
+      reason: MediaRevisionReason;
+    },
     fields: MediaRecordFields,
   ): Promise<MediaRecord> {
     const current = await bucket.get(record.key);
@@ -550,7 +716,8 @@ export function mediaLibrary(options: MediaLibraryOptions): MediaAdapter {
     // The newest revision names the copy only when it is these bytes and names none yet: a copy recorded under an older
     // scheme is kept as it is, and a newest row that is other bytes gets a row of its own for these.
     const [latest] = await store.revisions(record.key, 1);
-    const isHeld = latest !== undefined && (latest.sha256 ? latest.sha256 === heldSha : !latest.copyKey);
+    const isHeld =
+      latest !== undefined && (latest.sha256 ? latest.sha256 === heldSha : !latest.copyKey);
     if (isHeld && !latest.copyKey) await store.keepCopy(latest.id, copyKey);
     if (!isHeld) {
       await store.addRevision(record.key, {
@@ -564,7 +731,14 @@ export function mediaLibrary(options: MediaLibraryOptions): MediaAdapter {
       });
     }
     const sha256 = await sha256Hex(next.bytes);
-    const after: MediaRecord = { ...record, ...kept(fields), bytes: next.bytes.byteLength, width: next.width, height: next.height, sha256 };
+    const after: MediaRecord = {
+      ...record,
+      ...kept(fields),
+      bytes: next.bytes.byteLength,
+      width: next.width,
+      height: next.height,
+      sha256,
+    };
     const written = await bucket.put(record.key, next.bytes, {
       httpMetadata: { ...current.httpMetadata, contentType: record.contentType },
       customMetadata: objectMetadata(after, current.customMetadata),
@@ -572,14 +746,31 @@ export function mediaLibrary(options: MediaLibraryOptions): MediaAdapter {
     });
     if (!written) throw new RefusedError(RACED);
     // The row first, so it describes the bytes served even if the revision cannot be written.
-    const followed = await store.follow(record.key, { ...kept(fields), bytes: next.bytes.byteLength, width: next.width, height: next.height, sha256 });
-    await store.addRevision(record.key, { at: now().toISOString(), bytes: next.bytes.byteLength, width: next.width, height: next.height, reason: next.reason, sha256, copyKey: null });
+    const followed = await store.follow(record.key, {
+      ...kept(fields),
+      bytes: next.bytes.byteLength,
+      width: next.width,
+      height: next.height,
+      sha256,
+    });
+    await store.addRevision(record.key, {
+      at: now().toISOString(),
+      bytes: next.bytes.byteLength,
+      width: next.width,
+      height: next.height,
+      reason: next.reason,
+      sha256,
+      copyKey: null,
+    });
     await options.afterBytes?.(record.key);
     return followed;
   }
 
   /** Placeholder and color for new bytes, where the binding can measure them. */
-  const looks = (bytes: Uint8Array, width: number | null) => (width ? placeholderAndColor(images, bytes) : Promise.resolve({ placeholder: null, color: null }));
+  const looks = (bytes: Uint8Array, width: number | null) =>
+    width
+      ? placeholderAndColor(images, bytes)
+      : Promise.resolve({ placeholder: null, color: null });
 
   /** Every key the bucket holds under a prefix. */
   async function listed(prefix: string): Promise<string[]> {
@@ -604,8 +795,14 @@ export function mediaLibrary(options: MediaLibraryOptions): MediaAdapter {
     ...(options.importFetch ? { importFetch: options.importFetch } : {}),
 
     async list(query: MediaListQuery): Promise<MediaList> {
-      const start = query.cursor === undefined ? 0 : OFFSET.test(query.cursor) ? Number(query.cursor) : Number.NaN;
-      if (Number.isNaN(start)) throw new RefusedError("That page cursor is not this site's; reload the library.");
+      const start =
+        query.cursor === undefined
+          ? 0
+          : OFFSET.test(query.cursor)
+            ? Number(query.cursor)
+            : Number.NaN;
+      if (Number.isNaN(start))
+        throw new RefusedError("That page cursor is not this site's; reload the library.");
       // The cursor first: a change that lands while the page is read is in the next poll, not lost between them.
       const cursor = String(await store.changeCursor());
       const records = await store.all();
@@ -619,27 +816,42 @@ export function mediaLibrary(options: MediaLibraryOptions): MediaAdapter {
         large: (r) => r.bytes > LARGE_MEDIA_BYTES,
         duplicates: (r) => r.sha256 !== null && (hashes.get(r.sha256) ?? 0) > 1,
         "license-expired": (r) => r.licenseExpires !== null && r.licenseExpires < today,
-        oversized: (r) => resize !== undefined && Math.max(r.width ?? 0, r.height ?? 0) > resize.maxEdge,
+        oversized: (r) =>
+          resize !== undefined && Math.max(r.width ?? 0, r.height ?? 0) > resize.maxEdge,
       };
       const needle = query.q?.trim().toLowerCase();
       const matching = records.filter(
         (r) =>
           (query.trashed === "only" ? r.trashedAt !== null : r.trashedAt === null) &&
           (!query.tag || r.tags.includes(query.tag)) &&
-          (!needle || [r.key, r.filename ?? "", r.alt, r.caption, r.credit, ...r.tags].some((t) => t.toLowerCase().includes(needle))) &&
+          (!needle ||
+            [r.key, r.filename ?? "", r.alt, r.caption, r.credit, ...r.tags].some((t) =>
+              t.toLowerCase().includes(needle),
+            )) &&
           (!query.lens || lens[query.lens](r)) &&
-          (!query.orientation || orientationOf(positive(r.width), positive(r.height)) === query.orientation) &&
+          (!query.orientation ||
+            orientationOf(positive(r.width), positive(r.height)) === query.orientation) &&
           (!query.kind || kindOf(r.contentType) === query.kind),
       );
       // The contract's defaults: added, size and used run largest first, name A to Z. Ties: newest first, then by key.
       const sort = query.sort ?? "added";
       const dir = query.dir ?? (sort === "name" ? "asc" : "desc");
       const keyOf_ = (r: MediaRecord): string | number =>
-        sort === "size" ? r.bytes : sort === "used" ? (uses?.get(r.key)?.length ?? 0) : sort === "name" ? (r.filename ?? r.key).toLowerCase() : r.uploadedAt;
+        sort === "size"
+          ? r.bytes
+          : sort === "used"
+            ? (uses?.get(r.key)?.length ?? 0)
+            : sort === "name"
+              ? (r.filename ?? r.key).toLowerCase()
+              : r.uploadedAt;
       const sorted = matching.sort((a, b) => {
         const [x, y] = [keyOf_(a), keyOf_(b)];
         const by = typeof x === "number" ? x - (y as number) : x.localeCompare(y as string);
-        return (dir === "asc" ? 1 : -1) * by || b.uploadedAt.localeCompare(a.uploadedAt) || a.key.localeCompare(b.key);
+        return (
+          (dir === "asc" ? 1 : -1) * by ||
+          b.uploadedAt.localeCompare(a.uploadedAt) ||
+          a.key.localeCompare(b.key)
+        );
       });
       const page = sorted.slice(start, start + query.limit);
       return {
@@ -662,14 +874,29 @@ export function mediaLibrary(options: MediaLibraryOptions): MediaAdapter {
             .slice(0, 50)
             .map((r) => ({ id: r.key, filename: r.filename }))
         : [];
-      return { ...itemOf(record, options.usage ? uses : undefined), usedBy: uses.get(id) ?? [], twins };
+      return {
+        ...itemOf(record, options.usage ? uses : undefined),
+        usedBy: uses.get(id) ?? [],
+        twins,
+      };
     },
 
     async upload(input): Promise<MediaUploaded> {
       // The limits again: the route checked them, and a site's own upload path calling this did not.
-      const prepared = measured(await prepareUpload(images, input, { limits: options.limits, ...(resize ? { resize } : {}) }));
+      const prepared = measured(
+        await prepareUpload(images, input, {
+          limits: options.limits,
+          ...(resize ? { resize } : {}),
+        }),
+      );
       const found = prepared.embedded;
-      const embeddable: MediaEmbeddedField[] = ["credit", "license", "caption", "takenAt", ...(keepsRights ? (["copyright", "licenseUrl", "acquireLicenseUrl"] as const) : [])];
+      const embeddable: MediaEmbeddedField[] = [
+        "credit",
+        "license",
+        "caption",
+        "takenAt",
+        ...(keepsRights ? (["copyright", "licenseUrl", "acquireLicenseUrl"] as const) : []),
+      ];
       const embedded = embeddable.filter((field) => found[field]);
       const record = await storeFile({
         bytes: prepared.bytes,
@@ -695,7 +922,13 @@ export function mediaLibrary(options: MediaLibraryOptions): MediaAdapter {
         },
         reason: input.sourceUrl ? "import" : "upload",
         ...(prepared.resizedFrom && prepared.original
-          ? { original: { bytes: prepared.original, width: prepared.resizedFrom.width, height: prepared.resizedFrom.height } }
+          ? {
+              original: {
+                bytes: prepared.original,
+                width: prepared.resizedFrom.width,
+                height: prepared.resizedFrom.height,
+              },
+            }
           : {}),
       });
       await options.onWrite?.({ op: "upload", id: record.key, changeId: input.changeId });
@@ -713,7 +946,9 @@ export function mediaLibrary(options: MediaLibraryOptions): MediaAdapter {
       const uses = await usesOf([id]);
       const using = uses.get(id) ?? [];
       if (using.length > 0) throw new MediaInUseError(using);
-      const copies = historyServed ? (await store.revisions(id, ALL_REVISIONS)).flatMap((r) => (r.copyKey ? [r.copyKey] : [])) : [];
+      const copies = historyServed
+        ? (await store.revisions(id, ALL_REVISIONS)).flatMap((r) => (r.copyKey ? [r.copyKey] : []))
+        : [];
       if (!historyServed) {
         // A backups bucket keeps the last bytes too, so a file deleted for good can still be put back by hand.
         const last = await bucket.get(id);
@@ -724,11 +959,16 @@ export function mediaLibrary(options: MediaLibraryOptions): MediaAdapter {
       }
       const removed = await store.remove(id, record.rev);
       if (removed === "missing") throw new NotFoundError("No such media.");
-      if (removed === "stale") throw new RefusedError("The file changed while it was being deleted, so it was kept. Reload it, then delete it again.");
+      if (removed === "stale")
+        throw new RefusedError(
+          "The file changed while it was being deleted, so it was kept. Reload it, then delete it again.",
+        );
       if (removed === "in-use") {
         const now_ = (await usesOf([id])).get(id) ?? [];
         if (now_.length > 0) throw new MediaInUseError(now_);
-        throw new RefusedError("The file came into use while it was being deleted, so it was kept. Check where it is used, then try again.");
+        throw new RefusedError(
+          "The file came into use while it was being deleted, so it was kept. Check where it is used, then try again.",
+        );
       }
       const extra = historyServed ? await listed(`${historyPrefix}${id}/`) : [];
       // The file first, then its copies, at most 1000 keys a call (R2's limit).
@@ -738,7 +978,11 @@ export function mediaLibrary(options: MediaLibraryOptions): MediaAdapter {
       await options.onWrite?.({ op: "delete", id, changeId: input.changeId });
     },
 
-    setAlt: (id, input) => write("alt", id, input, { alt: input.alt, ...(input.decorative !== undefined ? { decorative: input.decorative } : {}) }),
+    setAlt: (id, input) =>
+      write("alt", id, input, {
+        alt: input.alt,
+        ...(input.decorative !== undefined ? { decorative: input.decorative } : {}),
+      }),
     setTags: (id, input) => write("tags", id, input, { tags: input.tags }),
     trash: (id, input) => moveTrash("trash", id, input),
     restore: (id, input) => moveTrash("restore", id, input),
@@ -772,7 +1016,9 @@ export function mediaLibrary(options: MediaLibraryOptions): MediaAdapter {
         licenseExpires: input.licenseExpires,
         ...(input.copyright !== undefined ? { copyright: input.copyright } : {}),
         ...(input.licenseUrl !== undefined ? { licenseUrl: input.licenseUrl } : {}),
-        ...(input.acquireLicenseUrl !== undefined ? { acquireLicenseUrl: input.acquireLicenseUrl } : {}),
+        ...(input.acquireLicenseUrl !== undefined
+          ? { acquireLicenseUrl: input.acquireLicenseUrl }
+          : {}),
       }),
 
     // The image route keys each cached size on the object's etag (site-runtime ./image), so no stored size of the old
@@ -780,8 +1026,13 @@ export function mediaLibrary(options: MediaLibraryOptions): MediaAdapter {
     async replace(id, input) {
       const record = await recordOf(id);
       atVersion(record, input.expectedVersion);
-      const prepared = measured(await prepare(input.bytes, input.contentType, input.filename, input.changeId, false));
-      if (options.replaceKeepsSize && (prepared.width !== positive(record.width) || prepared.height !== positive(record.height))) {
+      const prepared = measured(
+        await prepare(input.bytes, input.contentType, input.filename, input.changeId, false),
+      );
+      if (
+        options.replaceKeepsSize &&
+        (prepared.width !== positive(record.width) || prepared.height !== positive(record.height))
+      ) {
         throw new RefusedError(
           `Pages on this site hold this picture's size (${record.width ?? "?"} by ${record.height ?? "?"}), and the new one is ${prepared.width ?? "?"} by ${prepared.height ?? "?"}. Upload it as a new file instead.`,
         );
@@ -789,8 +1040,18 @@ export function mediaLibrary(options: MediaLibraryOptions): MediaAdapter {
       const claimed = await claim(id, input.expectedVersion);
       const after = await swapBytes(
         claimed,
-        { bytes: prepared.bytes, width: prepared.width, height: prepared.height, reason: "replace" },
-        { focus: null, filename: input.filename.slice(0, 300), placeholder: prepared.placeholder, color: prepared.color },
+        {
+          bytes: prepared.bytes,
+          width: prepared.width,
+          height: prepared.height,
+          reason: "replace",
+        },
+        {
+          focus: null,
+          filename: input.filename.slice(0, 300),
+          placeholder: prepared.placeholder,
+          color: prepared.color,
+        },
       );
       await options.onWrite?.({ op: "replace", id, changeId: input.changeId });
       return { item: await itemWithUse(after), sizesNeedPurge: false };
@@ -806,12 +1067,21 @@ export function mediaLibrary(options: MediaLibraryOptions): MediaAdapter {
     async transform(id, input) {
       const record = await recordOf(id);
       atVersion(record, input.expectedVersion);
-      if (!REENCODED.has(record.contentType)) throw new RefusedError(`A ${record.contentType} file is not turned here: a GIF may be animated, and an edit would keep one frame.`);
+      if (!REENCODED.has(record.contentType))
+        throw new RefusedError(
+          `A ${record.contentType} file is not turned here: a GIF may be animated, and an edit would keep one frame.`,
+        );
       const object = await bucket.get(id);
       if (!object) throw new NotFoundError("No such media.");
-      const edited = await editImage(images, object.body, { ...TRANSFORMS[input.op], quality: TRANSFORM_QUALITY, format: record.contentType as Encoded });
+      const edited = await editImage(images, object.body, {
+        ...TRANSFORMS[input.op],
+        quality: TRANSFORM_QUALITY,
+        format: record.contentType as Encoded,
+      });
       const bytes = new Uint8Array(await edited.arrayBuffer());
-      const [width, height] = turnsSize(input.op) ? [record.height, record.width] : [record.width, record.height];
+      const [width, height] = turnsSize(input.op)
+        ? [record.height, record.width]
+        : [record.width, record.height];
       const focus = transformFocus(record.focus, input.op);
       const { placeholder, color } = await looks(bytes, width);
       if (input.asNewFile) {
@@ -837,17 +1107,28 @@ export function mediaLibrary(options: MediaLibraryOptions): MediaAdapter {
             takenAt: record.takenAt,
             ...(record.copyright !== undefined ? { copyright: record.copyright } : {}),
             ...(record.licenseUrl !== undefined ? { licenseUrl: record.licenseUrl } : {}),
-            ...(record.acquireLicenseUrl !== undefined ? { acquireLicenseUrl: record.acquireLicenseUrl } : {}),
+            ...(record.acquireLicenseUrl !== undefined
+              ? { acquireLicenseUrl: record.acquireLicenseUrl }
+              : {}),
             placeholder,
             color,
           },
           reason: "transform",
         });
-        await options.onWrite?.({ op: "transform", id, changeId: input.changeId, newId: created.key });
+        await options.onWrite?.({
+          op: "transform",
+          id,
+          changeId: input.changeId,
+          newId: created.key,
+        });
         return { item: await itemWithUse(created), sizesNeedPurge: false };
       }
       const claimed = await claim(id, input.expectedVersion);
-      const after = await swapBytes(claimed, { bytes, width, height, reason: "transform" }, { focus, placeholder, color });
+      const after = await swapBytes(
+        claimed,
+        { bytes, width, height, reason: "transform" },
+        { focus, placeholder, color },
+      );
       await options.onWrite?.({ op: "transform", id, changeId: input.changeId });
       return { item: await itemWithUse(after), sizesNeedPurge: false };
     },
@@ -860,7 +1141,18 @@ export function mediaLibrary(options: MediaLibraryOptions): MediaAdapter {
       const listed_ =
         revisions.length > 0
           ? revisions
-          : [{ id: 0, at: record.uploadedAt, bytes: record.bytes, width: record.width, height: record.height, reason: record.sourceUrl ? ("import" as const) : ("upload" as const), sha256: record.sha256, copyKey: null }];
+          : [
+              {
+                id: 0,
+                at: record.uploadedAt,
+                bytes: record.bytes,
+                width: record.width,
+                height: record.height,
+                reason: record.sourceUrl ? ("import" as const) : ("upload" as const),
+                sha256: record.sha256,
+                copyKey: null,
+              },
+            ];
       return listed_.map((r, n) => ({
         rev: String(r.id),
         at: r.at,
@@ -877,13 +1169,20 @@ export function mediaLibrary(options: MediaLibraryOptions): MediaAdapter {
     async revert(id, input) {
       const record = await recordOf(id);
       atVersion(record, input.expectedVersion);
-      const target = (await store.revisions(id, ALL_REVISIONS)).find((r) => String(r.id) === input.to);
+      const target = (await store.revisions(id, ALL_REVISIONS)).find(
+        (r) => String(r.id) === input.to,
+      );
       const copy = target?.copyKey ? await historyBucket.get(target.copyKey) : null;
-      if (!target || !copy) throw new NotFoundError("This file has no such earlier version, or its copy is gone.");
+      if (!target || !copy)
+        throw new NotFoundError("This file has no such earlier version, or its copy is gone.");
       const bytes = new Uint8Array(await copy.arrayBuffer());
       const width = positive(target.width);
       const claimed = await claim(id, input.expectedVersion);
-      const after = await swapBytes(claimed, { bytes, width, height: positive(target.height), reason: "revert" }, { focus: null, ...(await looks(bytes, width)) });
+      const after = await swapBytes(
+        claimed,
+        { bytes, width, height: positive(target.height), reason: "revert" },
+        { focus: null, ...(await looks(bytes, width)) },
+      );
       await options.onWrite?.({ op: "revert", id, changeId: input.changeId });
       return { item: await itemWithUse(after), sizesNeedPurge: false };
     },
@@ -891,16 +1190,19 @@ export function mediaLibrary(options: MediaLibraryOptions): MediaAdapter {
     // From the change log the store keeps: every insert, update and delete of a row.
     async changes({ since, limit }) {
       const head = await store.changeCursor();
-      if (!SEQ.test(since) || Number(since) > head) throw new RefusedError("That change cursor is not this site's; reload the library.");
+      if (!SEQ.test(since) || Number(since) > head)
+        throw new RefusedError("That change cursor is not this site's; reload the library.");
       const changed = await store.changedSince(Number(since), head, limit);
       const more = changed.length > limit;
       const taken = changed.slice(0, limit);
       // In groups of 90: D1 binds at most 100 values to a statement, and a poll may name up to 200 files.
       const keys = taken.map((c) => c.key);
       const found: MediaRecord[] = [];
-      for (let n = 0; n < keys.length; n += 90) found.push(...(await store.records(keys.slice(n, n + 90))));
+      for (let n = 0; n < keys.length; n += 90)
+        found.push(...(await store.records(keys.slice(n, n + 90))));
       const records = new Map(found.map((r) => [r.key, r]));
-      const uses = options.usage && records.size > 0 ? await usesOf([...records.keys()]) : undefined;
+      const uses =
+        options.usage && records.size > 0 ? await usesOf([...records.keys()]) : undefined;
       return {
         items: taken.flatMap((c) => {
           const record = records.get(c.key);
@@ -918,13 +1220,16 @@ export function mediaLibrary(options: MediaLibraryOptions): MediaAdapter {
           async suggest(id: string) {
             const record = await store.record(id);
             if (!record) return null;
-            if (kindOf(record.contentType) !== "image") throw new RefusedError("Only a picture gets suggestions.");
+            if (kindOf(record.contentType) !== "image")
+              throw new RefusedError("Only a picture gets suggestions.");
             const object = await bucket.get(id);
             if (!object) return null;
             try {
               return await options.suggest!(object.body, id);
             } catch (error) {
-              throw new RefusedError(`No suggestion was made: ${error instanceof Error ? error.message : String(error)}`);
+              throw new RefusedError(
+                `No suggestion was made: ${error instanceof Error ? error.message : String(error)}`,
+              );
             }
           },
           async suggestFile({ bytes }: { bytes: Uint8Array; contentType: string }) {
@@ -940,10 +1245,20 @@ export function mediaLibrary(options: MediaLibraryOptions): MediaAdapter {
     adapter.shrink = async (id, input) => {
       const record = await recordOf(id);
       atVersion(record, input.expectedVersion);
-      if (Math.max(record.width ?? 0, record.height ?? 0) <= resize.maxEdge || !REENCODED.has(record.contentType)) return { resized: false, item: await itemWithUse(record) };
+      if (
+        Math.max(record.width ?? 0, record.height ?? 0) <= resize.maxEdge ||
+        !REENCODED.has(record.contentType)
+      )
+        return { resized: false, item: await itemWithUse(record) };
       const object = await bucket.get(id);
       if (!object) throw new NotFoundError("No such media.");
-      const prepared = await prepare(new Uint8Array(await object.arrayBuffer()), record.contentType, record.filename ?? id, input.changeId, true);
+      const prepared = await prepare(
+        new Uint8Array(await object.arrayBuffer()),
+        record.contentType,
+        record.filename ?? id,
+        input.changeId,
+        true,
+      );
       if (!prepared.resizedFrom) return { resized: false, item: await itemWithUse(record) };
       const claimed = await claim(id, input.expectedVersion);
       const after = await swapBytes(

@@ -4,10 +4,26 @@
 
 import { base64url } from "@dustinedwards/site-runtime/encoding";
 import { NotFoundError, type SiteAdapter } from "../adapter.js";
-import { PREVIEW_LINK_DEFAULT_HOURS, PreviewLink, PreviewLinkInput, PreviewLinkList, PreviewLinkListQuery, PreviewLinkRevokeQuery, PreviewLinkRevokeResult } from "../contract.js";
+import {
+  PREVIEW_LINK_DEFAULT_HOURS,
+  PreviewLink,
+  PreviewLinkInput,
+  PreviewLinkList,
+  PreviewLinkListQuery,
+  PreviewLinkRevokeQuery,
+  PreviewLinkRevokeResult,
+} from "../contract.js";
 import { sha256Hex } from "../media.js";
 import type { SiteApiStore } from "../store.js";
-import { BadRequest, ContractBreach, checked, json, readBody, readQuery, type Route } from "./http.js";
+import {
+  BadRequest,
+  ContractBreach,
+  checked,
+  json,
+  readBody,
+  readQuery,
+  type Route,
+} from "./http.js";
 
 /** Where a site serves its preview links, outside the API's prefix: `GET {origin}/preview/<token>`. */
 export const PREVIEW_LINK_PATH = "/preview/";
@@ -27,10 +43,18 @@ export function previewLinkRoutes(adapter: SiteAdapter, store: SiteApiStore): Ro
         const token = base64url(crypto.getRandomValues(new Uint8Array(32)));
         const now = new Date();
         // v0.22.0: expiresInHours, up to 30 days; the v0.17.0 `hours` still works.
-        if (input.expiresInHours !== undefined && input.hours !== undefined) throw new BadRequest("invalid", "Send expiresInHours or hours, not both.");
+        if (input.expiresInHours !== undefined && input.hours !== undefined)
+          throw new BadRequest("invalid", "Send expiresInHours or hours, not both.");
         const hours = input.expiresInHours ?? input.hours ?? PREVIEW_LINK_DEFAULT_HOURS;
         const expiresAt = new Date(now.getTime() + hours * HOUR).toISOString();
-        await store.putPreviewLink({ tokenHash: await sha256Hex(token), contentId: input.id, createdAt: now.toISOString(), expiresAt, revokedAt: null, changeId: input.changeId });
+        await store.putPreviewLink({
+          tokenHash: await sha256Hex(token),
+          contentId: input.id,
+          createdAt: now.toISOString(),
+          expiresAt,
+          revokedAt: null,
+          changeId: input.changeId,
+        });
         const url = new URL(`${PREVIEW_LINK_PATH}${token}`, adapter.site.origin).href;
         return json(201, checked(PreviewLink, { token, url, expiresAt }, "preview link"));
       },
@@ -42,7 +66,11 @@ export function previewLinkRoutes(adapter: SiteAdapter, store: SiteApiStore): Ro
       run: async (_m, url) => {
         const { id } = readQuery(url, PreviewLinkListQuery);
         const links = await store.activePreviewLinks(id, new Date().toISOString());
-        const items = links.map((l) => ({ id: l.tokenHash.slice(0, 12), createdAt: l.createdAt, expiresAt: l.expiresAt }));
+        const items = links.map((l) => ({
+          id: l.tokenHash.slice(0, 12),
+          createdAt: l.createdAt,
+          expiresAt: l.expiresAt,
+        }));
         return json(200, checked(PreviewLinkList, { items }, "preview links"));
       },
     },
@@ -54,8 +82,16 @@ export function previewLinkRoutes(adapter: SiteAdapter, store: SiteApiStore): Ro
         const linkId = m[1]!;
         if (!LINK_ID.test(linkId)) throw new BadRequest("invalid", "The link id is not valid.");
         const { changeId } = readQuery(url, PreviewLinkRevokeQuery);
-        if (!(await store.revokePreviewLink(linkId, new Date().toISOString()))) throw new NotFoundError("No such preview link.");
-        return json(200, checked(PreviewLinkRevokeResult, { id: linkId, revoked: true, changeId }, "preview link revoke"));
+        if (!(await store.revokePreviewLink(linkId, new Date().toISOString())))
+          throw new NotFoundError("No such preview link.");
+        return json(
+          200,
+          checked(
+            PreviewLinkRevokeResult,
+            { id: linkId, revoked: true, changeId },
+            "preview link revoke",
+          ),
+        );
       },
     },
   ];
@@ -70,11 +106,18 @@ const PRIVATE = {
 
 export function page(status: number, message: string): Response {
   const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="robots" content="noindex, nofollow"><title>${message}</title></head><body><p>${message}</p></body></html>`;
-  return new Response(html, { status, headers: { ...PRIVATE, "content-type": "text/html; charset=utf-8" } });
+  return new Response(html, {
+    status,
+    headers: { ...PRIVATE, "content-type": "text/html; charset=utf-8" },
+  });
 }
 
 /** The page behind one link: the item's current source through the site's own preview, or a small page saying why not. */
-export async function servePreviewLink(adapter: SiteAdapter, store: SiteApiStore | undefined, pathname: string): Promise<Response> {
+export async function servePreviewLink(
+  adapter: SiteAdapter,
+  store: SiteApiStore | undefined,
+  pathname: string,
+): Promise<Response> {
   const token = pathname.slice(PREVIEW_LINK_PATH.length);
   const link = store && TOKEN.test(token) ? await store.previewLink(await sha256Hex(token)) : null;
   // v0.22.0: a revoked link is as if it never was (404), so its address tells nothing; one that ran out says so (410).
@@ -86,5 +129,8 @@ export async function servePreviewLink(adapter: SiteAdapter, store: SiteApiStore
   if (doc.trashedAt) return page(410, "This preview link has expired.");
   const html = await adapter.preview.render({ id: doc.id, source: doc.source });
   if (typeof html !== "string") throw new ContractBreach("preview: not a string");
-  return new Response(html, { status: 200, headers: { ...PRIVATE, "content-type": "text/html; charset=utf-8" } });
+  return new Response(html, {
+    status: 200,
+    headers: { ...PRIVATE, "content-type": "text/html; charset=utf-8" },
+  });
 }
