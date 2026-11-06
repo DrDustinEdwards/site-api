@@ -199,7 +199,8 @@ describe("media library", () => {
     db.db.exec("DELETE FROM posts");
     await adapter.delete(first.id, { changeId: "c-3" });
     expect(media.objects.has(first.id)).toBe(false);
-    expect(backups.objects.size).toBe(1);
+    // The original the shrink replaced, and the last bytes.
+    expect(backups.objects.size).toBe(2);
   });
 
   it("stores a quarter turn as a new file on a site whose pages hold the size, and refuses a replace of another size", async () => {

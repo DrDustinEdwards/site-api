@@ -212,7 +212,7 @@ export interface MediaLibraryOptions {
   /**
    * Where earlier bytes are kept: `bucket` (the served bucket by default) under `prefix` (by default "history/"), at
    * <prefix><key>/<sha256>. Copies in the served bucket go when their file is deleted, and the site's media route must
-   * never serve the prefix; copies in another bucket (a private backups bucket) are kept.
+   * never serve the prefix; copies in another bucket (a private backups bucket) are kept, with the file's last bytes beside them.
    */
   history?: { bucket?: MediaBucket; prefix?: string };
   /** HTTP metadata every object of the library carries beside its type, such as a cache-control. */
@@ -669,11 +669,19 @@ export function mediaLibrary(options: MediaLibraryOptions): MediaAdapter {
     // The reference check, then the rows (refused atomically where the store guards them), then the objects, so a failure
     // leaves only bytes nothing lists.
     async delete(id, input) {
-      await recordOf(id);
+      const record = await recordOf(id);
       const uses = await usesOf([id]);
       const using = uses.get(id) ?? [];
       if (using.length > 0) throw new MediaInUseError(using);
       const copies = historyServed ? (await store.revisions(id)).flatMap((r) => (r.copyKey ? [r.copyKey] : [])) : [];
+      if (!historyServed) {
+        // A backups bucket keeps the last bytes too, so a file deleted for good can still be put back by hand.
+        const last = await bucket.get(id);
+        if (last) {
+          const bytes = new Uint8Array(await last.arrayBuffer());
+          await keepCopy(id, record.sha256 ?? (await sha256Hex(bytes)), bytes, record.contentType);
+        }
+      }
       const removed = await store.remove(id);
       if (removed === "missing") throw new NotFoundError("No such media.");
       if (removed === "in-use") {
