@@ -106,7 +106,7 @@ export interface MediaLibraryStore {
   keeps?: { decorative?: boolean; rights?: boolean };
   /** One file, trashed or not; null when the key is not a library file. */
   record(key: string): Promise<MediaRecord | null>;
-  /** Several files at once, in any order; keys that are not library files are left out. */
+  /** Several files at once (at most 90 keys a call), in any order; keys that are not library files are left out. */
   records(keys: string[]): Promise<MediaRecord[]>;
   /** Every library file, trashed included. Lists filter and sort in the Worker: a site's library is small. */
   all(): Promise<MediaRecord[]>;
@@ -851,7 +851,11 @@ export function mediaLibrary(options: MediaLibraryOptions): MediaAdapter {
       const changed = await store.changedSince(Number(since), head, limit);
       const more = changed.length > limit;
       const taken = changed.slice(0, limit);
-      const records = new Map((await store.records(taken.map((c) => c.key))).map((r) => [r.key, r]));
+      // In groups of 90: D1 binds at most 100 values to a statement, and a poll may name up to 200 files.
+      const keys = taken.map((c) => c.key);
+      const found: MediaRecord[] = [];
+      for (let n = 0; n < keys.length; n += 90) found.push(...(await store.records(keys.slice(n, n + 90))));
+      const records = new Map(found.map((r) => [r.key, r]));
       const uses = options.usage && records.size > 0 ? await usesOf([...records.keys()]) : undefined;
       return {
         items: taken.flatMap((c) => {
