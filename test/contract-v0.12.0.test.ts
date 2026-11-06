@@ -9,10 +9,20 @@ import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import * as contract from "../src/contract.js";
 import { additiveOnly, added, now, widened, type JsonSchema } from "./additive.js";
-import { V0170_CODES, V0170_ROUTES, V0170_SCHEMAS, V0170_WIDEN, V0220_ROUTES, withV0170, withV0220 } from "./v0.17.0.js";
+import {
+  V0170_CODES,
+  V0170_ROUTES,
+  V0170_SCHEMAS,
+  V0170_WIDEN,
+  V0220_ROUTES,
+  withV0170,
+  withV0220,
+} from "./v0.17.0.js";
 import { V0190_ROUTES, V0190_SCHEMAS, asOfV0190, withV0190 } from "./v0.19.0.js";
 
-const V0120 = JSON.parse(readFileSync(new URL("./fixtures/contract-v0.12.0.json", import.meta.url), "utf8")) as {
+const V0120 = JSON.parse(
+  readFileSync(new URL("./fixtures/contract-v0.12.0.json", import.meta.url), "utf8"),
+) as {
   version: string;
   schemaHash: string;
   routes: Array<Record<string, string>>;
@@ -21,22 +31,49 @@ const V0120 = JSON.parse(readFileSync(new URL("./fixtures/contract-v0.12.0.json"
 asOfV0190(V0120.schemas);
 
 /** What every file may carry from v0.13.0. */
-const ITEM = ["color", "credit", "downloadUrl", "license", "licenseExpires", "placeholder", "sourceUrl", "takenAt", "usedCount"];
+const ITEM = [
+  "color",
+  "credit",
+  "downloadUrl",
+  "license",
+  "licenseExpires",
+  "placeholder",
+  "sourceUrl",
+  "takenAt",
+  "usedCount",
+];
 
 /** Every v0.12.0 schema v0.13.0 and v0.17.0 extend, and exactly the optional properties each adds. */
-const ADDED: Record<string, string[]> = withV0220(withV0190(withV0170({
-  Capabilities: [
-    "mediaChanges", "mediaCredit", "mediaDuplicates", "mediaEmbedded", "mediaFilters", "mediaHistory", "mediaImport",
-    "mediaResize", "mediaResizePass", "mediaSuggestions", "mediaTransform", "mediaUsage", "insightNotFound",
-  ].sort(),
-  Meta: [],
-  MediaItem: ITEM,
-  MediaDetail: [...ITEM, "twins"].sort(),
-  MediaReplaceResult: ITEM,
-  MediaList: ["changeCursor", "moreChanges", "removed"],
-  MediaListQuery: ["changedSince", "kind", "orientation"],
-  MediaUploadQuery: ["resize"],
-}), V0120.schemas), V0120.schemas);
+const ADDED: Record<string, string[]> = withV0220(
+  withV0190(
+    withV0170({
+      Capabilities: [
+        "mediaChanges",
+        "mediaCredit",
+        "mediaDuplicates",
+        "mediaEmbedded",
+        "mediaFilters",
+        "mediaHistory",
+        "mediaImport",
+        "mediaResize",
+        "mediaResizePass",
+        "mediaSuggestions",
+        "mediaTransform",
+        "mediaUsage",
+        "insightNotFound",
+      ].sort(),
+      Meta: [],
+      MediaItem: ITEM,
+      MediaDetail: [...ITEM, "twins"].sort(),
+      MediaReplaceResult: ITEM,
+      MediaList: ["changeCursor", "moreChanges", "removed"],
+      MediaListQuery: ["changedSince", "kind", "orientation"],
+      MediaUploadQuery: ["resize"],
+    }),
+    V0120.schemas,
+  ),
+  V0120.schemas,
+);
 
 const NEW_LENSES = ["duplicates", "license-expired", "oversized"];
 
@@ -51,10 +88,28 @@ const WIDEN: Record<string, readonly string[]> = {
 };
 
 const NEW_SCHEMAS = [
-  "MediaColor", "MediaCredit", "MediaCreditInput", "MediaHistory", "MediaImportInput", "MediaKind", "MediaLicense",
-  "MediaOrientation", "MediaPlaceholder", "MediaResize", "MediaResizeOutcome", "MediaResizePassInput",
-  "MediaResizePassResult", "MediaRevertInput", "MediaRevision", "MediaSourceUrl", "MediaSuggestions",
-  "MediaTransformInput", "MediaTransformOp", "MediaTransformResult", "MediaTwin", "MediaUploadResult",
+  "MediaColor",
+  "MediaCredit",
+  "MediaCreditInput",
+  "MediaHistory",
+  "MediaImportInput",
+  "MediaKind",
+  "MediaLicense",
+  "MediaOrientation",
+  "MediaPlaceholder",
+  "MediaResize",
+  "MediaResizeOutcome",
+  "MediaResizePassInput",
+  "MediaResizePassResult",
+  "MediaRevertInput",
+  "MediaRevision",
+  "MediaSourceUrl",
+  "MediaSuggestions",
+  "MediaTransformInput",
+  "MediaTransformOp",
+  "MediaTransformResult",
+  "MediaTwin",
+  "MediaUploadResult",
 ];
 
 const exported = Object.entries(contract)
@@ -64,16 +119,23 @@ const exported = Object.entries(contract)
 describe("the v0.12.0 contract", () => {
   it("is the recorded v0.12.0", () => {
     expect(V0120.version).toBe("0.12.0");
-    expect(V0120.schemaHash).toBe("6672826e05c67023341bcf883438dd9691a185f734937a4373f79117be77df41");
+    expect(V0120.schemaHash).toBe(
+      "6672826e05c67023341bcf883438dd9691a185f734937a4373f79117be77df41",
+    );
     expect(V0120.routes.length).toBe(35);
   });
 
   it("keeps every v0.12.0 route exactly, but the upload's answer named MediaUploadResult, and adds only the v0.13.0 media routes and the v0.16.0 404 report", () => {
     for (const route of V0120.routes) {
-      const expected = route.method === "POST" && route.path === "/media" ? { ...route, response: "MediaUploadResult" } : route;
+      const expected =
+        route.method === "POST" && route.path === "/media"
+          ? { ...route, response: "MediaUploadResult" }
+          : route;
       expect(contract.ROUTES, JSON.stringify(route)).toContainEqual(expected);
     }
-    const fresh = contract.ROUTES.filter((r) => !V0120.routes.some((old) => old.method === r.method && old.path === r.path));
+    const fresh = contract.ROUTES.filter(
+      (r) => !V0120.routes.some((old) => old.method === r.method && old.path === r.path),
+    );
     expect(fresh.map((r) => `${r.method} ${r.path}`)).toEqual([
       "POST /media/import",
       "PUT /media/:id/credit",
@@ -91,10 +153,20 @@ describe("the v0.12.0 contract", () => {
 
   it("answers an upload with MediaItem and three optional properties more, so a v0.12.0 reader's MediaItem still parses it", () => {
     additiveOnly(V0120.schemas.MediaItem!, now("MediaUploadResult"), "MediaUploadResult");
-    expect(added(V0120.schemas.MediaItem!, now("MediaUploadResult")).sort()).toEqual([...ITEM, ...ADDED.MediaItem!.filter((p) => !ITEM.includes(p)), "duplicateOf", "embedded", "resizedFrom"].sort());
+    expect(added(V0120.schemas.MediaItem!, now("MediaUploadResult")).sort()).toEqual(
+      [
+        ...ITEM,
+        ...ADDED.MediaItem!.filter((p) => !ITEM.includes(p)),
+        "duplicateOf",
+        "embedded",
+        "resizedFrom",
+      ].sort(),
+    );
   });
 
-  for (const name of Object.keys(V0120.schemas).filter((n) => !(n in ADDED) && n !== "MediaLens" && n !== "ErrorCode")) {
+  for (const name of Object.keys(V0120.schemas).filter(
+    (n) => !(n in ADDED) && n !== "MediaLens" && n !== "ErrorCode",
+  )) {
     it(`keeps ${name} identical`, () => {
       expect(now(name)).toEqual(V0120.schemas[name]);
     });
@@ -116,17 +188,55 @@ describe("the v0.12.0 contract", () => {
   });
 
   it("adds only the new schemas v0.13.0, v0.17.0 and v0.17.0 name", () => {
-    expect(exported.filter((n) => !(n in V0120.schemas)).sort()).toEqual([...NEW_SCHEMAS, "NotFoundQuery", "NotFoundReport", "NotFoundRow", ...V0170_SCHEMAS, ...V0190_SCHEMAS].sort());
+    expect(exported.filter((n) => !(n in V0120.schemas)).sort()).toEqual(
+      [
+        ...NEW_SCHEMAS,
+        "NotFoundQuery",
+        "NotFoundReport",
+        "NotFoundRow",
+        ...V0170_SCHEMAS,
+        ...V0190_SCHEMAS,
+      ].sort(),
+    );
   });
 
   it("parses v0.12.0 bodies with the v0.13.0 schemas", () => {
     const item = {
-      id: "uploads/1-a.png", url: "/media/uploads/1-a.png", filename: "a.png", contentType: "image/png", bytes: 9,
-      width: null, height: null, alt: "", uploadedAt: null, deletable: true, version: "m1", tags: [], trashedAt: null, focus: null, caption: "",
+      id: "uploads/1-a.png",
+      url: "/media/uploads/1-a.png",
+      filename: "a.png",
+      contentType: "image/png",
+      bytes: 9,
+      width: null,
+      height: null,
+      alt: "",
+      uploadedAt: null,
+      deletable: true,
+      version: "m1",
+      tags: [],
+      trashedAt: null,
+      focus: null,
+      caption: "",
     };
     expect(contract.MediaUploadResult.safeParse(item).success).toBe(true);
-    expect(contract.MediaList.safeParse({ items: [item], nextCursor: null, total: 1, sorted: { sort: "added", dir: "desc" } }).success).toBe(true);
-    const capabilities = { content: true, preview: true, media: true, inbox: false, insight: false, publications: false, mediaLenses: ["no-alt"], mediaReplace: true };
+    expect(
+      contract.MediaList.safeParse({
+        items: [item],
+        nextCursor: null,
+        total: 1,
+        sorted: { sort: "added", dir: "desc" },
+      }).success,
+    ).toBe(true);
+    const capabilities = {
+      content: true,
+      preview: true,
+      media: true,
+      inbox: false,
+      insight: false,
+      publications: false,
+      mediaLenses: ["no-alt"],
+      mediaReplace: true,
+    };
     expect(contract.Capabilities.safeParse(capabilities).success).toBe(true);
   });
 

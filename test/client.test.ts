@@ -58,7 +58,16 @@ describe("client round trip", () => {
   });
 
   it("reads a site with no media manager and no content delete as the v0.1.0 capabilities, with no limits", async () => {
-    const { client: c } = client(memoryAdapter({ media: false, contentDelete: false, contentTags: false, contentExtras: false, mentions: false, schedules: false }));
+    const { client: c } = client(
+      memoryAdapter({
+        media: false,
+        contentDelete: false,
+        contentTags: false,
+        contentExtras: false,
+        mentions: false,
+        schedules: false,
+      }),
+    );
     expect((await c.meta()).capabilities).toEqual({
       content: true,
       preview: true,
@@ -84,13 +93,23 @@ describe("client round trip", () => {
       changeId: "chg-2",
     });
 
-    const published = await c.publish("series-part-1", { expectedVersion: edited.version, changeId: "chg-3" });
+    const published = await c.publish("series-part-1", {
+      expectedVersion: edited.version,
+      changeId: "chg-3",
+    });
     expect(published.status).toBe("published");
     const doc = await c.get("series-part-1");
-    expect(doc).toMatchObject({ title: "Part one", status: "published", path: "/blog/series-part-1" });
+    expect(doc).toMatchObject({
+      title: "Part one",
+      status: "published",
+      path: "/blog/series-part-1",
+    });
     expect(doc.publishedAt).not.toBeNull();
 
-    const unpublished = await c.unpublish("series-part-1", { expectedVersion: published.version, changeId: "chg-4" });
+    const unpublished = await c.unpublish("series-part-1", {
+      expectedVersion: published.version,
+      changeId: "chg-4",
+    });
     expect(unpublished.status).toBe("draft");
 
     const scheduled = await c.schedule("series-part-1", {
@@ -129,7 +148,11 @@ describe("client round trip", () => {
     const first = await c.list({ limit: 2 });
     expect(first.items.map((i) => i.id)).toEqual(["a", "b"]);
     const second = await c.list({ limit: 2, cursor: first.nextCursor! });
-    expect(second).toEqual({ items: [expect.objectContaining({ id: "c" })], nextCursor: null, total: 3 });
+    expect(second).toEqual({
+      items: [expect.objectContaining({ id: "c" })],
+      nextCursor: null,
+      total: 3,
+    });
   });
 
   it("raises the site's refusal with its error body", async () => {

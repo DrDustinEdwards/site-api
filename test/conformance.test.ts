@@ -66,47 +66,98 @@ describe("conformance", () => {
       "backlinks of an unknown id: refused, or not implemented where the site has none",
     ]);
     // v0.22.0 (M2): every check is a probe, and the probe post's steps, off by default, are each listed as passed over.
-    expect(report.probes.filter((p) => !p.skipped).map((p) => p.name)).toEqual(report.checks.map((c) => c.name));
+    expect(report.probes.filter((p) => !p.skipped).map((p) => p.name)).toEqual(
+      report.checks.map((c) => c.name),
+    );
     expect(report.probes.filter((p) => p.skipped)).toHaveLength(12);
-    expect(report.probes.find((p) => p.skipped)).toMatchObject({ name: "probe post: created as a draft", detail: "probePosts is off" });
+    expect(report.probes.find((p) => p.skipped)).toMatchObject({
+      name: "probe post: created as a draft",
+      detail: "probePosts is off",
+    });
   });
 
   it("passes a v0.14.0 content group, and a site with a store, whose stale write it sends twice and sees replayed", async () => {
-    expect(failing(await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: site(memoryAdapter({ contentExtras: false })).fetch }))).toEqual([]);
-    const api = createSiteApi({ adapter: memoryAdapter(), key: KEY, limiter: allow, log: () => {}, store: d1SiteApiStore(d1(SITE_API_STORE_SQL)) });
-    const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: (async (i: RequestInfo | URL, init?: RequestInit) => api.handle(new Request(i, init))) as typeof fetch });
+    expect(
+      failing(
+        await runConformance({
+          baseUrl: ORIGIN,
+          key: KEY,
+          fetch: site(memoryAdapter({ contentExtras: false })).fetch,
+        }),
+      ),
+    ).toEqual([]);
+    const api = createSiteApi({
+      adapter: memoryAdapter(),
+      key: KEY,
+      limiter: allow,
+      log: () => {},
+      store: d1SiteApiStore(d1(SITE_API_STORE_SQL)),
+    });
+    const report = await runConformance({
+      baseUrl: ORIGIN,
+      key: KEY,
+      fetch: (async (i: RequestInfo | URL, init?: RequestInit) =>
+        api.handle(new Request(i, init))) as typeof fetch,
+    });
     expect(failing(report)).toEqual([]);
     expect(report.checks.find((c) => c.name.startsWith("replay:"))?.ok).toBe(true);
   });
 
   it("runs only the content checks on a site with no media manager", async () => {
-    const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: site(memoryAdapter({ media: false })).fetch });
+    const report = await runConformance({
+      baseUrl: ORIGIN,
+      key: KEY,
+      fetch: site(memoryAdapter({ media: false })).fetch,
+    });
     expect(failing(report)).toEqual([]);
     expect(report.checks).toHaveLength(34);
   });
 
   it("expects 501 on a site with no content delete, and 404 where it has one", async () => {
-    const without = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: site(memoryAdapter({ contentDelete: false })).fetch });
+    const without = await runConformance({
+      baseUrl: ORIGIN,
+      key: KEY,
+      fetch: site(memoryAdapter({ contentDelete: false })).fetch,
+    });
     expect(failing(without)).toEqual([]);
-    expect(without.checks.find((c) => c.name.startsWith("content delete of an unknown id"))?.detail).toBe("501 not-implemented");
+    expect(
+      without.checks.find((c) => c.name.startsWith("content delete of an unknown id"))?.detail,
+    ).toBe("501 not-implemented");
     const withDelete = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: site().fetch });
-    expect(withDelete.checks.find((c) => c.name.startsWith("content delete of an unknown id"))?.detail).toBe("404 not-found");
+    expect(
+      withDelete.checks.find((c) => c.name.startsWith("content delete of an unknown id"))?.detail,
+    ).toBe("404 not-found");
   });
 
   it("expects 501 from every mentions check on a site without the group, and runs only the five that apply", async () => {
-    const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: site(memoryAdapter({ mentions: false })).fetch });
+    const report = await runConformance({
+      baseUrl: ORIGIN,
+      key: KEY,
+      fetch: site(memoryAdapter({ mentions: false })).fetch,
+    });
     expect(failing(report)).toEqual([]);
     const mentions = report.checks.filter((c) => c.name.startsWith("mention"));
-    expect(mentions.map((c) => c.detail)).toEqual(["501 not-implemented", "401", "501 not-implemented", "501 not-implemented", "501 not-implemented"]);
+    expect(mentions.map((c) => c.detail)).toEqual([
+      "501 not-implemented",
+      "401",
+      "501 not-implemented",
+      "501 not-implemented",
+      "501 not-implemented",
+    ]);
   });
 
   it("with a real mention in the queue, the stale-version probe runs against it and changes nothing", async () => {
     const adapter = memoryAdapter();
-    const id = adapter.receiveMention({ sourceUrl: "https://a.example/post", targetId: "first-post" });
+    const id = adapter.receiveMention({
+      sourceUrl: "https://a.example/post",
+      targetId: "first-post",
+    });
     const before = structuredClone(adapter.mentionStore.get(id));
     const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: site(adapter).fetch });
     expect(failing(report)).toEqual([]);
-    expect(report.checks.find((c) => c.name.startsWith("mention decide on a stale"))?.detail).toBe(`409 version-conflict on mention ${id}, unchanged`);
+    expect(report.checks.find((c) => c.name.startsWith("mention decide on a stale"))?.detail).toBe(
+      `409 version-conflict on mention ${id}, unchanged`,
+    );
     expect(adapter.mentionStore.get(id)).toEqual(before);
     expect(adapter.purged).toEqual([]);
   });
@@ -115,13 +166,21 @@ describe("conformance", () => {
     const adapter = memoryAdapter();
     adapter.mentions!.decide = async () => ({ status: "approved", version: "m9", purged: null });
     const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: site(adapter).fetch });
-    expect(failing(report)).toEqual(["mention decide of an unknown id: refused, or not implemented where the site has no mentions"]);
+    expect(failing(report)).toEqual([
+      "mention decide of an unknown id: refused, or not implemented where the site has no mentions",
+    ]);
   });
 
   it("expects 501 from every lens on a site that names none, and passes it", async () => {
-    const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: site(memoryAdapter({ mediaLenses: false })).fetch });
+    const report = await runConformance({
+      baseUrl: ORIGIN,
+      key: KEY,
+      fetch: site(memoryAdapter({ mediaLenses: false })).fetch,
+    });
     expect(failing(report)).toEqual([]);
-    expect(report.checks.find((c) => c.name.startsWith("media lenses"))?.detail).toBe("501 for every lens");
+    expect(report.checks.find((c) => c.name.startsWith("media lenses"))?.detail).toBe(
+      "501 for every lens",
+    );
   });
 
   it("PLANT: fails a site that answers a lens it does not name with its whole library", async () => {
@@ -131,73 +190,125 @@ describe("conformance", () => {
     // A site that serves every lens but names one: what it answers for the others is not what was asked.
     const fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = new URL(String(input instanceof Request ? input.url : input));
-      if (url.searchParams.get("lens") && url.searchParams.get("lens") !== "unattached") url.searchParams.set("lens", "unattached");
+      if (url.searchParams.get("lens") && url.searchParams.get("lens") !== "unattached")
+        url.searchParams.set("lens", "unattached");
       return s.fetch(url, init);
     }) as typeof globalThis.fetch;
     const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch });
-    expect(failing(report)).toEqual(["media lenses: each one the site names answers, and one it does not is not implemented"]);
+    expect(failing(report)).toEqual([
+      "media lenses: each one the site names answers, and one it does not is not implemented",
+    ]);
   });
 
   it("expects 501 from content tags on a site that keeps none, and 404 where it does", async () => {
-    const without = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: site(memoryAdapter({ contentTags: false })).fetch });
+    const without = await runConformance({
+      baseUrl: ORIGIN,
+      key: KEY,
+      fetch: site(memoryAdapter({ contentTags: false })).fetch,
+    });
     expect(failing(without)).toEqual([]);
-    expect(without.checks.find((c) => c.name.startsWith("content tags"))?.detail).toBe("501 not-implemented");
+    expect(without.checks.find((c) => c.name.startsWith("content tags"))?.detail).toBe(
+      "501 not-implemented",
+    );
     const withTags = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: site().fetch });
-    expect(withTags.checks.find((c) => c.name.startsWith("content tags"))?.detail).toBe("404 not-found");
+    expect(withTags.checks.find((c) => c.name.startsWith("content tags"))?.detail).toBe(
+      "404 not-found",
+    );
   });
 
   it("PLANT: fails a site that tags a post it does not hold", async () => {
     const adapter = memoryAdapter();
-    adapter.content.setTags = async (id, input) => ({ id, version: "v9", status: "draft", changeId: input.changeId });
+    adapter.content.setTags = async (id, input) => ({
+      id,
+      version: "v9",
+      status: "draft",
+      changeId: input.changeId,
+    });
     const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: site(adapter).fetch });
-    expect(failing(report)).toEqual(["content tags of an unknown id: refused, or not implemented where the site keeps no tags"]);
+    expect(failing(report)).toEqual([
+      "content tags of an unknown id: refused, or not implemented where the site keeps no tags",
+    ]);
   });
 
   it("expects 501 from the 404 report on a site without it, and the report where it has one", async () => {
     const without = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: site().fetch });
-    expect(without.checks.find((c) => c.name.startsWith("not-found report"))?.detail).toBe("501 not-implemented");
-    const rows = [{ path: "/old-post", kind: "page" as const, hits: 3, referrers: [{ host: "a.example", hits: 3 }] }];
-    const withReport = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: site(memoryAdapter({ notFound: rows })).fetch });
+    expect(without.checks.find((c) => c.name.startsWith("not-found report"))?.detail).toBe(
+      "501 not-implemented",
+    );
+    const rows = [
+      {
+        path: "/old-post",
+        kind: "page" as const,
+        hits: 3,
+        referrers: [{ host: "a.example", hits: 3 }],
+      },
+    ];
+    const withReport = await runConformance({
+      baseUrl: ORIGIN,
+      key: KEY,
+      fetch: site(memoryAdapter({ notFound: rows })).fetch,
+    });
     expect(failing(withReport)).toEqual([]);
-    expect(withReport.checks.filter((c) => c.name.startsWith("not-found report")).map((c) => c.detail)).toEqual(["1 missing path(s) in 7 days", "400 invalid"]);
+    expect(
+      withReport.checks.filter((c) => c.name.startsWith("not-found report")).map((c) => c.detail),
+    ).toEqual(["1 missing path(s) in 7 days", "400 invalid"]);
   });
 
   it("expects 501 from a reset on a v0.5.0 mentions group, and 404 where the site has reset", async () => {
-    const without = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: site(memoryAdapter({ mentionReset: false })).fetch });
+    const without = await runConformance({
+      baseUrl: ORIGIN,
+      key: KEY,
+      fetch: site(memoryAdapter({ mentionReset: false })).fetch,
+    });
     expect(failing(without)).toEqual([]);
-    expect(without.checks.find((c) => c.name.startsWith("mention reset"))?.detail).toBe("501 not-implemented");
+    expect(without.checks.find((c) => c.name.startsWith("mention reset"))?.detail).toBe(
+      "501 not-implemented",
+    );
     const withReset = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: site().fetch });
-    expect(withReset.checks.find((c) => c.name.startsWith("mention reset"))?.detail).toBe("404 not-found");
+    expect(withReset.checks.find((c) => c.name.startsWith("mention reset"))?.detail).toBe(
+      "404 not-found",
+    );
   });
 
   it("PLANT: fails a site that resets a mention it does not hold", async () => {
     const adapter = memoryAdapter();
     adapter.mentions!.reset = async () => ({ status: "pending", version: "m9", purged: null });
     const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: site(adapter).fetch });
-    expect(failing(report)).toEqual(["mention reset of an unknown id: refused, or not implemented where the site has no reset"]);
+    expect(failing(report)).toEqual([
+      "mention reset of an unknown id: refused, or not implemented where the site has no reset",
+    ]);
   });
 
   it("PLANT: fails a site that deletes a mention it does not hold", async () => {
     const adapter = memoryAdapter();
     adapter.mentions!.delete = async () => ({ purged: null });
     const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: site(adapter).fetch });
-    expect(failing(report)).toEqual(["mention delete of an unknown id: refused, or not implemented where the site has no mentions"]);
+    expect(failing(report)).toEqual([
+      "mention delete of an unknown id: refused, or not implemented where the site has no mentions",
+    ]);
   });
 
   it("PLANT: fails a site that ignores the version on a mention decision", async () => {
     const adapter = memoryAdapter();
     adapter.receiveMention({ sourceUrl: "https://a.example/post", targetId: "first-post" });
     const decide = adapter.mentions!.decide;
-    adapter.mentions!.decide = (id, input) => decide(id, { ...input, expectedVersion: adapter.mentionStore.get(id)?.version ?? input.expectedVersion });
+    adapter.mentions!.decide = (id, input) =>
+      decide(id, {
+        ...input,
+        expectedVersion: adapter.mentionStore.get(id)?.version ?? input.expectedVersion,
+      });
     const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: site(adapter).fetch });
-    expect(failing(report)).toEqual(["mention decide on a stale version: refused, whatever mention is first"]);
+    expect(failing(report)).toEqual([
+      "mention decide on a stale version: refused, whatever mention is first",
+    ]);
   });
 
   it("PLANT: fails a site that offers mentions but does not say so in its capabilities", async () => {
     const s = site();
     const silent = (async (input: RequestInfo | URL, init?: RequestInit) => {
       const response = await s.fetch(input, init);
-      if (!new URL(new Request(input).url).pathname.endsWith("/meta") || !response.ok) return response;
+      if (!new URL(new Request(input).url).pathname.endsWith("/meta") || !response.ok)
+        return response;
       const meta = await response.json();
       const { mentions: _gone, ...capabilities } = meta.capabilities;
       return Response.json({ ...meta, capabilities });
@@ -215,25 +326,36 @@ describe("conformance", () => {
     const adapter = memoryAdapter();
     adapter.content.delete = async () => {};
     const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: site(adapter).fetch });
-    expect(failing(report)).toEqual(["content delete of an unknown id: refused, or not implemented where the site has no delete"]);
+    expect(failing(report)).toEqual([
+      "content delete of an unknown id: refused, or not implemented where the site has no delete",
+    ]);
   });
 
   it("PLANT: fails a site that offers a delete but does not say so in its capabilities", async () => {
     const s = site();
     const silent = (async (input: RequestInfo | URL, init?: RequestInit) => {
       const response = await s.fetch(input, init);
-      if (!new URL(new Request(input).url).pathname.endsWith("/meta") || !response.ok) return response;
+      if (!new URL(new Request(input).url).pathname.endsWith("/meta") || !response.ok)
+        return response;
       const meta = await response.json();
       const { contentDelete: _gone, ...capabilities } = meta.capabilities;
       return Response.json({ ...meta, capabilities });
     }) as typeof fetch;
     const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: silent });
-    expect(failing(report)).toEqual(["content delete of an unknown id: refused, or not implemented where the site has no delete"]);
+    expect(failing(report)).toEqual([
+      "content delete of an unknown id: refused, or not implemented where the site has no delete",
+    ]);
   });
 
   it("changes nothing on a conforming site: no content, no file stored, no file deleted", async () => {
     const s = site();
-    await s.adapter.media!.upload({ bytes: new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), contentType: "image/png", filename: "real.png", alt: "", changeId: "seed" });
+    await s.adapter.media!.upload({
+      bytes: new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+      contentType: "image/png",
+      filename: "real.png",
+      alt: "",
+      changeId: "seed",
+    });
     await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: s.fetch });
     expect(s.adapter.store.size).toBe(0);
     expect(s.adapter.deletedContent).toEqual([]);
@@ -243,16 +365,34 @@ describe("conformance", () => {
 
   it("with probeMediaUpload, uploads a file of its own and deletes that file and no other", async () => {
     const s = site();
-    await s.adapter.media!.upload({ bytes: new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), contentType: "image/png", filename: "real.png", alt: "", changeId: "seed" });
-    const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: s.fetch, probeMediaUpload: true });
+    await s.adapter.media!.upload({
+      bytes: new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+      contentType: "image/png",
+      filename: "real.png",
+      alt: "",
+      changeId: "seed",
+    });
+    const report = await runConformance({
+      baseUrl: ORIGIN,
+      key: KEY,
+      fetch: s.fetch,
+      probeMediaUpload: true,
+    });
     expect(failing(report)).toEqual([]);
-    expect(report.checks.find((c) => c.name.startsWith("media round trip"))).toMatchObject({ name: "media round trip: upload, read, delete its own file", ok: true });
+    expect(report.checks.find((c) => c.name.startsWith("media round trip"))).toMatchObject({
+      name: "media round trip: upload, read, delete its own file",
+      ok: true,
+    });
     expect([...s.adapter.mediaStore.keys()]).toEqual(["uploads/1-real.png"]);
     expect(s.adapter.deleted).toEqual(["uploads/2-carrel-conformance-probe.png"]);
   });
 
   it("PLANT: fails a site that accepts a type it never declared", async () => {
-    const s = site(memoryAdapter({ media: { maxBytes: 1000, types: ["image/png", "application/x-carrel-conformance-probe"] } }));
+    const s = site(
+      memoryAdapter({
+        media: { maxBytes: 1000, types: ["image/png", "application/x-carrel-conformance-probe"] },
+      }),
+    );
     const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: s.fetch });
     expect(failing(report)).toEqual(["media upload of a type the site does not accept: refused"]);
   });
@@ -265,9 +405,17 @@ describe("conformance", () => {
   });
 
   it("expects 501 from every media write on a v0.2.0 site, and passes it", async () => {
-    const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: site(memoryAdapter({ mediaWrites: false })).fetch });
+    const report = await runConformance({
+      baseUrl: ORIGIN,
+      key: KEY,
+      fetch: site(memoryAdapter({ mediaWrites: false })).fetch,
+    });
     expect(failing(report)).toEqual([]);
-    const details = report.checks.filter((c) => /^media (alt|tags|trash|restore|focus|caption|replace|bulk|empty)/.test(c.name)).map((c) => c.detail);
+    const details = report.checks
+      .filter((c) =>
+        /^media (alt|tags|trash|restore|focus|caption|replace|bulk|empty)/.test(c.name),
+      )
+      .map((c) => c.detail);
     expect(details).toHaveLength(12);
     expect(details.every((d) => d.startsWith("501"))).toBe(true);
   });
@@ -276,14 +424,17 @@ describe("conformance", () => {
     const adapter = memoryAdapter();
     adapter.media!.setAlt = async () => ({ version: "x" });
     const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: site(adapter).fetch });
-    expect(failing(report)).toEqual(["media alt of an unknown id: refused, or not implemented where the site lacks it"]);
+    expect(failing(report)).toEqual([
+      "media alt of an unknown id: refused, or not implemented where the site lacks it",
+    ]);
   });
 
   it("PLANT: fails a site that offers a trash but does not say so in its capabilities", async () => {
     const s = site();
     const silent = (async (input: RequestInfo | URL, init?: RequestInit) => {
       const response = await s.fetch(input, init);
-      if (!new URL(new Request(input).url).pathname.endsWith("/meta") || !response.ok) return response;
+      if (!new URL(new Request(input).url).pathname.endsWith("/meta") || !response.ok)
+        return response;
       const meta = await response.json();
       const { mediaTrash: _gone, ...capabilities } = meta.capabilities;
       return Response.json({ ...meta, capabilities });
@@ -299,7 +450,13 @@ describe("conformance", () => {
 
   it("changes no file on a conforming site when the write probes run", async () => {
     const s = site();
-    const item = await s.adapter.media!.upload({ bytes: new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), contentType: "image/png", filename: "real.png", alt: "kept", changeId: "seed" });
+    const item = await s.adapter.media!.upload({
+      bytes: new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+      contentType: "image/png",
+      filename: "real.png",
+      alt: "kept",
+      changeId: "seed",
+    });
     await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: s.fetch });
     expect(s.adapter.mediaStore.get(item.id)?.item).toEqual(item);
   });
@@ -308,7 +465,8 @@ describe("conformance", () => {
     const s = site();
     const unlimited = (async (input: RequestInfo | URL, init?: RequestInit) => {
       const response = await s.fetch(input, init);
-      if (!new URL(new Request(input).url).pathname.endsWith("/meta") || !response.ok) return response;
+      if (!new URL(new Request(input).url).pathname.endsWith("/meta") || !response.ok)
+        return response;
       const meta = await response.json();
       const { mediaUpload: _gone, ...capabilities } = meta.capabilities;
       return Response.json({ ...meta, capabilities });
@@ -345,7 +503,8 @@ describe("conformance", () => {
     const s = site();
     const drifted = (async (input: RequestInfo | URL, init?: RequestInit) => {
       const response = await s.fetch(input, init);
-      if (!new URL(new Request(input).url).pathname.endsWith("/meta") || !response.ok) return response;
+      if (!new URL(new Request(input).url).pathname.endsWith("/meta") || !response.ok)
+        return response;
       const meta = await response.json();
       return Response.json({ ...meta, schemaHash: "0".repeat(64), packageVersion: "0.0.9" });
     }) as typeof fetch;
@@ -354,16 +513,30 @@ describe("conformance", () => {
   });
 
   it("PLANT: fails a site with the wrong key configured", async () => {
-    const report = await runConformance({ baseUrl: ORIGIN, key: `${KEY}-other`, fetch: site().fetch });
+    const report = await runConformance({
+      baseUrl: ORIGIN,
+      key: `${KEY}-other`,
+      fetch: site().fetch,
+    });
     expect(failing(report)).toContain("meta: answers with this contract's schema hash");
     expect(report.ok).toBe(false);
   });
 
   // v0.22.0 (M1): the probe post, on a site whose public routes answer as a real site's do.
   function liveSite(options: { tombstones?: boolean; contentDelete?: boolean } = {}) {
-    const adapter = memoryAdapter({ site: { id: "memory", name: "Memory site", origin: ORIGIN }, ...(options.contentDelete === false ? { contentDelete: false } : {}) });
+    const adapter = memoryAdapter({
+      site: { id: "memory", name: "Memory site", origin: ORIGIN },
+      ...(options.contentDelete === false ? { contentDelete: false } : {}),
+    });
     const store = d1SiteApiStore(d1(SITE_API_STORE_SQL));
-    const api = createSiteApi({ adapter, key: KEY, limiter: allow, log: () => {}, store, hooks: [{ name: "probe-hook", run: () => true }] });
+    const api = createSiteApi({
+      adapter,
+      key: KEY,
+      limiter: allow,
+      log: () => {},
+      store,
+      hooks: [{ name: "probe-hook", run: () => true }],
+    });
     const fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
       const request = new Request(input, init);
       if (api.matchesPreviewLink(request)) return api.servePreviewLink(request);
@@ -371,8 +544,14 @@ describe("conformance", () => {
       const { pathname } = new URL(request.url);
       const moved = adapter.redirects.get(pathname);
       if (moved) return new Response(null, { status: 301, headers: { location: moved } });
-      if ([...adapter.store.values()].some((s) => s.doc.status === "published" && s.doc.path === pathname)) return new Response("<p>post</p>");
-      if (options.tombstones !== false && (await store.isGone(pathname))) return goneResponse(request);
+      if (
+        [...adapter.store.values()].some(
+          (s) => s.doc.status === "published" && s.doc.path === pathname,
+        )
+      )
+        return new Response("<p>post</p>");
+      if (options.tombstones !== false && (await store.isGone(pathname)))
+        return goneResponse(request);
       return new Response("Not found", { status: 404 });
     }) as typeof globalThis.fetch;
     return { adapter, fetch };
@@ -391,7 +570,10 @@ describe("conformance", () => {
       ["published, and its public page answers", false],
       ["each declared hook recorded a run for the publish", false],
       ["backlinks answer in shape", false],
-      ["a draft saved over the live post reads hasDraft and lists as published and as a draft", false],
+      [
+        "a draft saved over the live post reads hasDraft and lists as published and as a draft",
+        false,
+      ],
       ["a rename answers 301 from the old path", false],
       ["trash and restore", false],
       ["a delete answers 410 on the old path", false],
@@ -406,13 +588,27 @@ describe("conformance", () => {
     const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch, probePosts: true });
     expect(failing(report)).toEqual(["probe post: a delete answers 410 on the old path"]);
     expect(adapter.store.size).toBe(0);
-    const page = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: liveSite({ contentDelete: false }).fetch, probePosts: true });
+    const page = await runConformance({
+      baseUrl: ORIGIN,
+      key: KEY,
+      fetch: liveSite({ contentDelete: false }).fetch,
+      probePosts: true,
+    });
     expect(failing(page)).toEqual([]);
-    expect(page.probes.filter((p) => p.name.startsWith("probe post:")).every((p) => p.skipped && /cannot delete/.test(p.detail!))).toBe(true);
+    expect(
+      page.probes
+        .filter((p) => p.name.startsWith("probe post:"))
+        .every((p) => p.skipped && /cannot delete/.test(p.detail!)),
+    ).toBe(true);
   });
 
   it("skips the write probe when told to", async () => {
-    const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: site().fetch, probeWrites: false });
+    const report = await runConformance({
+      baseUrl: ORIGIN,
+      key: KEY,
+      fetch: site().fetch,
+      probeWrites: false,
+    });
     expect(report.checks.map((c) => c.name)).not.toContain("stale expectedVersion: refused");
   });
 });

@@ -87,13 +87,19 @@ export interface ContentAdapter {
    * refuse. A site without it answers `DELETE /content/:id` with 501. The write and whatever the
    * site must do afterward (its cache purge, say) are one unit, so the site runs them together here.
    */
-  delete?(id: string, input: { expectedVersion: string; changeId: string; actor?: Actor }): Promise<void>;
+  delete?(
+    id: string,
+    input: { expectedVersion: string; changeId: string; actor?: Actor },
+  ): Promise<void>;
   /**
    * Optional (v0.6.0): sets the item's whole tag set, already unique, and returns the write like a
    * save does. Throws VersionConflictError, NotFoundError (checked first, for a missing id) or
    * RefusedError like the writes. A site without it answers `PUT /content/:id/tags` with 501.
    */
-  setTags?(id: string, input: { tags: string[]; expectedVersion: string; changeId: string; actor?: Actor }): Promise<WriteResult>;
+  setTags?(
+    id: string,
+    input: { tags: string[]; expectedVersion: string; changeId: string; actor?: Actor },
+  ): Promise<WriteResult>;
   /**
    * Optional (v0.17.0): moves the item to `newId`, its history with it, and, when it was ever published, keeps a permanent
    * (301) redirect from its old path to the new one; answers that old path as `previousPath` (null when never published).
@@ -107,8 +113,14 @@ export interface ContentAdapter {
    * item. Each throws like the writes. `list` then never lists a trashed item unless `trashed` is true, and then only
    * those. The package's `runSchedules` deletes items trashed more than TRASH_DAYS ago, through `delete`.
    */
-  trash?(id: string, input: { expectedVersion: string; changeId: string; actor?: Actor }): Promise<WriteResult>;
-  restore?(id: string, input: { expectedVersion: string; changeId: string; actor?: Actor }): Promise<WriteResult>;
+  trash?(
+    id: string,
+    input: { expectedVersion: string; changeId: string; actor?: Actor },
+  ): Promise<WriteResult>;
+  restore?(
+    id: string,
+    input: { expectedVersion: string; changeId: string; actor?: Actor },
+  ): Promise<WriteResult>;
   /**
    * Optional (v0.22.0, capabilities.backlinks): every other post that links to this one, so a delete or a trash warns with
    * the list first. The package checks the id exists before it asks. Absent: `GET /content/:id/backlinks` answers 501.
@@ -207,21 +219,39 @@ export interface MediaAdapter {
    * identifies its editable metadata, so each write here moves it. The write and whatever must
    * follow it (a cache purge) are one unit, run together in the method.
    */
-  setAlt?(id: string, input: { alt: string; decorative?: boolean; expectedVersion: string; changeId: string }): Promise<{ version: string }>;
+  setAlt?(
+    id: string,
+    input: { alt: string; decorative?: boolean; expectedVersion: string; changeId: string },
+  ): Promise<{ version: string }>;
   /** `tags` is the whole set after the write, already in the contract's spelling. */
-  setTags?(id: string, input: { tags: string[]; expectedVersion: string; changeId: string }): Promise<{ version: string }>;
+  setTags?(
+    id: string,
+    input: { tags: string[]; expectedVersion: string; changeId: string },
+  ): Promise<{ version: string }>;
   /** Soft delete: hides the file from list and removes nothing. Both trash and restore, or neither. */
-  trash?(id: string, input: { expectedVersion: string; changeId: string }): Promise<{ version: string }>;
-  restore?(id: string, input: { expectedVersion: string; changeId: string }): Promise<{ version: string }>;
+  trash?(
+    id: string,
+    input: { expectedVersion: string; changeId: string },
+  ): Promise<{ version: string }>;
+  restore?(
+    id: string,
+    input: { expectedVersion: string; changeId: string },
+  ): Promise<{ version: string }>;
   /**
    * Optional (v0.10.0), each answering 501 when absent, and each throwing and moving the version like the writes above.
    * `focus` is already in the form site-runtime's ./image writes (`focusOf`), or null to clear it; a site on R2 keeps it
    * as the object's customMetadata `focus` (FOCUS_METADATA), which `writeFocus` from `@dustinedwards/site-api/r2` does.
    * Every item the site answers then carries `focus`.
    */
-  setFocus?(id: string, input: { focus: string | null; expectedVersion: string; changeId: string }): Promise<{ version: string }>;
+  setFocus?(
+    id: string,
+    input: { focus: string | null; expectedVersion: string; changeId: string },
+  ): Promise<{ version: string }>;
   /** Every item the site answers then carries `caption` ("" for none). */
-  setCaption?(id: string, input: { caption: string; expectedVersion: string; changeId: string }): Promise<{ version: string }>;
+  setCaption?(
+    id: string,
+    input: { caption: string; expectedVersion: string; changeId: string },
+  ): Promise<{ version: string }>;
   /**
    * Optional (v0.10.0): replaces the file's bytes under the same id and address, so every page that uses it shows the
    * new one. The package has already checked the bytes against the site's limits, that the file exists, that its version
@@ -280,7 +310,10 @@ export interface MediaAdapter {
    * The package has checked the file and its version, that `to` is in the history and is not current, and, on a site whose
    * `replaceKeepsSize`, that its size is the current one's. Alt, caption, tags and credit stay; the focal point is cleared.
    */
-  revert?(id: string, input: { to: string; expectedVersion: string; changeId: string }): Promise<{ item: MediaItem; sizesNeedPurge: boolean }>;
+  revert?(
+    id: string,
+    input: { to: string; expectedVersion: string; changeId: string },
+  ): Promise<{ item: MediaItem; sizesNeedPurge: boolean }>;
   /**
    * Every file changed since `since`, a `changeCursor` the site answered on a list (capabilities.mediaChanges: with it,
    * every `list` answer carries `changeCursor`). A change is any write that moves a file's version or bytes, an upload,
@@ -288,14 +321,20 @@ export interface MediaAdapter {
    * removed ids together, the oldest changes first, `more` when others wait. `cursor` is where the next poll starts.
    * Throws RefusedError for a cursor it can no longer answer from, and the screen reloads its page.
    */
-  changes?(input: { since: string; limit: number }): Promise<{ items: MediaItem[]; removed: string[]; cursor: string; more: boolean }>;
+  changes?(input: {
+    since: string;
+    limit: number;
+  }): Promise<{ items: MediaItem[]; removed: string[]; cursor: string; more: boolean }>;
   /**
    * Shrinks one stored picture to `resize` (capabilities.mediaResizePass), in place, keeping the old bytes where the site
    * keeps history. Throws VersionConflictError, NotFoundError or RefusedError like the writes; `resized: false` and the
    * same version for a picture already within the size. On a site whose `replaceKeepsSize` (v0.22.0) the shrink must keep the
    * picture's proportions and only make it smaller, which the package checks; a site whose addresses carry the size leaves it out.
    */
-  shrink?(id: string, input: { expectedVersion: string; changeId: string }): Promise<{ resized: boolean; item: MediaItem }>;
+  shrink?(
+    id: string,
+    input: { expectedVersion: string; changeId: string },
+  ): Promise<{ resized: boolean; item: MediaItem }>;
   /**
    * What the site's model suggests for the file (capabilities.mediaSuggestions): tags and alt text, never applied. The
    * model is the site's choice (on Dustin's sites, Workers AI through Cloudflare AI Gateway). null when the id does not
@@ -308,7 +347,10 @@ export interface MediaAdapter {
    * has checked the bytes as an upload's. Nothing is stored. With `mediaSuggester`:
    * `suggestFile: ({ bytes }) => suggest(env, new Response(toArrayBuffer(bytes)).body!)`.
    */
-  suggestFile?(input: { bytes: Uint8Array; contentType: string }): Promise<{ tags: string[]; alt: string | null; model: string }>;
+  suggestFile?(input: {
+    bytes: Uint8Array;
+    contentType: string;
+  }): Promise<{ tags: string[]; alt: string | null; model: string }>;
 }
 
 /** One replace (v0.10.0), already checked by the package. */
@@ -345,7 +387,10 @@ export interface MentionsAdapter {
     input: { expectedVersion: string; changeId: string },
   ): Promise<{ status: MentionStatus; version: string; purged: boolean | null }>;
   /** Removes the only copy of what a stranger sent. */
-  delete(id: string, input: { expectedVersion: string; changeId: string }): Promise<{ purged: boolean | null }>;
+  delete(
+    id: string,
+    input: { expectedVersion: string; changeId: string },
+  ): Promise<{ purged: boolean | null }>;
   /** Removes failed and rejected mentions past the site's retention windows, and reports how many. */
   sweep(input: { changeId: string }): Promise<{ failed: number; rejected: number }>;
 }
@@ -378,13 +423,25 @@ export interface SchedulesAdapter {
    * Stores the update on a live item, replacing any update already waiting (a reschedule). The item stays live and
    * unchanged. Refuse (RefusedError) an item that is not live: the package sends only live items here.
    */
-  update(id: string, input: { source: string; publishAt: string; expectedVersion: string; changeId: string; actor?: Actor }): Promise<WriteResult>;
+  update(
+    id: string,
+    input: {
+      source: string;
+      publishAt: string;
+      expectedVersion: string;
+      changeId: string;
+      actor?: Actor;
+    },
+  ): Promise<WriteResult>;
   /**
    * Cancels the schedule. A live item drops its waiting update and stays live; a scheduled item that was never live
    * returns to draft. Throws NotFoundError for a missing id (checked first), and RefusedError for an item with nothing
    * scheduled.
    */
-  cancel(id: string, input: { expectedVersion: string; changeId: string; actor?: Actor }): Promise<WriteResult>;
+  cancel(
+    id: string,
+    input: { expectedVersion: string; changeId: string; actor?: Actor },
+  ): Promise<WriteResult>;
   /** Every schedule due at `now`, scheduled items and live items' updates alike, oldest first, at most `limit`. */
   due(input: { now: Date; limit: number }): Promise<DueSchedule[]>;
   /**
@@ -439,7 +496,10 @@ export interface SiteAdapter {
  * Stage 2 implemented content and preview; v0.2.0 adds media for a site whose adapter has it. The
  * other groups answer 501 until their stage. `store` (v0.17.0): the site gave createSiteApi a store.
  */
-export function capabilitiesOf(adapter: SiteAdapter, options: { store?: boolean; hooks?: readonly string[] } = {}): Capabilities {
+export function capabilitiesOf(
+  adapter: SiteAdapter,
+  options: { store?: boolean; hooks?: readonly string[] } = {},
+): Capabilities {
   return {
     content: true,
     preview: true,
@@ -455,7 +515,9 @@ export function capabilitiesOf(adapter: SiteAdapter, options: { store?: boolean;
     ...(adapter.content.rename ? { contentRename: true } : {}),
     ...(hasContentTrash(adapter) ? { contentTrash: true } : {}),
     ...(contentFiltersOf(adapter).length ? { contentFilters: contentFiltersOf(adapter) } : {}),
-    ...(adapter.content.searchFields?.length ? { searchFields: [...adapter.content.searchFields] } : {}),
+    ...(adapter.content.searchFields?.length
+      ? { searchFields: [...adapter.content.searchFields] }
+      : {}),
     ...(adapter.content.postFields?.length ? { postFields: [...adapter.content.postFields] } : {}),
     ...(adapter.media?.setAlt ? { mediaAlt: true } : {}),
     ...(adapter.media?.lenses?.length ? { mediaLenses: [...adapter.media.lenses] } : {}),
@@ -464,7 +526,9 @@ export function capabilitiesOf(adapter: SiteAdapter, options: { store?: boolean;
     ...(adapter.media?.setFocus ? { mediaFocus: true } : {}),
     ...(adapter.media?.setCaption ? { mediaCaption: true } : {}),
     ...(adapter.media?.replace ? { mediaReplace: true } : {}),
-    ...(adapter.media?.replace && adapter.media.replaceKeepsSize ? { mediaReplaceKeepsSize: true } : {}),
+    ...(adapter.media?.replace && adapter.media.replaceKeepsSize
+      ? { mediaReplaceKeepsSize: true }
+      : {}),
     ...(adapter.media?.findByHash ? { mediaDuplicates: true } : {}),
     ...(adapter.media?.usage ? { mediaUsage: true } : {}),
     ...(adapter.media?.filters ? { mediaFilters: true } : {}),
@@ -481,7 +545,9 @@ export function capabilitiesOf(adapter: SiteAdapter, options: { store?: boolean;
     ...(adapter.mentions ? { mentions: true } : {}),
     ...(adapter.mentions?.reset ? { mentionReset: true } : {}),
     ...(adapter.schedules ? { scheduledUpdates: true } : {}),
-    ...(options.store ? { replay: true, previewLinks: true, previewLinkHours: { max: PREVIEW_LINK_MAX_HOURS } } : {}),
+    ...(options.store
+      ? { replay: true, previewLinks: true, previewLinkHours: { max: PREVIEW_LINK_MAX_HOURS } }
+      : {}),
     ...(options.store && options.hooks?.length ? { hooks: [...options.hooks] } : {}),
     ...(adapter.content.backlinks ? { backlinks: true } : {}),
     ...(adapter.renderVersion ? { render: { version: adapter.renderVersion } } : {}),
@@ -492,7 +558,9 @@ export function capabilitiesOf(adapter: SiteAdapter, options: { store?: boolean;
 /** Trash and restore, and the delete that empties the trash (v0.17.0). */
 export function hasContentTrash(adapter: SiteAdapter): boolean {
   const { content } = adapter;
-  return content.trash !== undefined && content.restore !== undefined && content.delete !== undefined;
+  return (
+    content.trash !== undefined && content.restore !== undefined && content.delete !== undefined
+  );
 }
 
 /** The list filters the site applies (v0.17.0), in the contract's order. */
@@ -501,7 +569,6 @@ export function contentFiltersOf(adapter: SiteAdapter): ContentFilter[] {
   if (hasContentTrash(adapter)) offered.add("trashed");
   return CONTENT_FILTERS.filter((f) => offered.has(f));
 }
-
 
 /**
  * A content version made from the fields that identify an item's own content: the first 32 hex
@@ -514,7 +581,10 @@ export async function contentVersion(parts: readonly unknown[]): Promise<string>
 
 /** The expectedVersion on a write is not what the site holds. currentVersion null: no such id. */
 export class VersionConflictError extends Error {
-  constructor(readonly currentVersion: string | null, message = "The content changed since it was loaded.") {
+  constructor(
+    readonly currentVersion: string | null,
+    message = "The content changed since it was loaded.",
+  ) {
     super(message);
     this.name = "VersionConflictError";
   }
@@ -529,7 +599,10 @@ export class NotFoundError extends Error {
 
 /** The site's reference check found the file in use: the delete is refused, naming every use. */
 export class MediaInUseError extends Error {
-  constructor(readonly usedBy: MediaUse[], message?: string) {
+  constructor(
+    readonly usedBy: MediaUse[],
+    message?: string,
+  ) {
     super(message ?? `The file is in use: ${describeUses(usedBy)}. Remove it from each first.`);
     this.name = "MediaInUseError";
   }

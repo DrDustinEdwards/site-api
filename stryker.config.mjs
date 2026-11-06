@@ -8,7 +8,12 @@ const CHUNKS = {
   server: ["src/server.ts", "src/server/**/*.ts"],
   admin: ["src/admin.ts", "src/admin/**/*.ts"],
 };
-CHUNKS.rest = [...ALL, ...Object.values(CHUNKS).flat().map((glob) => `!${glob}`)];
+CHUNKS.rest = [
+  ...ALL,
+  ...Object.values(CHUNKS)
+    .flat()
+    .map((glob) => `!${glob}`),
+];
 
 const chunk = process.env.STRYKER_CHUNK;
 if (chunk && !CHUNKS[chunk]) {

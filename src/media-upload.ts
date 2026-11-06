@@ -13,9 +13,12 @@ import { MediaPlaceholder, type MediaResize, type MediaUploadLimits } from "./co
 import { checkUpload } from "./media.js";
 import { toArrayBuffer } from "./media-kit.js";
 
-const ascii = (b: Uint8Array, from: number, length: number) => String.fromCharCode(...b.subarray(from, from + length));
-const u32be = (b: Uint8Array, at: number) => ((b[at]! << 24) | (b[at + 1]! << 16) | (b[at + 2]! << 8) | b[at + 3]!) >>> 0;
-const u32le = (b: Uint8Array, at: number) => (b[at]! | (b[at + 1]! << 8) | (b[at + 2]! << 16) | (b[at + 3]! << 24)) >>> 0;
+const ascii = (b: Uint8Array, from: number, length: number) =>
+  String.fromCharCode(...b.subarray(from, from + length));
+const u32be = (b: Uint8Array, at: number) =>
+  ((b[at]! << 24) | (b[at + 1]! << 16) | (b[at + 2]! << 8) | b[at + 3]!) >>> 0;
+const u32le = (b: Uint8Array, at: number) =>
+  (b[at]! | (b[at + 1]! << 8) | (b[at + 2]! << 16) | (b[at + 3]! << 24)) >>> 0;
 
 // ---------- Embedded metadata
 
@@ -49,11 +52,23 @@ type Facts = {
 };
 
 /** The metadata blocks one file carries, each null where it has none. */
-type Blocks = { tiff: Uint8Array | null; xmp: string | null; iptc: Uint8Array | null; text: Record<string, string> };
+type Blocks = {
+  tiff: Uint8Array | null;
+  xmp: string | null;
+  iptc: Uint8Array | null;
+  text: Record<string, string>;
+};
 
 const NONE: Blocks = { tiff: null, xmp: null, iptc: null, text: {} };
 
-const TAGS = { description: 0x010e, artist: 0x013b, copyright: 0x8298, exifIfd: 0x8769, taken: 0x9003, offset: 0x9011 } as const;
+const TAGS = {
+  description: 0x010e,
+  artist: 0x013b,
+  copyright: 0x8298,
+  exifIfd: 0x8769,
+  taken: 0x9003,
+  offset: 0x9011,
+} as const;
 
 /**
  * The fields from whichever metadata the file's type carries: a JPEG's EXIF, XMP and IPTC (APP13), a PNG's eXIf, XMP and
@@ -90,8 +105,14 @@ function blocksOf(bytes: Uint8Array, contentType: string): Blocks {
 /** The facts from each block, the first one found winning: XMP, then IPTC, then a PNG's text, then EXIF. */
 function factsOf(blocks: Blocks): Facts {
   const found: Facts = {};
-  for (const source of [safely(fromXmp, blocks.xmp), safely(fromIptc, blocks.iptc), fromPngText(blocks.text), safely(fromTiff, blocks.tiff)]) {
-    for (const [key, value] of Object.entries(source) as [keyof Facts, string | undefined][]) if (value && !found[key]) found[key] = value;
+  for (const source of [
+    safely(fromXmp, blocks.xmp),
+    safely(fromIptc, blocks.iptc),
+    fromPngText(blocks.text),
+    safely(fromTiff, blocks.tiff),
+  ]) {
+    for (const [key, value] of Object.entries(source) as [keyof Facts, string | undefined][])
+      if (value && !found[key]) found[key] = value;
   }
   return found;
 }
@@ -146,7 +167,8 @@ const XMP_PNG = "XML:com.adobe.xmp";
 
 const isExif = (s: Segment) => s.marker === 0xe1 && ascii(s.data, 0, 6) === EXIF_JPEG;
 const isXmp = (s: Segment) => s.marker === 0xe1 && ascii(s.data, 0, XMP_JPEG.length) === XMP_JPEG;
-const isIptc = (s: Segment) => s.marker === 0xed && ascii(s.data, 0, IPTC_JPEG.length) === IPTC_JPEG;
+const isIptc = (s: Segment) =>
+  s.marker === 0xed && ascii(s.data, 0, IPTC_JPEG.length) === IPTC_JPEG;
 
 function jpegBlocks(b: Uint8Array): Blocks {
   if (b[0] !== 0xff || b[1] !== 0xd8) return NONE;
@@ -163,13 +185,20 @@ function jpegBlocks(b: Uint8Array): Blocks {
 }
 
 /** One RIFF chunk of a WebP: its FourCC, where it starts and ends (padding included), and its data. */
-function riffChunks(b: Uint8Array): { fourcc: string; at: number; end: number; data: Uint8Array }[] {
+function riffChunks(
+  b: Uint8Array,
+): { fourcc: string; at: number; end: number; data: Uint8Array }[] {
   const chunks = [];
   let at = 12;
   while (at + 8 <= b.length) {
     const size = u32le(b, at + 4);
     const end = Math.min(at + 8 + size + (size % 2), b.length);
-    chunks.push({ fourcc: ascii(b, at, 4), at, end, data: b.subarray(at + 8, Math.min(at + 8 + size, b.length)) });
+    chunks.push({
+      fourcc: ascii(b, at, 4),
+      at,
+      end,
+      data: b.subarray(at + 8, Math.min(at + 8 + size, b.length)),
+    });
     at = end;
   }
   return chunks;
@@ -180,7 +209,12 @@ function webpBlocks(b: Uint8Array): Blocks {
   const chunks = riffChunks(b);
   const exif = chunks.find((c) => c.fourcc === "EXIF");
   const xmp = chunks.find((c) => c.fourcc === "XMP ");
-  return { tiff: exif ? tiffOf(exif.data) : null, xmp: xmp ? utf8(xmp.data) : null, iptc: null, text: {} };
+  return {
+    tiff: exif ? tiffOf(exif.data) : null,
+    xmp: xmp ? utf8(xmp.data) : null,
+    iptc: null,
+    text: {},
+  };
 }
 
 /** Some writers keep the JPEG segment's "Exif\0\0" in front of the TIFF header. */
@@ -206,7 +240,8 @@ function pngText(type: string, data: Uint8Array): { keyword: string; value?: str
   const nul = data.indexOf(0);
   if (nul < 1 || !["tEXt", "iTXt", "zTXt"].includes(type)) return null;
   const keyword = new TextDecoder("latin1").decode(data.subarray(0, nul));
-  if (type === "tEXt") return { keyword, value: new TextDecoder("latin1").decode(data.subarray(nul + 1)) };
+  if (type === "tEXt")
+    return { keyword, value: new TextDecoder("latin1").decode(data.subarray(nul + 1)) };
   if (type === "zTXt" || data[nul + 1] !== 0) return { keyword };
   // Keyword, compression flag and method, language tag, translated keyword, then the text.
   const lang = data.indexOf(0, nul + 3);
@@ -258,12 +293,16 @@ function heifItems(b: Uint8Array): HeifItem[] {
   for (const infe of boxes(b, iinf.start + (b[iinf.start] === 0 ? 6 : 8), iinf.end)) {
     const version = b[infe.start]!;
     if (infe.type !== "infe" || version < 2) continue;
-    const id = version === 2 ? (b[infe.start + 4]! << 8) | b[infe.start + 5]! : u32be(b, infe.start + 4);
+    const id =
+      version === 2 ? (b[infe.start + 4]! << 8) | b[infe.start + 5]! : u32be(b, infe.start + 4);
     const typeAt = infe.start + 4 + (version === 2 ? 2 : 4) + 2;
     const type = ascii(b, typeAt, 4);
     // A mime item: its name, then its content type, each ending in NUL.
     const nameEnd = b.indexOf(0, typeAt + 4);
-    const mime = nameEnd === -1 ? "" : ascii(b, nameEnd + 1, Math.max(0, b.indexOf(0, nameEnd + 1) - nameEnd - 1));
+    const mime =
+      nameEnd === -1
+        ? ""
+        : ascii(b, nameEnd + 1, Math.max(0, b.indexOf(0, nameEnd + 1) - nameEnd - 1));
     if (type === "Exif") kinds.set(id, "exif");
     else if (type === "mime" && mime === "application/rdf+xml") kinds.set(id, "xmp");
   }
@@ -271,10 +310,22 @@ function heifItems(b: Uint8Array): HeifItem[] {
 
   const version = b[iloc.start]!;
   let at = iloc.start + 4;
-  const [offsetSize, lengthSize, baseSize, indexSize] = [b[at]! >> 4, b[at]! & 15, b[at + 1]! >> 4, version > 0 ? b[at + 1]! & 15 : 0];
+  const [offsetSize, lengthSize, baseSize, indexSize] = [
+    b[at]! >> 4,
+    b[at]! & 15,
+    b[at + 1]! >> 4,
+    version > 0 ? b[at + 1]! & 15 : 0,
+  ];
   at += 2;
   const read = (size: number) => {
-    const value = size === 8 ? u32be(b, at) * 2 ** 32 + u32be(b, at + 4) : size === 4 ? u32be(b, at) : size === 2 ? (b[at]! << 8) | b[at + 1]! : 0;
+    const value =
+      size === 8
+        ? u32be(b, at) * 2 ** 32 + u32be(b, at + 4)
+        : size === 4
+          ? u32be(b, at)
+          : size === 2
+            ? (b[at]! << 8) | b[at + 1]!
+            : 0;
     at += size;
     return value;
   };
@@ -310,11 +361,20 @@ function heifBlocks(b: Uint8Array): Blocks {
   const items = heifItems(b);
   const exif = items.find((i) => i.kind === "exif");
   const xmp = items.find((i) => i.kind === "xmp");
-  return { tiff: exif ? heifTiff(exif.data) : null, xmp: xmp ? utf8(xmp.data) : null, iptc: null, text: {} };
+  return {
+    tiff: exif ? heifTiff(exif.data) : null,
+    xmp: xmp ? utf8(xmp.data) : null,
+    iptc: null,
+    text: {},
+  };
 }
 
 /** The boxes between two offsets: each one's type and where its contents start and end. */
-function boxes(b: Uint8Array, from: number, to: number): { type: string; start: number; end: number }[] {
+function boxes(
+  b: Uint8Array,
+  from: number,
+  to: number,
+): { type: string; start: number; end: number }[] {
   const found = [];
   let at = from;
   while (at + 8 <= to) {
@@ -333,7 +393,21 @@ function boxes(b: Uint8Array, from: number, to: number): { type: string; start: 
 type Entry = { tag: number; type: number; count: number; value: Uint8Array };
 
 /** Bytes per value of each TIFF field type. */
-const TYPE_BYTES: Record<number, number> = { 1: 1, 2: 1, 3: 2, 4: 4, 5: 8, 6: 1, 7: 1, 8: 2, 9: 4, 10: 8, 11: 4, 12: 8, 13: 4 };
+const TYPE_BYTES: Record<number, number> = {
+  1: 1,
+  2: 1,
+  3: 2,
+  4: 4,
+  5: 8,
+  6: 1,
+  7: 1,
+  8: 2,
+  9: 4,
+  10: 8,
+  11: 4,
+  12: 8,
+  13: 4,
+};
 
 /** A TIFF block's byte order and its IFD0 and EXIF IFD entries; null for anything that is not one. */
 function tiffEntries(tiff: Uint8Array): { little: boolean; ifd0: Entry[]; exif: Entry[] } | null {
@@ -349,7 +423,11 @@ function tiffEntries(tiff: Uint8Array): { little: boolean; ifd0: Entry[]; exif: 
     for (let i = 0; i < n; i++) {
       const at = start + 2 + i * 12;
       if (at + 12 > tiff.length) break;
-      const [tag, type, count] = [view.getUint16(at, little), view.getUint16(at + 2, little), view.getUint32(at + 4, little)];
+      const [tag, type, count] = [
+        view.getUint16(at, little),
+        view.getUint16(at + 2, little),
+        view.getUint32(at + 4, little),
+      ];
       const length = (TYPE_BYTES[type] ?? 0) * count;
       const from = length <= 4 ? at + 8 : view.getUint32(at + 8, little);
       if (length === 0 || from + length > tiff.length) continue;
@@ -359,7 +437,9 @@ function tiffEntries(tiff: Uint8Array): { little: boolean; ifd0: Entry[]; exif: 
   };
   const ifd0 = ifd(view.getUint32(4, little));
   const pointer = ifd0.find((e) => e.tag === TAGS.exifIfd && e.value.length === 4);
-  const exif = pointer ? ifd(new DataView(pointer.value.buffer, pointer.value.byteOffset, 4).getUint32(0, little)) : [];
+  const exif = pointer
+    ? ifd(new DataView(pointer.value.buffer, pointer.value.byteOffset, 4).getUint32(0, little))
+    : [];
   return { little, ifd0, exif };
 }
 
@@ -392,7 +472,11 @@ function exifDate(value: string | undefined, offset: string | undefined): string
 const ENTITIES: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'" };
 const unxml = (s: string) =>
   s.replace(/&(#x[0-9a-f]+|#\d+|\w+);/gi, (m, e: string) =>
-    e[0] === "#" ? String.fromCodePoint(e[1] === "x" || e[1] === "X" ? Number.parseInt(e.slice(2), 16) : Number(e.slice(1))) : (ENTITIES[e] ?? m),
+    e[0] === "#"
+      ? String.fromCodePoint(
+          e[1] === "x" || e[1] === "X" ? Number.parseInt(e.slice(2), 16) : Number(e.slice(1)),
+        )
+      : (ENTITIES[e] ?? m),
   );
 
 /**
@@ -411,8 +495,12 @@ function xmpValue(xmp: string, name: string): string | undefined {
   const items = [...inner.matchAll(/<rdf:li\b([^>]*)>([\s\S]*?)<\/rdf:li>/g)];
   const plain = (s: string) => unxml(s.replace(/<[^>]+>/g, "")).trim();
   if (items.length === 0) return plain(inner);
-  if (/<rdf:Alt\b/.test(inner)) return plain((items.find((i) => /xml:lang\s*=\s*["']x-default/.test(i[1]!)) ?? items[0]!)[2]!);
-  return items.map((i) => plain(i[2]!)).filter(Boolean).join(", ");
+  if (/<rdf:Alt\b/.test(inner))
+    return plain((items.find((i) => /xml:lang\s*=\s*["']x-default/.test(i[1]!)) ?? items[0]!)[2]!);
+  return items
+    .map((i) => plain(i[2]!))
+    .filter(Boolean)
+    .join(", ");
 }
 
 /** The IPTC Photo Metadata properties in XMP: Dublin Core, Photoshop, XMP Rights and PLUS. */
@@ -426,7 +514,11 @@ function fromXmp(xmp: string): Facts {
     licenseUrl: address(xmpValue(xmp, "xmpRights:WebStatement")),
     acquireLicenseUrl: address(xmpValue(xmp, "plus:LicensorURL")),
     caption: text(xmpValue(xmp, "dc:description"), 2000),
-    takenAt: created && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})?$/.test(created) ? created : undefined,
+    takenAt:
+      created &&
+      /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})?$/.test(created)
+        ? created
+        : undefined,
   };
 }
 
@@ -443,11 +535,15 @@ function fromIptc(resources: Uint8Array): Facts {
     const sizeAt = at + 6 + ((resources[at + 6]! + 2) & ~1);
     const size = u32be(resources, sizeAt);
     const data = resources.subarray(sizeAt + 4, sizeAt + 4 + size);
-    for (let i = 0; id === 0x0404 && i + 5 <= data.length && data[i] === 0x1c; ) {
+    for (let i = 0; id === 0x0404 && i + 5 <= data.length && data[i] === 0x1c;) {
       const length = (data[i + 3]! << 8) | data[i + 4]!;
       // An extended length (the top bit) is only for large binary data sets, never these.
       if (length & 0x8000) break;
-      if (data[i + 1] === 2) found.set(data[i + 2]!, [...(found.get(data[i + 2]!) ?? []), utf8(data.subarray(i + 5, i + 5 + length))]);
+      if (data[i + 1] === 2)
+        found.set(data[i + 2]!, [
+          ...(found.get(data[i + 2]!) ?? []),
+          utf8(data.subarray(i + 5, i + 5 + length)),
+        ]);
       i += 5 + length;
     }
     at = sizeAt + 4 + size + (size % 2);
@@ -463,7 +559,16 @@ function fromIptc(resources: Uint8Array): Facts {
 // ---------- Private metadata
 
 /** IFD0 tags a cleaned file keeps: description, orientation, resolution, chroma siting, artist and copyright. */
-const KEEP_IFD0 = new Set([TAGS.description, 0x0112, 0x011a, 0x011b, 0x0128, 0x0213, TAGS.artist, TAGS.copyright]);
+const KEEP_IFD0 = new Set([
+  TAGS.description,
+  0x0112,
+  0x011a,
+  0x011b,
+  0x0128,
+  0x0213,
+  TAGS.artist,
+  TAGS.copyright,
+]);
 /** EXIF IFD tags it keeps: the EXIF version and the color space. */
 const KEEP_EXIF = new Set([0x9000, 0xa001]);
 
@@ -477,11 +582,13 @@ function keptTiff(tiff: Uint8Array): Uint8Array | null {
   const exif = read.exif.filter((e) => KEEP_EXIF.has(e.tag));
   const ifd0 = read.ifd0.filter((e) => KEEP_IFD0.has(e.tag));
   if (ifd0.length === 0) return null;
-  if (exif.length > 0) ifd0.push({ tag: TAGS.exifIfd, type: 4, count: 1, value: new Uint8Array(4) });
+  if (exif.length > 0)
+    ifd0.push({ tag: TAGS.exifIfd, type: 4, count: 1, value: new Uint8Array(4) });
   ifd0.sort((a, b) => a.tag - b.tag);
 
   const little = read.little;
-  const outside = (entries: Entry[]) => entries.reduce((sum, e) => sum + (e.value.length > 4 ? (e.value.length + 1) & ~1 : 0), 0);
+  const outside = (entries: Entry[]) =>
+    entries.reduce((sum, e) => sum + (e.value.length > 4 ? (e.value.length + 1) & ~1 : 0), 0);
   const size = (entries: Entry[]) => 2 + entries.length * 12 + 4;
   const exifAt = 8 + size(ifd0) + outside(ifd0);
   const out = new Uint8Array(exifAt + (exif.length > 0 ? size(exif) + outside(exif) : 0));
@@ -515,9 +622,11 @@ function keptTiff(tiff: Uint8Array): Uint8Array | null {
  * reads for its credit and Licensable badge; null when there is none of them.
  */
 function xmpPacket(f: Facts): Uint8Array | null {
-  const alt = (v: string) => `<rdf:Alt><rdf:li xml:lang="x-default">${escapeXml(v)}</rdf:li></rdf:Alt>`;
+  const alt = (v: string) =>
+    `<rdf:Alt><rdf:li xml:lang="x-default">${escapeXml(v)}</rdf:li></rdf:Alt>`;
   const props = [
-    f.creator && `<dc:creator><rdf:Seq><rdf:li>${escapeXml(f.creator)}</rdf:li></rdf:Seq></dc:creator>`,
+    f.creator &&
+      `<dc:creator><rdf:Seq><rdf:li>${escapeXml(f.creator)}</rdf:li></rdf:Seq></dc:creator>`,
     f.copyright && `<dc:rights>${alt(f.copyright)}</dc:rights>`,
     f.caption && `<dc:description>${alt(f.caption)}</dc:description>`,
     f.creditLine && `<photoshop:Credit>${escapeXml(f.creditLine)}</photoshop:Credit>`,
@@ -546,7 +655,8 @@ const XMP_NAMESPACES = {
 };
 
 /** The XMP a cleaned file keeps: written only where the file had XMP or IPTC, which the clean removes. */
-const freshXmp = (blocks: Blocks) => (blocks.xmp !== null || blocks.iptc !== null ? xmpPacket(factsOf(blocks)) : null);
+const freshXmp = (blocks: Blocks) =>
+  blocks.xmp !== null || blocks.iptc !== null ? xmpPacket(factsOf(blocks)) : null;
 
 const bytesOf = (s: string) => Uint8Array.from(s, (c) => c.charCodeAt(0));
 
@@ -560,7 +670,8 @@ function concat(parts: Uint8Array[]): Uint8Array {
   return out;
 }
 
-const same = (a: Uint8Array, b: Uint8Array) => a.length === b.length && a.every((v, i) => v === b[i]);
+const same = (a: Uint8Array, b: Uint8Array) =>
+  a.length === b.length && a.every((v, i) => v === b[i]);
 
 /**
  * The picture without its private metadata (v0.19.0; v0.15.0's stripLocation took out only the location): no GPS, camera
@@ -575,7 +686,16 @@ const same = (a: Uint8Array, b: Uint8Array) => a.length === b.length && a.every(
  */
 export function stripMetadata(bytes: Uint8Array, contentType: string): Uint8Array {
   try {
-    const out = contentType === "image/jpeg" ? cleanJpeg(bytes) : contentType === "image/png" ? cleanPng(bytes) : contentType === "image/webp" ? cleanWebp(bytes) : HEIF.has(contentType) ? cleanHeif(bytes) : bytes;
+    const out =
+      contentType === "image/jpeg"
+        ? cleanJpeg(bytes)
+        : contentType === "image/png"
+          ? cleanPng(bytes)
+          : contentType === "image/webp"
+            ? cleanWebp(bytes)
+            : HEIF.has(contentType)
+              ? cleanHeif(bytes)
+              : bytes;
     return same(out, bytes) ? bytes : out;
   } catch {
     // A block too malformed to walk is left as it came, as readEmbedded leaves it unread.
@@ -594,8 +714,8 @@ export async function duplicateKey(bytes: Uint8Array, contentType: string): Prom
   return sha256Hex(stripMetadata(bytes, contentType));
 }
 
-
-const jpegSegment = (marker: number, data: Uint8Array) => concat([new Uint8Array([0xff, marker, (data.length + 2) >> 8, (data.length + 2) & 0xff]), data]);
+const jpegSegment = (marker: number, data: Uint8Array) =>
+  concat([new Uint8Array([0xff, marker, (data.length + 2) >> 8, (data.length + 2) & 0xff]), data]);
 
 /** Where a JPEG's first picture ends, after its EOI, from the start of its first scan; the file's end where it has none. */
 function jpegEnd(b: Uint8Array, scan: number): number {
@@ -608,7 +728,8 @@ function jpegEnd(b: Uint8Array, scan: number): number {
     const marker = b[at + 1]!;
     if (marker === 0xd9) return at + 2;
     // Stuffed bytes, restart markers and fill bytes lie inside the entropy-coded data; any other marker is a segment.
-    if (marker === 0x00 || marker === 0xff || (marker >= 0xd0 && marker <= 0xd7)) at += marker === 0xff ? 1 : 2;
+    if (marker === 0x00 || marker === 0xff || (marker >= 0xd0 && marker <= 0xd7))
+      at += marker === 0xff ? 1 : 2;
     else at += 2 + ((b[at + 2]! << 8) | b[at + 3]!);
   }
   return b.length;
@@ -627,7 +748,11 @@ function cleanJpeg(b: Uint8Array): Uint8Array {
       if (tiff) xmpAt = parts.push(jpegSegment(0xe1, concat([bytesOf(EXIF_JPEG), tiff])));
     } else if (s.marker === 0xe0 && ascii(s.data, 0, 5) === "JFIF\u0000") {
       xmpAt = parts.push(b.subarray(s.at, s.end));
-    } else if ((s.marker === 0xe2 && ascii(s.data, 0, 12) === "ICC_PROFILE\u0000") || s.marker === 0xee || s.marker < 0xe0) {
+    } else if (
+      (s.marker === 0xe2 && ascii(s.data, 0, 12) === "ICC_PROFILE\u0000") ||
+      s.marker === 0xee ||
+      s.marker < 0xe0
+    ) {
       parts.push(b.subarray(s.at, s.end));
     }
   }
@@ -651,13 +776,35 @@ function pngChunk(type: string, data: Uint8Array): Uint8Array {
   chunk.set(bytesOf(type), 4);
   chunk.set(data, 8);
   let crc = 0xffffffff;
-  for (const byte of chunk.subarray(4, 8 + data.length)) crc = CRC_TABLE[(crc ^ byte) & 0xff]! ^ (crc >>> 8);
+  for (const byte of chunk.subarray(4, 8 + data.length))
+    crc = CRC_TABLE[(crc ^ byte) & 0xff]! ^ (crc >>> 8);
   view.setUint32(8 + data.length, (crc ^ 0xffffffff) >>> 0);
   return chunk;
 }
 
 /** The PNG chunks a cleaned file keeps: the picture, its color, its size on paper and its animation (APNG). */
-const PNG_KEPT = new Set(["IHDR", "PLTE", "IDAT", "IEND", "tRNS", "cHRM", "gAMA", "iCCP", "sBIT", "sRGB", "cICP", "mDCv", "cLLi", "bKGD", "hIST", "pHYs", "sPLT", "acTL", "fcTL", "fdAT"]);
+const PNG_KEPT = new Set([
+  "IHDR",
+  "PLTE",
+  "IDAT",
+  "IEND",
+  "tRNS",
+  "cHRM",
+  "gAMA",
+  "iCCP",
+  "sBIT",
+  "sRGB",
+  "cICP",
+  "mDCv",
+  "cLLi",
+  "bKGD",
+  "hIST",
+  "pHYs",
+  "sPLT",
+  "acTL",
+  "fcTL",
+  "fdAT",
+]);
 /** The text chunks it keeps, by keyword: the picture's title, author, copyright and description. */
 const PNG_TEXT_KEPT = new Set(["Title", "Author", "Copyright", "Description"]);
 
@@ -704,7 +851,9 @@ function cleanWebp(b: Uint8Array): Uint8Array {
   const tiff = extended && exif ? keptTiff(tiffOf(exif.data)) : null;
   const xmp = extended ? freshXmp(webpBlocks(b)) : null;
   const parts: Uint8Array[] = [b.slice(0, 12)];
-  for (const c of chunks) if (RIFF_KEPT.has(c.fourcc)) parts.push(c.fourcc === "VP8X" ? b.slice(c.at, c.end) : b.subarray(c.at, c.end));
+  for (const c of chunks)
+    if (RIFF_KEPT.has(c.fourcc))
+      parts.push(c.fourcc === "VP8X" ? b.slice(c.at, c.end) : b.subarray(c.at, c.end));
   if (tiff) parts.push(riffChunk("EXIF", tiff));
   if (xmp) parts.push(riffChunk("XMP ", xmp));
   if (extended) parts[1]![8] = (parts[1]![8]! & ~0x0c) | (tiff ? 0x08 : 0) | (xmp ? 0x04 : 0);
@@ -744,9 +893,17 @@ const PLACEHOLDER_EDGE = 16;
 const PLACEHOLDER_OUTPUT = { format: "image/webp", quality: 60, anim: false };
 
 /** The bytes of one transform through the binding, or null where it failed. */
-async function transformed(images: ImagesLike, bytes: Uint8Array, transform: object, output: { format: string; quality?: number }): Promise<Uint8Array | null> {
+async function transformed(
+  images: ImagesLike,
+  bytes: Uint8Array,
+  transform: object,
+  output: { format: string; quality?: number },
+): Promise<Uint8Array | null> {
   try {
-    const result = await images.input(new Response(toArrayBuffer(bytes)).body!).transform(transform).output(output);
+    const result = await images
+      .input(new Response(toArrayBuffer(bytes)).body!)
+      .transform(transform)
+      .output(output);
     return new Uint8Array(await result.response().arrayBuffer());
   } catch {
     return null;
@@ -772,7 +929,13 @@ async function pngColor(b: Uint8Array): Promise<string | null> {
     else if (chunk === "tRNS") alphas = data;
     else if (chunk === "IEND") break;
   }
-  const row = new Uint8Array(await new Response(new Blob([toArrayBuffer(concat(idat))]).stream().pipeThrough(new DecompressionStream("deflate"))).arrayBuffer());
+  const row = new Uint8Array(
+    await new Response(
+      new Blob([toArrayBuffer(concat(idat))])
+        .stream()
+        .pipeThrough(new DecompressionStream("deflate")),
+    ).arrayBuffer(),
+  );
   // A sample is its first byte (the high one of a 16-bit sample), or for a smaller depth the top bits of that byte.
   const step = depth === 16 ? 2 : 1;
   const sample = (i: number) => (depth < 8 ? row[1]! >> (8 - depth) : row[1 + i * step]!);
@@ -804,12 +967,26 @@ async function pngColor(b: Uint8Array): Promise<string | null> {
  * is outside the contract; no color without a placeholder, so a picture the binding cannot read costs one call.
  * prepareUpload calls it for every picture the binding measured; a site calls it alone to fill files stored before.
  */
-export async function placeholderAndColor(images: ImagesLike, bytes: Uint8Array): Promise<{ placeholder: string | null; color: string | null }> {
+export async function placeholderAndColor(
+  images: ImagesLike,
+  bytes: Uint8Array,
+): Promise<{ placeholder: string | null; color: string | null }> {
   // A light blur: the page scales these few pixels up, and a soft edge reads as loading rather than as a blocky picture.
-  const tiny = await transformed(images, bytes, { width: PLACEHOLDER_EDGE, height: PLACEHOLDER_EDGE, fit: "scale-down", blur: 2 }, PLACEHOLDER_OUTPUT);
+  const tiny = await transformed(
+    images,
+    bytes,
+    { width: PLACEHOLDER_EDGE, height: PLACEHOLDER_EDGE, fit: "scale-down", blur: 2 },
+    PLACEHOLDER_OUTPUT,
+  );
   const placeholder = tiny && `data:image/webp;base64,${toBase64(tiny)}`;
-  if (!tiny || !MediaPlaceholder.safeParse(placeholder).success) return { placeholder: null, color: null };
-  const pixel = await transformed(images, tiny, { width: 1, height: 1, fit: "squeeze" }, { format: "image/png" });
+  if (!tiny || !MediaPlaceholder.safeParse(placeholder).success)
+    return { placeholder: null, color: null };
+  const pixel = await transformed(
+    images,
+    tiny,
+    { width: 1, height: 1, fit: "squeeze" },
+    { format: "image/png" },
+  );
   try {
     return { placeholder, color: pixel && (await pngColor(pixel)) };
   } catch {
@@ -822,8 +999,36 @@ export async function placeholderAndColor(images: ImagesLike, bytes: Uint8Array)
 
 /** The words of a camera's, a phone's or a screenshot tool's own file name, which say nothing a search can use. */
 const CAMERA_WORDS = new Set([
-  "img", "image", "dsc", "dscn", "dscf", "dcim", "pxl", "mvimg", "mp", "photo", "pic", "picture", "screenshot", "screen", "shot",
-  "whatsapp", "signal", "at", "am", "pm", "p", "gopr", "dji", "mg", "wp", "unnamed", "untitled", "download", "edited", "scaled",
+  "img",
+  "image",
+  "dsc",
+  "dscn",
+  "dscf",
+  "dcim",
+  "pxl",
+  "mvimg",
+  "mp",
+  "photo",
+  "pic",
+  "picture",
+  "screenshot",
+  "screen",
+  "shot",
+  "whatsapp",
+  "signal",
+  "at",
+  "am",
+  "pm",
+  "p",
+  "gopr",
+  "dji",
+  "mg",
+  "wp",
+  "unnamed",
+  "untitled",
+  "download",
+  "edited",
+  "scaled",
 ]);
 
 /** The extensions each stored type may carry, the first the one given where the name has another. */
@@ -846,7 +1051,12 @@ export function fileNameFor(filename: string, contentType: string, words: string
   const dot = filename.lastIndexOf(".");
   let stem = dot > 0 ? filename.slice(0, dot) : filename;
   const ext = dot > 0 ? filename.slice(dot + 1).toLowerCase() : "";
-  const camera = /^[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}/i.test(stem) || stem.toLowerCase().split(/[^a-z]+/).every((w) => w === "" || CAMERA_WORDS.has(w));
+  const camera =
+    /^[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}/i.test(stem) ||
+    stem
+      .toLowerCase()
+      .split(/[^a-z]+/)
+      .every((w) => w === "" || CAMERA_WORDS.has(w));
   const slug = words
     .normalize("NFKD")
     .replace(/\p{M}+/gu, "")
@@ -854,9 +1064,19 @@ export function fileNameFor(filename: string, contentType: string, words: string
     .replace(/[^\p{L}\p{N}]+/gu, "-")
     .replace(/^(?:an?|the)-/, "")
     .replace(/^-+|-+$/g, "");
-  if (camera && slug) stem = slug.length > 60 ? slug.slice(0, slug.lastIndexOf("-", 60) > 20 ? slug.lastIndexOf("-", 60) : 60) : slug;
+  if (camera && slug)
+    stem =
+      slug.length > 60
+        ? slug.slice(0, slug.lastIndexOf("-", 60) > 20 ? slug.lastIndexOf("-", 60) : 60)
+        : slug;
   const allowed = EXTENSIONS[contentType];
-  return (allowed && !allowed.includes(ext) ? `${stem}.${allowed[0]}` : dot > 0 ? `${stem}.${filename.slice(dot + 1)}` : stem).slice(0, 200);
+  return (
+    allowed && !allowed.includes(ext)
+      ? `${stem}.${allowed[0]}`
+      : dot > 0
+        ? `${stem}.${filename.slice(dot + 1)}`
+        : stem
+  ).slice(0, 200);
 }
 
 // ---------- The upload step
@@ -919,10 +1139,21 @@ export interface PreparedUpload {
 }
 
 /** The picture's width and height by the binding; null when it reports none or cannot read the file. */
-async function measure(images: UploadImages, bytes: Uint8Array): Promise<{ width: number; height: number } | null> {
+async function measure(
+  images: UploadImages,
+  bytes: Uint8Array,
+): Promise<{ width: number; height: number } | null> {
   try {
-    const info = (await images.info(new Response(toArrayBuffer(bytes)).body!)) as { width?: unknown; height?: unknown };
-    return typeof info.width === "number" && typeof info.height === "number" && info.width > 0 && info.height > 0 ? { width: info.width, height: info.height } : null;
+    const info = (await images.info(new Response(toArrayBuffer(bytes)).body!)) as {
+      width?: unknown;
+      height?: unknown;
+    };
+    return typeof info.width === "number" &&
+      typeof info.height === "number" &&
+      info.width > 0 &&
+      info.height > 0
+      ? { width: info.width, height: info.height }
+      : null;
   } catch {
     return null;
   }
@@ -937,9 +1168,16 @@ async function measure(images: UploadImages, bytes: Uint8Array): Promise<{ width
  * the stored bytes where the binding could measure them; and the hashes. Throws RefusedError
  * for bytes outside the limits or a HEIC the binding cannot convert.
  */
-export async function prepareUpload(images: UploadImages, input: MediaUpload, options: PrepareUploadOptions = {}): Promise<PreparedUpload> {
+export async function prepareUpload(
+  images: UploadImages,
+  input: MediaUpload,
+  options: PrepareUploadOptions = {},
+): Promise<PreparedUpload> {
   if (options.limits) {
-    if (input.bytes.byteLength > options.limits.maxBytes) throw new RefusedError(`The file is larger than this site accepts (${options.limits.maxBytes} bytes).`);
+    if (input.bytes.byteLength > options.limits.maxBytes)
+      throw new RefusedError(
+        `The file is larger than this site accepts (${options.limits.maxBytes} bytes).`,
+      );
     const refusal = checkUpload(input.contentType, input.bytes, options.limits);
     if (refusal) throw new RefusedError(refusal.message);
   }
@@ -951,9 +1189,15 @@ export async function prepareUpload(images: UploadImages, input: MediaUpload, op
   const converted = CONVERTED.has(contentType);
   if (converted) {
     try {
-      bytes = new Uint8Array(await (await editImage(images, toArrayBuffer(bytes), { format: "image/jpeg", quality })).arrayBuffer());
+      bytes = new Uint8Array(
+        await (
+          await editImage(images, toArrayBuffer(bytes), { format: "image/jpeg", quality })
+        ).arrayBuffer(),
+      );
     } catch (error) {
-      throw new RefusedError(`Cloudflare Images could not convert the picture to JPEG, so nothing was stored (${error instanceof Error ? error.message : String(error)}).`);
+      throw new RefusedError(
+        `Cloudflare Images could not convert the picture to JPEG, so nothing was stored (${error instanceof Error ? error.message : String(error)}).`,
+      );
     }
     contentType = "image/jpeg";
   }
@@ -967,18 +1211,35 @@ export async function prepareUpload(images: UploadImages, input: MediaUpload, op
   let resizedFrom: PreparedUpload["resizedFrom"];
   let original: Uint8Array | undefined;
   const maxEdge = options.resize?.maxEdge;
-  if (input.resize && maxEdge && size && REENCODED.has(contentType) && Math.max(size.width, size.height) > maxEdge) {
+  if (
+    input.resize &&
+    maxEdge &&
+    size &&
+    REENCODED.has(contentType) &&
+    Math.max(size.width, size.height) > maxEdge
+  ) {
     original = bytes;
     resizedFrom = { width: size.width, height: size.height, bytes: bytes.byteLength };
-    const response = await editImage(images, toArrayBuffer(bytes), { maxEdge, format: contentType as Encoded, quality });
+    const response = await editImage(images, toArrayBuffer(bytes), {
+      maxEdge,
+      format: contentType as Encoded,
+      quality,
+    });
     bytes = new Uint8Array(await response.arrayBuffer());
     const scale = maxEdge / Math.max(size.width, size.height);
-    size = (await measure(images, bytes)) ?? { width: Math.round(size.width * scale), height: Math.round(size.height * scale) };
+    size = (await measure(images, bytes)) ?? {
+      width: Math.round(size.width * scale),
+      height: Math.round(size.height * scale),
+    };
   }
 
-  const { placeholder, color } = size ? await placeholderAndColor(images, bytes) : { placeholder: null, color: null };
+  const { placeholder, color } = size
+    ? await placeholderAndColor(images, bytes)
+    : { placeholder: null, color: null };
   const sha256 = await sha256Hex(bytes);
-  const uploadSha256 = input.sha256 ?? (!converted && !resizedFrom ? sha256 : await duplicateKey(input.bytes, input.contentType));
+  const uploadSha256 =
+    input.sha256 ??
+    (!converted && !resizedFrom ? sha256 : await duplicateKey(input.bytes, input.contentType));
   return {
     bytes,
     contentType,

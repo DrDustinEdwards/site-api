@@ -28,6 +28,7 @@ export function localClient(adapter: SiteAdapter, options: LocalClientOptions = 
     limiter: { limit: async () => ({ success: true }) },
     ...(options.log ? { log: options.log } : {}),
   });
-  const handle = (async (input: RequestInfo | URL, init?: RequestInit) => api.handle(new Request(input, init))) as typeof fetch;
+  const handle = (async (input: RequestInfo | URL, init?: RequestInit) =>
+    api.handle(new Request(input, init))) as typeof fetch;
   return createSiteClient({ baseUrl: adapter.site.origin, key, fetch: handle });
 }

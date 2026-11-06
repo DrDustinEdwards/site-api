@@ -1,10 +1,47 @@
 // A reference adapter held in memory: what a conforming site does, small enough to read in one
 // sitting. Carrel's tests run against it, and the conformance suite is proven on it.
 
-import { MediaInUseError, NotFoundError, RefusedError, VersionConflictError, type DueSchedule, type MediaAdapter, type MediaReplace, type MentionsAdapter, type SchedulesAdapter, type SiteAdapter } from "./adapter.js";
-import { joinSource, POST_FIELDS, postFieldsOf, setTags as writeTags, splitSource, tagsOf } from "./frontmatter.js";
+import {
+  MediaInUseError,
+  NotFoundError,
+  RefusedError,
+  VersionConflictError,
+  type DueSchedule,
+  type MediaAdapter,
+  type MediaReplace,
+  type MentionsAdapter,
+  type SchedulesAdapter,
+  type SiteAdapter,
+} from "./adapter.js";
+import {
+  joinSource,
+  POST_FIELDS,
+  postFieldsOf,
+  setTags as writeTags,
+  splitSource,
+  tagsOf,
+} from "./frontmatter.js";
 import { LARGE_MEDIA_BYTES, MEDIA_LENSES } from "./contract.js";
-import type { ContentDoc, ContentStatus, ContentSummary, MediaEmbeddedField, MediaLens, MediaItem, MediaResize, MediaRevision, MediaTransformOp, MediaUploadLimits, MediaUse, MentionItem, MentionStatus, NotFoundRow, Revision, ScheduledUpdate, SiteInfo, WriteResult } from "./contract.js";
+import type {
+  ContentDoc,
+  ContentStatus,
+  ContentSummary,
+  MediaEmbeddedField,
+  MediaLens,
+  MediaItem,
+  MediaResize,
+  MediaRevision,
+  MediaTransformOp,
+  MediaUploadLimits,
+  MediaUse,
+  MentionItem,
+  MentionStatus,
+  NotFoundRow,
+  Revision,
+  ScheduledUpdate,
+  SiteInfo,
+  WriteResult,
+} from "./contract.js";
 import { kindOf, orientationOf, transformFocus, turnsSize } from "./media.js";
 
 interface Stored {
@@ -102,7 +139,8 @@ interface StoredMedia {
 /** A PNG's width and height from its IHDR chunk, as a site measures an upload; null for anything else. */
 function measure(bytes: Uint8Array): { width: number; height: number } | null {
   const png = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a].every((v, i) => bytes[i] === v);
-  if (!png || bytes.length < 24 || String.fromCharCode(...bytes.subarray(12, 16)) !== "IHDR") return null;
+  if (!png || bytes.length < 24 || String.fromCharCode(...bytes.subarray(12, 16)) !== "IHDR")
+    return null;
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const [width, height] = [view.getUint32(16), view.getUint32(20)];
   return width > 0 && height > 0 ? { width, height } : null;
@@ -113,13 +151,16 @@ function pngText(bytes: Uint8Array): Record<string, string> {
   const found: Record<string, string> = {};
   if (!measure(bytes)) return found;
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  for (let at = 8; at + 8 <= bytes.length; ) {
+  for (let at = 8; at + 8 <= bytes.length;) {
     const length = view.getUint32(at);
     const type = String.fromCharCode(...bytes.subarray(at + 4, at + 8));
     const data = bytes.subarray(at + 8, Math.min(at + 8 + length, bytes.length));
     if (type === "tEXt") {
       const nul = data.indexOf(0);
-      if (nul > 0) found[String.fromCharCode(...data.subarray(0, nul))] = String.fromCharCode(...data.subarray(nul + 1));
+      if (nul > 0)
+        found[String.fromCharCode(...data.subarray(0, nul))] = String.fromCharCode(
+          ...data.subarray(nul + 1),
+        );
     }
     at += 12 + length;
   }
@@ -131,7 +172,12 @@ function withTags(doc: ContentDoc): ContentDoc {
   const front = splitSource(doc.source).front;
   if (front === null) return doc;
   const { authors, excerpt } = postFieldsOf(front);
-  return { ...doc, tags: tagsOf(front), ...(authors.length ? { authors } : {}), ...(excerpt ? { excerpt } : {}) };
+  return {
+    ...doc,
+    tags: tagsOf(front),
+    ...(authors.length ? { authors } : {}),
+    ...(excerpt ? { excerpt } : {}),
+  };
 }
 
 /** A list row: the item without its source, with its version and tags. */
@@ -147,9 +193,7 @@ function titleOf(source: string, id: string): string {
   return heading ? heading[1]!.trim() : id;
 }
 
-export function memoryAdapter(
-  options: MemoryAdapterOptions = {},
-): SiteAdapter & {
+export function memoryAdapter(options: MemoryAdapterOptions = {}): SiteAdapter & {
   store: Map<string, Stored>;
   mediaStore: Map<string, StoredMedia>;
   deleted: string[];
@@ -162,7 +206,11 @@ export function memoryAdapter(
   /** The permanent redirects a rename left (v0.17.0), old path to new. */
   redirects: Map<string, string>;
 } {
-  const site = options.site ?? { id: "memory", name: "Memory site", origin: "https://memory.example" };
+  const site = options.site ?? {
+    id: "memory",
+    name: "Memory site",
+    origin: "https://memory.example",
+  };
   const now = options.now ?? (() => new Date());
   const store = new Map<string, Stored>();
   const schedules = options.schedules !== false;
@@ -180,7 +228,16 @@ export function memoryAdapter(
   function commit(
     id: string,
     previous: Stored | undefined,
-    changes: { source?: string; status: ContentStatus; publishAt?: string | null; pending?: ScheduledUpdate | null; publishedAt?: string; redate?: string; trashedAt?: string | null; hasDraft?: boolean },
+    changes: {
+      source?: string;
+      status: ContentStatus;
+      publishAt?: string | null;
+      pending?: ScheduledUpdate | null;
+      publishedAt?: string;
+      redate?: string;
+      trashedAt?: string | null;
+      hasDraft?: boolean;
+    },
     changeId: string,
     message: string,
     actor?: { name: string },
@@ -196,24 +253,67 @@ export function memoryAdapter(
       status: changes.status,
       path: changes.status === "published" || wasPublished ? `/blog/${id}` : null,
       publishAt: changes.publishAt ?? null,
-      publishedAt: changes.status === "published" ? (changes.redate ?? wasPublished ?? changes.publishedAt ?? at) : wasPublished,
+      publishedAt:
+        changes.status === "published"
+          ? (changes.redate ?? wasPublished ?? changes.publishedAt ?? at)
+          : wasPublished,
       updatedAt: at,
       format: "markdown",
       source,
       version,
-      ...(contentExtras ? { trashedAt: changes.trashedAt !== undefined ? changes.trashedAt : (previous?.doc.trashedAt ?? null) } : {}),
+      ...(contentExtras
+        ? {
+            trashedAt:
+              changes.trashedAt !== undefined
+                ? changes.trashedAt
+                : (previous?.doc.trashedAt ?? null),
+          }
+        : {}),
       // v0.22.0: only a live item has a pending draft; a write that does not say keeps what it had. (In memory the draft is
       // the source itself: there is no separate public copy to keep.)
-      ...(contentExtras ? { hasDraft: changes.status === "published" && (changes.hasDraft ?? previous?.doc.hasDraft ?? false) } : {}),
+      ...(contentExtras
+        ? {
+            hasDraft:
+              changes.status === "published" &&
+              (changes.hasDraft ?? previous?.doc.hasDraft ?? false),
+          }
+        : {}),
     };
     // Only a live item carries an update, and a write that does not name one keeps what was waiting.
-    const pending = changes.status !== "published" ? undefined : changes.pending === undefined ? previous?.pending : (changes.pending ?? undefined);
-    if (schedules) doc.scheduledUpdate = pending ? { publishAt: pending.publishAt, changeId: pending.changeId } : null;
+    const pending =
+      changes.status !== "published"
+        ? undefined
+        : changes.pending === undefined
+          ? previous?.pending
+          : (changes.pending ?? undefined);
+    if (schedules)
+      doc.scheduledUpdate = pending
+        ? { publishAt: pending.publishAt, changeId: pending.changeId }
+        : null;
     const history = previous?.history ?? [];
     // v0.22.0: the person Carrel names is the revision's author.
-    history.unshift({ revision: { version, at, author: actor?.name ?? "carrel", message: `${message} [${changeId}]` }, source });
-    store.set(id, { doc, history, ...(pending ? { pending } : {}), ...(changes.status === "scheduled" ? { scheduleChangeId: changeId } : {}) });
-    return { id, version, status: doc.status, changeId, ...(schedules ? { scheduledUpdate: doc.scheduledUpdate } : {}) };
+    history.unshift({
+      revision: {
+        version,
+        at,
+        author: actor?.name ?? "carrel",
+        message: `${message} [${changeId}]`,
+      },
+      source,
+    });
+    store.set(id, {
+      doc,
+      history,
+      ...(pending ? { pending } : {}),
+      ...(changes.status === "scheduled" ? { scheduleChangeId: changeId } : {}),
+    });
+    return {
+      id,
+      version,
+      status: doc.status,
+      changeId,
+      ...(schedules ? { scheduledUpdate: doc.scheduledUpdate } : {}),
+    };
   }
 
   function existing(id: string, expectedVersion: string): Stored {
@@ -234,7 +334,11 @@ export function memoryAdapter(
   function heldMedia(id: string, expectedVersion: string): StoredMedia {
     const stored = mediaStore.get(id);
     if (!stored) throw new NotFoundError("No such media.");
-    if (stored.item.version !== expectedVersion) throw new VersionConflictError(stored.item.version ?? null, "The file changed since it was loaded.");
+    if (stored.item.version !== expectedVersion)
+      throw new VersionConflictError(
+        stored.item.version ?? null,
+        "The file changed since it was loaded.",
+      );
     return stored;
   }
 
@@ -249,7 +353,10 @@ export function memoryAdapter(
   // ---------- v0.13.0
   const extras = mediaWrites && options.mediaExtras !== false;
   const dedupe = extras && options.mediaDuplicates === true;
-  const resize = extras && options.mediaResize !== false ? (options.mediaResize ?? { maxEdge: 2048, quality: 82 }) : undefined;
+  const resize =
+    extras && options.mediaResize !== false
+      ? (options.mediaResize ?? { maxEdge: 2048, quality: 82 })
+      : undefined;
   /** Every change in order, as a site's own change log would hold it: what `changes` answers from. */
   const changeLog: Array<{ seq: number; id: string }> = [];
   let changeSeq = 0;
@@ -259,17 +366,36 @@ export function memoryAdapter(
   }
 
   /** Keeps a new set of bytes as the file's current revision; the earlier ones stay. */
-  function keepBytes(stored: StoredMedia, data: Uint8Array, size: { width: number | null; height: number | null }, reason: MediaRevision["reason"]) {
+  function keepBytes(
+    stored: StoredMedia,
+    data: Uint8Array,
+    size: { width: number | null; height: number | null },
+    reason: MediaRevision["reason"],
+  ) {
     if (!extras) return;
     stored.revisions ??= [];
-    stored.revisions.push({ rev: `r${++revCounter}`, at: now().toISOString(), bytes: data.byteLength, width: size.width, height: size.height, reason, data });
+    stored.revisions.push({
+      rev: `r${++revCounter}`,
+      at: now().toISOString(),
+      bytes: data.byteLength,
+      width: size.width,
+      height: size.height,
+      reason,
+      data,
+    });
   }
 
   /** A size scaled so its longer edge is the site's maxEdge, or null when it already fits. */
-  function shrunk(width: number | null, height: number | null): { width: number; height: number } | null {
+  function shrunk(
+    width: number | null,
+    height: number | null,
+  ): { width: number; height: number } | null {
     if (!resize || !width || !height || Math.max(width, height) <= resize.maxEdge) return null;
     const scale = resize.maxEdge / Math.max(width, height);
-    return { width: Math.max(1, Math.round(width * scale)), height: Math.max(1, Math.round(height * scale)) };
+    return {
+      width: Math.max(1, Math.round(width * scale)),
+      height: Math.max(1, Math.round(height * scale)),
+    };
   }
 
   /** An item as the site answers it: with its usage count, which moves whenever a post does. */
@@ -283,7 +409,8 @@ export function memoryAdapter(
     "no-alt": (i) => i.alt.trim() === "" && !i.decorative,
     large: (i) => i.bytes > LARGE_MEDIA_BYTES,
     duplicates: (i) => twinsOf(i.id).length > 0,
-    "license-expired": (i) => Boolean(i.licenseExpires && i.licenseExpires < now().toISOString().slice(0, 10)),
+    "license-expired": (i) =>
+      Boolean(i.licenseExpires && i.licenseExpires < now().toISOString().slice(0, 10)),
     oversized: (i) => shrunk(i.width, i.height) !== null,
   };
 
@@ -291,7 +418,9 @@ export function memoryAdapter(
   function twinsOf(id: string): Array<{ id: string; filename: string | null }> {
     const hash = mediaStore.get(id)?.sha256;
     if (!hash) return [];
-    return [...mediaStore.values()].filter((m) => m.sha256 === hash && m.item.id !== id).map((m) => ({ id: m.item.id, filename: m.item.filename }));
+    return [...mediaStore.values()]
+      .filter((m) => m.sha256 === hash && m.item.id !== id)
+      .map((m) => ({ id: m.item.id, filename: m.item.filename }));
   }
 
   /** The site's reference check: every post whose source carries the file's URL, as the real site scans. */
@@ -301,7 +430,8 @@ export function memoryAdapter(
     for (const { doc } of store.values()) {
       const lines = doc.source.split("\n");
       lines.forEach((line, i) => {
-        if (line.includes(url)) uses.push({ type: "post", id: doc.id, title: doc.title, detail: `line ${i + 1}` });
+        if (line.includes(url))
+          uses.push({ type: "post", id: doc.id, title: doc.title, detail: `line ${i + 1}` });
       });
     }
     return uses;
@@ -312,7 +442,16 @@ export function memoryAdapter(
       ? undefined
       : {
           limits: options.media ?? MEMORY_MEDIA_LIMITS,
-          ...(options.mediaLenses === false ? {} : { lenses: MEDIA_LENSES.filter((l) => (extras || ["unattached", "no-alt", "large"].includes(l)) && (l !== "oversized" || resize) && (l !== "duplicates" || dedupe)) }),
+          ...(options.mediaLenses === false
+            ? {}
+            : {
+                lenses: MEDIA_LENSES.filter(
+                  (l) =>
+                    (extras || ["unattached", "no-alt", "large"].includes(l)) &&
+                    (l !== "oversized" || resize) &&
+                    (l !== "duplicates" || dedupe),
+                ),
+              }),
           ...(options.mediaReplaceKeepsSize ? { replaceKeepsSize: true } : {}),
           ...(extras ? { usage: true, filters: true, readsEmbedded: true } : {}),
           ...(resize ? { resize } : {}),
@@ -324,17 +463,32 @@ export function memoryAdapter(
               .map((m) => m.item)
               .filter((i) => (query.trashed === "only" ? Boolean(i.trashedAt) : !i.trashedAt))
               .filter((i) => !query.tag || (i.tags ?? []).includes(query.tag))
-              .filter((i) => !needle || [i.id, i.filename ?? "", i.alt].some((t) => t.toLowerCase().includes(needle)))
+              .filter(
+                (i) =>
+                  !needle ||
+                  [i.id, i.filename ?? "", i.alt].some((t) => t.toLowerCase().includes(needle)),
+              )
               .filter((i) => !lensed || !query.lens || LENS[query.lens](i))
-              .filter((i) => !query.orientation || orientationOf(i.width, i.height) === query.orientation)
+              .filter(
+                (i) => !query.orientation || orientationOf(i.width, i.height) === query.orientation,
+              )
               .filter((i) => !query.kind || kindOf(i.contentType) === query.kind)
               .map(shown)
               .reverse();
             // v0.6.0: sorted as asked, newest, largest or A to Z first unless dir says otherwise.
-            const sorted = lensed && query.sort ? { sort: query.sort, dir: query.dir ?? (query.sort === "name" ? "asc" : "desc") } : undefined;
+            const sorted =
+              lensed && query.sort
+                ? { sort: query.sort, dir: query.dir ?? (query.sort === "name" ? "asc" : "desc") }
+                : undefined;
             if (sorted) {
               const key = (i: MediaItem): string | number =>
-                sorted.sort === "size" ? i.bytes : sorted.sort === "used" ? (i.usedCount ?? 0) : sorted.sort === "name" ? (i.filename ?? i.id).toLowerCase() : (i.uploadedAt ?? "");
+                sorted.sort === "size"
+                  ? i.bytes
+                  : sorted.sort === "used"
+                    ? (i.usedCount ?? 0)
+                    : sorted.sort === "name"
+                      ? (i.filename ?? i.id).toLowerCase()
+                      : (i.uploadedAt ?? "");
               const order = [...all];
               all.sort((a, b) => {
                 const [x, y] = [key(a), key(b)];
@@ -354,10 +508,21 @@ export function memoryAdapter(
           },
           async get(id) {
             const stored = mediaStore.get(id);
-            return stored ? { ...shown(stored.item), usedBy: usesOf(id), ...(dedupe ? { twins: twinsOf(id) } : {}) } : null;
+            return stored
+              ? {
+                  ...shown(stored.item),
+                  usedBy: usesOf(id),
+                  ...(dedupe ? { twins: twinsOf(id) } : {}),
+                }
+              : null;
           },
           async upload(input) {
-            const base = input.filename.replace(/\.[^.]*$/, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "file";
+            const base =
+              input.filename
+                .replace(/\.[^.]*$/, "")
+                .toLowerCase()
+                .replace(/[^a-z0-9]+/g, "-")
+                .replace(/^-+|-+$/g, "") || "file";
             const id = `uploads/${++mediaCounter}-${base}.${EXTENSIONS[input.contentType] ?? "bin"}`;
             const size = (extras ? measure(input.bytes) : null) ?? { width: null, height: null };
             // v0.13.0: shrunk to the site's longest edge unless the upload said no. The reference adapter does not re-encode,
@@ -365,7 +530,10 @@ export function memoryAdapter(
             const small = input.resize ? shrunk(size.width, size.height) : null;
             // The embedded metadata fills only what the upload left empty.
             const text = extras ? pngText(input.bytes) : {};
-            const taken = text["Creation Time"] && !Number.isNaN(Date.parse(text["Creation Time"])) ? new Date(text["Creation Time"]).toISOString() : null;
+            const taken =
+              text["Creation Time"] && !Number.isNaN(Date.parse(text["Creation Time"]))
+                ? new Date(text["Creation Time"]).toISOString()
+                : null;
             const embedded: MediaEmbeddedField[] = [
               ...(text.Author ? (["credit"] as const) : []),
               ...(text.Copyright ? (["license"] as const) : []),
@@ -384,7 +552,15 @@ export function memoryAdapter(
               ...(input.decorative ? { decorative: true } : {}),
               uploadedAt: now().toISOString(),
               deletable: true,
-              ...(mediaWrites ? { version: nextMediaVersion(), tags: [], trashedAt: null, focus: null, caption: text.Description?.slice(0, 2000) ?? "" } : {}),
+              ...(mediaWrites
+                ? {
+                    version: nextMediaVersion(),
+                    tags: [],
+                    trashedAt: null,
+                    focus: null,
+                    caption: text.Description?.slice(0, 2000) ?? "",
+                  }
+                : {}),
               ...(extras
                 ? {
                     credit: text.Author?.slice(0, 300) ?? "",
@@ -398,14 +574,26 @@ export function memoryAdapter(
                   }
                 : {}),
             };
-            const stored: StoredMedia = { item, bytes: input.bytes, ...(input.sha256 ? { sha256: input.sha256 } : {}) };
+            const stored: StoredMedia = {
+              item,
+              bytes: input.bytes,
+              ...(input.sha256 ? { sha256: input.sha256 } : {}),
+            };
             keepBytes(stored, input.bytes, item, input.sourceUrl ? "import" : "upload");
             mediaStore.set(id, stored);
             logChange(id);
             return {
               ...item,
               ...(embedded.length > 0 ? { embedded } : {}),
-              ...(small && size.width && size.height ? { resizedFrom: { width: size.width, height: size.height, bytes: input.bytes.byteLength } } : {}),
+              ...(small && size.width && size.height
+                ? {
+                    resizedFrom: {
+                      width: size.width,
+                      height: size.height,
+                      bytes: input.bytes.byteLength,
+                    },
+                  }
+                : {}),
             };
           },
           async delete(id) {
@@ -418,35 +606,78 @@ export function memoryAdapter(
           },
           ...(mediaWrites
             ? {
-                async setAlt(id: string, input: { alt: string; decorative?: boolean; expectedVersion: string; changeId: string }) {
-                  return touchMedia(heldMedia(id, input.expectedVersion), { alt: input.alt, decorative: input.decorative === true });
+                async setAlt(
+                  id: string,
+                  input: {
+                    alt: string;
+                    decorative?: boolean;
+                    expectedVersion: string;
+                    changeId: string;
+                  },
+                ) {
+                  return touchMedia(heldMedia(id, input.expectedVersion), {
+                    alt: input.alt,
+                    decorative: input.decorative === true,
+                  });
                 },
-                async setTags(id: string, input: { tags: string[]; expectedVersion: string; changeId: string; actor?: { name: string } }) {
+                async setTags(
+                  id: string,
+                  input: {
+                    tags: string[];
+                    expectedVersion: string;
+                    changeId: string;
+                    actor?: { name: string };
+                  },
+                ) {
                   return touchMedia(heldMedia(id, input.expectedVersion), { tags: input.tags });
                 },
                 async trash(id: string, input: { expectedVersion: string; changeId: string }) {
-                  return touchMedia(heldMedia(id, input.expectedVersion), { trashedAt: now().toISOString() });
+                  return touchMedia(heldMedia(id, input.expectedVersion), {
+                    trashedAt: now().toISOString(),
+                  });
                 },
                 async restore(id: string, input: { expectedVersion: string; changeId: string }) {
                   return touchMedia(heldMedia(id, input.expectedVersion), { trashedAt: null });
                 },
-                async setFocus(id: string, input: { focus: string | null; expectedVersion: string; changeId: string }) {
+                async setFocus(
+                  id: string,
+                  input: { focus: string | null; expectedVersion: string; changeId: string },
+                ) {
                   return touchMedia(heldMedia(id, input.expectedVersion), { focus: input.focus });
                 },
-                async setCaption(id: string, input: { caption: string; expectedVersion: string; changeId: string }) {
-                  return touchMedia(heldMedia(id, input.expectedVersion), { caption: input.caption });
+                async setCaption(
+                  id: string,
+                  input: { caption: string; expectedVersion: string; changeId: string },
+                ) {
+                  return touchMedia(heldMedia(id, input.expectedVersion), {
+                    caption: input.caption,
+                  });
                 },
                 // Same id and address, alt, caption and tags kept, the focal point cleared. Nothing is cached in memory,
                 // so no size can be stale.
                 async replace(id: string, input: MediaReplace) {
                   const stored = heldMedia(id, input.expectedVersion);
-                  const size = (extras ? measure(input.bytes) : null) ?? { width: null, height: null };
-                  if (options.mediaReplaceKeepsSize && (size.width !== stored.item.width || size.height !== stored.item.height)) {
-                    throw new RefusedError("The new picture is another size; this site's addresses carry the size.");
+                  const size = (extras ? measure(input.bytes) : null) ?? {
+                    width: null,
+                    height: null,
+                  };
+                  if (
+                    options.mediaReplaceKeepsSize &&
+                    (size.width !== stored.item.width || size.height !== stored.item.height)
+                  ) {
+                    throw new RefusedError(
+                      "The new picture is another size; this site's addresses carry the size.",
+                    );
                   }
                   stored.bytes = input.bytes;
                   keepBytes(stored, input.bytes, size, "replace");
-                  touchMedia(stored, { filename: input.filename, bytes: input.bytes.byteLength, ...size, focus: null, uploadedAt: now().toISOString() });
+                  touchMedia(stored, {
+                    filename: input.filename,
+                    bytes: input.bytes.byteLength,
+                    ...size,
+                    focus: null,
+                    uploadedAt: now().toISOString(),
+                  });
                   return { item: shown(stored.item), sizesNeedPurge: false };
                 },
               }
@@ -466,19 +697,55 @@ export function memoryAdapter(
           }
         : {}),
       async setCredit(id, input) {
-        const { credit, license, sourceUrl, licenseExpires, copyright, licenseUrl, acquireLicenseUrl } = input;
-        const named = Object.entries({ copyright, licenseUrl, acquireLicenseUrl }).filter(([, v]) => v !== undefined);
-        return touchMedia(heldMedia(id, input.expectedVersion), { credit, license, sourceUrl, licenseExpires, ...Object.fromEntries(named) });
+        const {
+          credit,
+          license,
+          sourceUrl,
+          licenseExpires,
+          copyright,
+          licenseUrl,
+          acquireLicenseUrl,
+        } = input;
+        const named = Object.entries({ copyright, licenseUrl, acquireLicenseUrl }).filter(
+          ([, v]) => v !== undefined,
+        );
+        return touchMedia(heldMedia(id, input.expectedVersion), {
+          credit,
+          license,
+          sourceUrl,
+          licenseExpires,
+          ...Object.fromEntries(named),
+        });
       },
       // The reference adapter does not decode pictures, so a turn moves the size and the focal point and keeps the bytes.
-      async transform(id, input: { op: MediaTransformOp; asNewFile: boolean; expectedVersion: string; changeId: string }) {
+      async transform(
+        id,
+        input: {
+          op: MediaTransformOp;
+          asNewFile: boolean;
+          expectedVersion: string;
+          changeId: string;
+        },
+      ) {
         const stored = heldMedia(id, input.expectedVersion);
         const { width, height } = stored.item;
         const size = turnsSize(input.op) ? { width: height, height: width } : { width, height };
         const focus = transformFocus(stored.item.focus ?? null, input.op);
         if (input.asNewFile) {
           const newId = id.replace(/(\.[a-z0-9]+)?$/, (ext) => `-${input.op}${ext}`);
-          const copy: StoredMedia = { item: { ...stored.item, ...size, focus, id: newId, url: `/media/${newId}`, downloadUrl: `/media/${newId}`, version: nextMediaVersion(), uploadedAt: now().toISOString() }, bytes: stored.bytes };
+          const copy: StoredMedia = {
+            item: {
+              ...stored.item,
+              ...size,
+              focus,
+              id: newId,
+              url: `/media/${newId}`,
+              downloadUrl: `/media/${newId}`,
+              version: nextMediaVersion(),
+              uploadedAt: now().toISOString(),
+            },
+            bytes: stored.bytes,
+          };
           keepBytes(copy, stored.bytes, size, "transform");
           mediaStore.set(newId, copy);
           logChange(newId);
@@ -491,7 +758,9 @@ export function memoryAdapter(
       async history(id) {
         const revisions = mediaStore.get(id)?.revisions;
         if (!revisions) return null;
-        return revisions.map(({ data: _d, ...r }, n) => ({ ...r, current: n === revisions.length - 1 })).reverse();
+        return revisions
+          .map(({ data: _d, ...r }, n) => ({ ...r, current: n === revisions.length - 1 }))
+          .reverse();
       },
       async revert(id, input) {
         const stored = heldMedia(id, input.expectedVersion);
@@ -499,12 +768,18 @@ export function memoryAdapter(
         if (!target) throw new NotFoundError("This file has no such earlier version.");
         stored.bytes = target.data;
         keepBytes(stored, target.data, target, "revert");
-        touchMedia(stored, { bytes: target.bytes, width: target.width, height: target.height, focus: null });
+        touchMedia(stored, {
+          bytes: target.bytes,
+          width: target.width,
+          height: target.height,
+          focus: null,
+        });
         return { item: shown(stored.item), sizesNeedPurge: false };
       },
       async changes({ since, limit }) {
         const from = Number(since);
-        if (!Number.isInteger(from) || from < 0 || from > changeSeq) throw new RefusedError("That change cursor is not this site's; reload the library.");
+        if (!Number.isInteger(from) || from < 0 || from > changeSeq)
+          throw new RefusedError("That change cursor is not this site's; reload the library.");
         // Each file once, at its latest change, oldest first.
         const latest = new Map<string, number>();
         for (const entry of changeLog) if (entry.seq > from) latest.set(entry.id, entry.seq);
@@ -512,7 +787,9 @@ export function memoryAdapter(
         const taken = order.slice(0, limit);
         const more = order.length > limit;
         return {
-          items: taken.filter(([id]) => mediaStore.has(id)).map(([id]) => shown(mediaStore.get(id)!.item)),
+          items: taken
+            .filter(([id]) => mediaStore.has(id))
+            .map(([id]) => shown(mediaStore.get(id)!.item)),
           removed: taken.filter(([id]) => !mediaStore.has(id)).map(([id]) => id),
           cursor: String(more ? taken[taken.length - 1]![1] : changeSeq),
           more,
@@ -534,12 +811,23 @@ export function memoryAdapter(
       async suggest(id) {
         const item = mediaStore.get(id)?.item;
         if (!item) return null;
-        const words = (item.filename ?? id).replace(/\.[^.]*$/, "").split(/[^A-Za-z]+/).filter((w) => w.length >= 3);
-        return { tags: words.map((w) => w.toLowerCase()), alt: words.length > 0 ? `A picture of ${words.join(" ").toLowerCase()}.` : null, model: "memory-suggester" };
+        const words = (item.filename ?? id)
+          .replace(/\.[^.]*$/, "")
+          .split(/[^A-Za-z]+/)
+          .filter((w) => w.length >= 3);
+        return {
+          tags: words.map((w) => w.toLowerCase()),
+          alt: words.length > 0 ? `A picture of ${words.join(" ").toLowerCase()}.` : null,
+          model: "memory-suggester",
+        };
       },
       // Before an upload there is no name to go on: the model's answer is the file's size.
       async suggestFile({ bytes }) {
-        return { tags: ["upload"], alt: `A picture of ${bytes.byteLength} bytes.`, model: "memory-suggester" };
+        return {
+          tags: ["upload"],
+          alt: `A picture of ${bytes.byteLength} bytes.`,
+          model: "memory-suggester",
+        };
       },
     };
   }
@@ -586,7 +874,9 @@ export function memoryAdapter(
     const at = now().getTime();
     const past = (status: "failed" | "rejected") =>
       [...mentionStore.values()].filter(
-        (m) => m.status === status && Date.parse(m.receivedAt) < at - MEMORY_MENTION_RETENTION_DAYS[status] * DAY,
+        (m) =>
+          m.status === status &&
+          Date.parse(m.receivedAt) < at - MEMORY_MENTION_RETENTION_DAYS[status] * DAY,
       );
     return { failed: past("failed"), rejected: past("rejected") };
   }
@@ -600,9 +890,19 @@ export function memoryAdapter(
             const needle = filters ? query.q?.toLowerCase() : undefined;
             const all = [...mentionStore.values()]
               .filter((m) => !query.status || m.status === query.status)
-              .filter((m) => !needle || [m.sourceUrl, m.authorName ?? "", m.excerpt ?? ""].some((t) => t.toLowerCase().includes(needle)))
+              .filter(
+                (m) =>
+                  !needle ||
+                  [m.sourceUrl, m.authorName ?? "", m.excerpt ?? ""].some((t) =>
+                    t.toLowerCase().includes(needle),
+                  ),
+              )
               .filter((m) => !filters || !query.targetId || m.targetId === query.targetId)
-              .sort((a, b) => Date.parse(b.receivedAt) - Date.parse(a.receivedAt) || Number(b.id) - Number(a.id));
+              .sort(
+                (a, b) =>
+                  Date.parse(b.receivedAt) - Date.parse(a.receivedAt) ||
+                  Number(b.id) - Number(a.id),
+              );
             const start = query.cursor ? Number(query.cursor) : 0;
             const counts = { unverified: 0, pending: 0, approved: 0, rejected: 0, failed: 0 };
             for (const m of mentionStore.values()) counts[m.status]++;
@@ -612,13 +912,22 @@ export function memoryAdapter(
               nextCursor: start + query.limit < all.length ? String(start + query.limit) : null,
               counts,
               expiring: { failed: soon.failed.length, rejected: soon.rejected.length },
-              ...(filters && (query.q || query.targetId) ? { filtered: { ...(query.q ? { q: query.q } : {}), ...(query.targetId ? { targetId: query.targetId } : {}) } } : {}),
+              ...(filters && (query.q || query.targetId)
+                ? {
+                    filtered: {
+                      ...(query.q ? { q: query.q } : {}),
+                      ...(query.targetId ? { targetId: query.targetId } : {}),
+                    },
+                  }
+                : {}),
             };
           },
           async decide(id, input) {
             const current = heldMention(id, input.expectedVersion);
             if (!DECIDABLE.includes(current.status)) {
-              throw new RefusedError(`A ${current.status} mention cannot be decided: only a verified mention can.`);
+              throw new RefusedError(
+                `A ${current.status} mention cannot be decided: only a verified mention can.`,
+              );
             }
             const next: MentionItem = {
               ...current,
@@ -635,7 +944,12 @@ export function memoryAdapter(
             if (current.status !== "approved" && current.status !== "rejected") {
               throw new RefusedError(`A ${current.status} mention has no decision to take back.`);
             }
-            const next: MentionItem = { ...current, status: "pending", decidedAt: null, version: `m${++mentionVersion}` };
+            const next: MentionItem = {
+              ...current,
+              status: "pending",
+              decidedAt: null,
+              version: `m${++mentionVersion}`,
+            };
             mentionStore.set(id, next);
             purged.push(current.targetId);
             return { status: next.status, version: next.version, purged: true };
@@ -665,7 +979,11 @@ export function memoryAdapter(
     const linking = new RegExp(`${target.replace(/\./g, "\\.")}(?![\\w.-])`);
     return [...store.values()]
       .filter(({ doc }) => doc.id !== id && linking.test(doc.source))
-      .map(({ doc }) => ({ id: doc.id, title: doc.title, path: doc.status === "published" ? doc.path : null }));
+      .map(({ doc }) => ({
+        id: doc.id,
+        title: doc.title,
+        path: doc.status === "published" ? doc.path : null,
+      }));
   }
 
   /** The reference schedules group (v0.10.0): the update sits beside the live item until `apply` puts it live. */
@@ -675,22 +993,57 @@ export function memoryAdapter(
     },
     async update(id, input) {
       const previous = existing(id, input.expectedVersion);
-      if (previous.doc.status !== "published") throw new RefusedError("Only a live post takes a scheduled update.");
-      const pending = { id, source: input.source, publishAt: input.publishAt, changeId: input.changeId, scheduledAt: now().toISOString() };
-      return commit(id, previous, { status: "published", pending }, input.changeId, "Schedule update", input.actor);
+      if (previous.doc.status !== "published")
+        throw new RefusedError("Only a live post takes a scheduled update.");
+      const pending = {
+        id,
+        source: input.source,
+        publishAt: input.publishAt,
+        changeId: input.changeId,
+        scheduledAt: now().toISOString(),
+      };
+      return commit(
+        id,
+        previous,
+        { status: "published", pending },
+        input.changeId,
+        "Schedule update",
+        input.actor,
+      );
     },
     async cancel(id, input) {
       if (!store.has(id)) throw new NotFoundError();
       const previous = existing(id, input.expectedVersion);
-      if (previous.pending) return commit(id, previous, { status: "published", pending: null }, input.changeId, "Cancel scheduled update", input.actor);
-      if (previous.doc.status === "scheduled") return commit(id, previous, { status: "draft" }, input.changeId, "Unschedule", input.actor);
+      if (previous.pending)
+        return commit(
+          id,
+          previous,
+          { status: "published", pending: null },
+          input.changeId,
+          "Cancel scheduled update",
+          input.actor,
+        );
+      if (previous.doc.status === "scheduled")
+        return commit(id, previous, { status: "draft" }, input.changeId, "Unschedule", input.actor);
       throw new RefusedError("Nothing is scheduled for this post.");
     },
     async due({ now: time, limit }) {
       const due: DueSchedule[] = [];
       for (const { doc, pending, scheduleChangeId } of store.values()) {
-        if (pending) due.push({ id: doc.id, kind: "update", publishAt: pending.publishAt, changeId: pending.changeId });
-        else if (doc.status === "scheduled" && doc.publishAt) due.push({ id: doc.id, kind: "publish", publishAt: doc.publishAt, changeId: scheduleChangeId ?? "schedule" });
+        if (pending)
+          due.push({
+            id: doc.id,
+            kind: "update",
+            publishAt: pending.publishAt,
+            changeId: pending.changeId,
+          });
+        else if (doc.status === "scheduled" && doc.publishAt)
+          due.push({
+            id: doc.id,
+            kind: "publish",
+            publishAt: doc.publishAt,
+            changeId: scheduleChangeId ?? "schedule",
+          });
       }
       return due
         .filter((d) => at(d.publishAt) <= time.getTime())
@@ -702,12 +1055,31 @@ export function memoryAdapter(
       if (!previous || at(input.publishAt) > input.now.getTime()) return null;
       const { doc, pending } = previous;
       if (input.kind === "update") {
-        if (doc.status !== "published" || !pending || pending.changeId !== input.changeId || at(pending.publishAt) !== at(input.publishAt)) return null;
-        return commit(id, previous, { source: pending.source, status: "published", pending: null }, input.changeId, "Publish scheduled update");
+        if (
+          doc.status !== "published" ||
+          !pending ||
+          pending.changeId !== input.changeId ||
+          at(pending.publishAt) !== at(input.publishAt)
+        )
+          return null;
+        return commit(
+          id,
+          previous,
+          { source: pending.source, status: "published", pending: null },
+          input.changeId,
+          "Publish scheduled update",
+        );
       }
-      if (doc.status !== "scheduled" || !doc.publishAt || at(doc.publishAt) !== at(input.publishAt)) return null;
+      if (doc.status !== "scheduled" || !doc.publishAt || at(doc.publishAt) !== at(input.publishAt))
+        return null;
       // A first publication records the time it was scheduled for, not the time the cron ran.
-      return commit(id, previous, { status: "published", publishedAt: new Date(doc.publishAt).toISOString() }, input.changeId, "Publish scheduled");
+      return commit(
+        id,
+        previous,
+        { status: "published", publishedAt: new Date(doc.publishAt).toISOString() },
+        input.changeId,
+        "Publish scheduled",
+      );
     },
   };
 
@@ -719,7 +1091,14 @@ export function memoryAdapter(
     receiveMention,
     ...(mentionsAdapter ? { mentions: mentionsAdapter } : {}),
     ...(options.notFound
-      ? { insight: { notFound: async (q) => options.notFound!.filter((row) => q.includeProbes || row.kind === "page").slice(0, q.limit) } }
+      ? {
+          insight: {
+            notFound: async (q) =>
+              options
+                .notFound!.filter((row) => q.includeProbes || row.kind === "page")
+                .slice(0, q.limit),
+          },
+        }
       : {}),
     store,
     redirects,
@@ -728,27 +1107,71 @@ export function memoryAdapter(
     deletedContent,
     ...(mediaAdapter ? { media: mediaAdapter } : {}),
     content: {
-      ...(contentExtras ? { publishedAtSettable: true, hasDraft: true, postFields: POST_FIELDS, filters: ["kind", "tag", "author", "published"] as const } : {}),
+      ...(contentExtras
+        ? {
+            publishedAtSettable: true,
+            hasDraft: true,
+            postFields: POST_FIELDS,
+            filters: ["kind", "tag", "author", "published"] as const,
+          }
+        : {}),
       async list(query) {
         const needle = query.q?.toLowerCase();
         const all = [...store.values()]
           .map((s) => s.doc)
-          .filter((d) => !query.status || d.status === query.status || (query.status === "draft" && d.hasDraft === true))
+          .filter(
+            (d) =>
+              !query.status ||
+              d.status === query.status ||
+              (query.status === "draft" && d.hasDraft === true),
+          )
           .filter((d) => Boolean(d.trashedAt) === Boolean(query.trashed))
           .filter((d) => !query.kind || d.kind === query.kind)
-          .filter((d) => !query.tag || (withTags(d).tags ?? []).some((t) => t.toLowerCase() === query.tag!.toLowerCase()))
+          .filter(
+            (d) =>
+              !query.tag ||
+              (withTags(d).tags ?? []).some((t) => t.toLowerCase() === query.tag!.toLowerCase()),
+          )
           .filter((d) => !query.author || (withTags(d).authors ?? []).includes(query.author))
-          .filter((d) => !query.publishedAfter || (d.publishedAt !== null && at(d.publishedAt) >= at(query.publishedAfter)))
-          .filter((d) => !query.publishedBefore || (d.publishedAt !== null && at(d.publishedAt) < at(query.publishedBefore)))
-          .filter((d) => !needle || d.title.toLowerCase().includes(needle) || d.source.toLowerCase().includes(needle))
+          .filter(
+            (d) =>
+              !query.publishedAfter ||
+              (d.publishedAt !== null && at(d.publishedAt) >= at(query.publishedAfter)),
+          )
+          .filter(
+            (d) =>
+              !query.publishedBefore ||
+              (d.publishedAt !== null && at(d.publishedAt) < at(query.publishedBefore)),
+          )
+          .filter(
+            (d) =>
+              !needle ||
+              d.title.toLowerCase().includes(needle) ||
+              d.source.toLowerCase().includes(needle),
+          )
           .sort((a, b) => a.id.localeCompare(b.id));
         // A search without a sort answers the newest updated first (v0.17.0), as every site's does.
-        if (needle && !query.sort) all.sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? "") || a.id.localeCompare(b.id));
+        if (needle && !query.sort)
+          all.sort(
+            (a, b) =>
+              (b.updatedAt ?? "").localeCompare(a.updatedAt ?? "") || a.id.localeCompare(b.id),
+          );
         // v0.6.0: sorted as asked, newest first for the dates and A to Z for titles unless dir says otherwise.
-        const sorted = query.sort ? { sort: query.sort, dir: query.dir ?? (query.sort === "title" ? "asc" : "desc") } : undefined;
+        const sorted = query.sort
+          ? { sort: query.sort, dir: query.dir ?? (query.sort === "title" ? "asc" : "desc") }
+          : undefined;
         if (sorted) {
-          const key = (d: ContentDoc) => (sorted.sort === "title" ? d.title.toLowerCase() : sorted.sort === "published" ? (d.publishedAt ?? d.publishAt ?? "") : (d.updatedAt ?? ""));
-          all.sort((a, b) => (sorted.dir === "asc" ? 1 : -1) * key(a).localeCompare(key(b)) || a.id.localeCompare(b.id));
+          const key = (d: ContentDoc) =>
+            sorted.sort === "title"
+              ? d.title.toLowerCase()
+              : sorted.sort === "published"
+                ? (d.publishedAt ?? d.publishAt ?? "")
+                : (d.updatedAt ?? "");
+          all.sort(
+            (a, b) =>
+              (sorted.dir === "asc" ? 1 : -1) * key(a).localeCompare(key(b)) ||
+              a.id.localeCompare(b.id),
+          );
         }
         const start = query.cursor ? Number(query.cursor) : 0;
         const page = all.slice(start, start + query.limit);
@@ -767,17 +1190,45 @@ export function memoryAdapter(
       async saveDraft(id, input) {
         const previous = expect(id, input.expectedVersion);
         const status = previous?.doc.status === "published" ? "published" : "draft";
-        return commit(id, previous, { source: input.source, status, publishAt: previous?.doc.publishAt, hasDraft: status === "published" }, input.changeId, "Save", input.actor);
+        return commit(
+          id,
+          previous,
+          {
+            source: input.source,
+            status,
+            publishAt: previous?.doc.publishAt,
+            hasDraft: status === "published",
+          },
+          input.changeId,
+          "Save",
+          input.actor,
+        );
       },
       async publish(id, input) {
         const previous = existing(id, input.expectedVersion);
         // A publish now drops any update that was waiting: what goes live is this.
-        const redate = input.publishedAt ? { redate: new Date(input.publishedAt).toISOString() } : {};
-        return commit(id, previous, { source: input.source, status: "published", pending: null, hasDraft: false, ...redate }, input.changeId, "Publish", input.actor);
+        const redate = input.publishedAt
+          ? { redate: new Date(input.publishedAt).toISOString() }
+          : {};
+        return commit(
+          id,
+          previous,
+          { source: input.source, status: "published", pending: null, hasDraft: false, ...redate },
+          input.changeId,
+          "Publish",
+          input.actor,
+        );
       },
       async schedule(id, input) {
         const previous = existing(id, input.expectedVersion);
-        return commit(id, previous, { source: input.source, status: "scheduled", publishAt: input.publishAt }, input.changeId, "Schedule", input.actor);
+        return commit(
+          id,
+          previous,
+          { source: input.source, status: "scheduled", publishAt: input.publishAt },
+          input.changeId,
+          "Schedule",
+          input.actor,
+        );
       },
       async unpublish(id, input) {
         const previous = existing(id, input.expectedVersion);
@@ -793,40 +1244,95 @@ export function memoryAdapter(
       ...(options.contentTags === false
         ? {}
         : {
-            async setTags(id: string, input: { tags: string[]; expectedVersion: string; changeId: string; actor?: { name: string } }) {
+            async setTags(
+              id: string,
+              input: {
+                tags: string[];
+                expectedVersion: string;
+                changeId: string;
+                actor?: { name: string };
+              },
+            ) {
               if (!store.has(id)) throw new NotFoundError();
               const previous = existing(id, input.expectedVersion);
               const parts = splitSource(previous.doc.source);
-              if (parts.front === null) throw new RefusedError("This post has no frontmatter, so it has nowhere to keep tags.");
+              if (parts.front === null)
+                throw new RefusedError(
+                  "This post has no frontmatter, so it has nowhere to keep tags.",
+                );
               const source = joinSource({ ...parts, front: writeTags(parts.front, input.tags) });
-              return commit(id, previous, { source, status: previous.doc.status, publishAt: previous.doc.publishAt }, input.changeId, "Tags", input.actor);
+              return commit(
+                id,
+                previous,
+                { source, status: previous.doc.status, publishAt: previous.doc.publishAt },
+                input.changeId,
+                "Tags",
+                input.actor,
+              );
             },
           }),
       ...(contentExtras
         ? {
-            async rename(id: string, input: { newId: string; expectedVersion: string; changeId: string; actor?: { name: string } }) {
+            async rename(
+              id: string,
+              input: {
+                newId: string;
+                expectedVersion: string;
+                changeId: string;
+                actor?: { name: string };
+              },
+            ) {
               if (!store.has(id)) throw new NotFoundError();
               const previous = existing(id, input.expectedVersion);
-              if (store.has(input.newId)) throw new RefusedError(`${input.newId} is already taken.`);
+              if (store.has(input.newId))
+                throw new RefusedError(`${input.newId} is already taken.`);
               const previousPath = previous.doc.publishedAt ? previous.doc.path : null;
               store.delete(id);
               const moved = { ...previous, doc: { ...previous.doc, id: input.newId } };
-              const written = commit(input.newId, moved, { status: previous.doc.status, publishAt: previous.doc.publishAt }, input.changeId, `Rename from ${id}`, input.actor);
+              const written = commit(
+                input.newId,
+                moved,
+                { status: previous.doc.status, publishAt: previous.doc.publishAt },
+                input.changeId,
+                `Rename from ${id}`,
+                input.actor,
+              );
               if (previousPath) redirects.set(previousPath, store.get(input.newId)!.doc.path!);
               return { ...written, previousPath };
             },
             // A live item leaves the site as it goes to the trash, and comes back a draft.
-            async trash(id: string, input: { expectedVersion: string; changeId: string; actor?: { name: string } }) {
+            async trash(
+              id: string,
+              input: { expectedVersion: string; changeId: string; actor?: { name: string } },
+            ) {
               if (!store.has(id)) throw new NotFoundError();
               const previous = existing(id, input.expectedVersion);
-              if (previous.doc.trashedAt) throw new RefusedError("This post is already in the trash.");
-              return commit(id, previous, { status: "draft", pending: null, trashedAt: now().toISOString() }, input.changeId, "Trash", input.actor);
+              if (previous.doc.trashedAt)
+                throw new RefusedError("This post is already in the trash.");
+              return commit(
+                id,
+                previous,
+                { status: "draft", pending: null, trashedAt: now().toISOString() },
+                input.changeId,
+                "Trash",
+                input.actor,
+              );
             },
-            async restore(id: string, input: { expectedVersion: string; changeId: string; actor?: { name: string } }) {
+            async restore(
+              id: string,
+              input: { expectedVersion: string; changeId: string; actor?: { name: string } },
+            ) {
               if (!store.has(id)) throw new NotFoundError();
               const previous = existing(id, input.expectedVersion);
               if (!previous.doc.trashedAt) throw new RefusedError("This post is not in the trash.");
-              return commit(id, previous, { status: "draft", trashedAt: null }, input.changeId, "Restore", input.actor);
+              return commit(
+                id,
+                previous,
+                { status: "draft", trashedAt: null },
+                input.changeId,
+                "Restore",
+                input.actor,
+              );
             },
           }
         : {}),

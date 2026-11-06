@@ -32,8 +32,12 @@ export function asOfV0190(schemas: Record<string, JsonSchema>): Record<string, J
 }
 
 /** An earlier test's own additions with v0.19.0's merged in, each list sorted, for the schemas its contract had. */
-export function withV0190(added: Record<string, string[]>, schemas: Record<string, JsonSchema>): Record<string, string[]> {
+export function withV0190(
+  added: Record<string, string[]>,
+  schemas: Record<string, JsonSchema>,
+): Record<string, string[]> {
   const merged: Record<string, string[]> = { ...added };
-  for (const [name, props] of Object.entries(V0190_ADDED)) if (name in schemas) merged[name] = [...new Set([...(merged[name] ?? []), ...props])].sort();
+  for (const [name, props] of Object.entries(V0190_ADDED))
+    if (name in schemas) merged[name] = [...new Set([...(merged[name] ?? []), ...props])].sort();
   return merged;
 }

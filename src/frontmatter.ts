@@ -3,13 +3,29 @@
 // it names, and every other block, comment and unknown key comes back byte for byte. This module adds the
 // site API's own fields on top. Exported as `@dustinedwards/site-api/frontmatter`.
 
-import { readKey, readList, setBlock, setRawKey, splitSource } from "@drdustinedwards/site-helpers/frontmatter";
+import {
+  readKey,
+  readList,
+  setBlock,
+  setRawKey,
+  splitSource,
+} from "@drdustinedwards/site-helpers/frontmatter";
 
-export { joinSource, readKey, readList, setBlock, setRawKey, splitSource, type Split } from "@drdustinedwards/site-helpers/frontmatter";
+export {
+  joinSource,
+  readKey,
+  readList,
+  setBlock,
+  setRawKey,
+  splitSource,
+  type Split,
+} from "@drdustinedwards/site-helpers/frontmatter";
 
 /** The tags the frontmatter holds now, in order. */
 export function tagsOf(front: string | null): string[] {
-  return readList(front, "tags").map((t) => t.trim()).filter(Boolean);
+  return readList(front, "tags")
+    .map((t) => t.trim())
+    .filter(Boolean);
 }
 
 /**
@@ -34,9 +50,23 @@ function tagItem(tag: string): string {
  * with the post. A site lists the ones it renders in its capabilities' `searchFields`, and Carrel shows a box for each.
  * An empty one falls back to the site's own default (the title, the opening text, the cover, the page's own address).
  */
-export const SEARCH_FIELDS = ["searchTitle", "description", "image", "imageAlt", "canonical", "noindex"] as const;
+export const SEARCH_FIELDS = [
+  "searchTitle",
+  "description",
+  "image",
+  "imageAlt",
+  "canonical",
+  "noindex",
+] as const;
 export type SearchField = (typeof SEARCH_FIELDS)[number];
-export type SearchValues = { searchTitle: string; description: string; image: string; imageAlt: string; canonical: string; noindex: boolean };
+export type SearchValues = {
+  searchTitle: string;
+  description: string;
+  image: string;
+  imageAlt: string;
+  canonical: string;
+  noindex: boolean;
+};
 
 export function searchFieldsOf(front: string | null): SearchValues {
   return {
@@ -56,7 +86,11 @@ export function setSearchFields(front: string, values: Partial<SearchValues>): s
     const value = values[field];
     if (value === undefined) continue;
     const text = typeof value === "boolean" ? (value ? "true" : "") : value.trim();
-    out = setBlock(out, field, text === "" ? [] : [`${field}: ${typeof value === "boolean" ? text : JSON.stringify(text)}`]);
+    out = setBlock(
+      out,
+      field,
+      text === "" ? [] : [`${field}: ${typeof value === "boolean" ? text : JSON.stringify(text)}`],
+    );
   }
   return out;
 }
@@ -67,7 +101,14 @@ export function setSearchFields(front: string, values: Partial<SearchValues>): s
  * positive whole number). v0.22.0: `featureImage` (the picture a post leads with: a URL, a site path or a media key) and
  * `featureImageAlt` (its alt text). A site lists the ones it renders in its capabilities' `postFields`.
  */
-export const POST_FIELDS = ["excerpt", "authors", "series", "seriesPart", "featureImage", "featureImageAlt"] as const;
+export const POST_FIELDS = [
+  "excerpt",
+  "authors",
+  "series",
+  "seriesPart",
+  "featureImage",
+  "featureImageAlt",
+] as const;
 export type PostField = (typeof POST_FIELDS)[number];
 export type PostValues = {
   excerpt: string;
@@ -107,7 +148,10 @@ function authorsOf(front: string | null): string[] {
       // Not JSON: a YAML flow list, read below.
     }
   }
-  const list = Array.isArray(names) && names.every((n) => typeof n === "string") ? (names as string[]) : readList(front, "authors");
+  const list =
+    Array.isArray(names) && names.every((n) => typeof n === "string")
+      ? (names as string[])
+      : readList(front, "authors");
   return list.map((n) => n.trim()).filter(Boolean);
 }
 
@@ -142,13 +186,26 @@ export function setPostFields(front: string, values: Partial<PostValues>): strin
  * true` or `featureImageDecorative: true`) takes an empty alt and is not listed; nothing else does. Carrel's gate and the
  * package's publish both read this.
  */
-export function missingAltFields(front: string | null, declared: { searchFields?: readonly string[]; postFields?: readonly string[] }): Array<"imageAlt" | "featureImageAlt"> {
+export function missingAltFields(
+  front: string | null,
+  declared: { searchFields?: readonly string[]; postFields?: readonly string[] },
+): Array<"imageAlt" | "featureImageAlt"> {
   const faults: Array<"imageAlt" | "featureImageAlt"> = [];
-  if ((declared.searchFields ?? []).includes("image") && readKey(front, "image") && !readKey(front, "imageAlt") && readKey(front, "imageDecorative") !== "true") {
+  if (
+    (declared.searchFields ?? []).includes("image") &&
+    readKey(front, "image") &&
+    !readKey(front, "imageAlt") &&
+    readKey(front, "imageDecorative") !== "true"
+  ) {
     faults.push("imageAlt");
   }
   const post = postFieldsOf(front);
-  if ((declared.postFields ?? []).includes("featureImage") && post.featureImage && !post.featureImageAlt && !post.featureImageDecorative) {
+  if (
+    (declared.postFields ?? []).includes("featureImage") &&
+    post.featureImage &&
+    !post.featureImageAlt &&
+    !post.featureImageDecorative
+  ) {
     faults.push("featureImageAlt");
   }
   return faults;
@@ -162,8 +219,14 @@ export function missingAltFields(front: string | null, declared: { searchFields?
 const KEY = /^([A-Za-z_][\w-]*):(.*)$/;
 
 export type JsonFieldKind = "text" | "list" | "flag";
-type JsonValue<K extends JsonFieldKind> = K extends "text" ? string | null : K extends "list" ? string[] : boolean;
-export type JsonValues<F extends Record<string, JsonFieldKind>> = { [K in keyof F]?: JsonValue<F[K]> };
+type JsonValue<K extends JsonFieldKind> = K extends "text"
+  ? string | null
+  : K extends "list"
+    ? string[]
+    : boolean;
+export type JsonValues<F extends Record<string, JsonFieldKind>> = {
+  [K in keyof F]?: JsonValue<F[K]>;
+};
 
 export class JsonSourceError extends Error {
   constructor(readonly problems: string[]) {
@@ -179,18 +242,26 @@ export class JsonSourceError extends Error {
  * problem: an unknown, repeated or malformed key, a value of the wrong kind, or a `required` field that
  * is missing or blank. With no front matter, the whole source is the body, unless a field is required.
  */
-export function jsonSource<F extends Record<string, JsonFieldKind>>(fields: F, options: { required?: Array<keyof F & string>; blankLine?: boolean } = {}) {
+export function jsonSource<F extends Record<string, JsonFieldKind>>(
+  fields: F,
+  options: { required?: Array<keyof F & string>; blankLine?: boolean } = {},
+) {
   const keys = Object.keys(fields) as Array<keyof F & string>;
   const required = options.required ?? [];
   return {
     write(values: JsonValues<F>, body: string): string {
-      const lines = keys.filter((k) => values[k] !== undefined).map((k) => `${k}: ${JSON.stringify(values[k])}`);
+      const lines = keys
+        .filter((k) => values[k] !== undefined)
+        .map((k) => `${k}: ${JSON.stringify(values[k])}`);
       return `---\n${lines.join("\n")}\n---\n${options.blankLine ? "\n" : ""}${body}`;
     },
     read(source: string): { values: JsonValues<F>; body: string } {
       const { front, body } = splitSource(source);
       if (front === null) {
-        if (required.length > 0) throw new JsonSourceError(["The source must start with a front matter block between two --- lines."]);
+        if (required.length > 0)
+          throw new JsonSourceError([
+            "The source must start with a front matter block between two --- lines.",
+          ]);
         return { values: {}, body: source };
       }
       const problems: string[] = [];
@@ -199,14 +270,17 @@ export function jsonSource<F extends Record<string, JsonFieldKind>>(fields: F, o
         if (line.trim() === "") continue;
         const m = KEY.exec(line);
         const key = m?.[1];
-        if (!m || !key) problems.push(`This front matter line is not "key: value": ${line.slice(0, 80)}`);
-        else if (!Object.hasOwn(fields, key)) problems.push(`${key} is not a field. The fields are ${keys.join(", ")}.`);
+        if (!m || !key)
+          problems.push(`This front matter line is not "key: value": ${line.slice(0, 80)}`);
+        else if (!Object.hasOwn(fields, key))
+          problems.push(`${key} is not a field. The fields are ${keys.join(", ")}.`);
         else if (key in values) problems.push(`${key} appears twice.`);
         else values[key] = jsonValue(key, fields[key]!, m[2]!.trim(), problems);
       }
       for (const key of required) {
         const v = values[key];
-        if (v === undefined || v === null || (typeof v === "string" && v.trim() === "")) problems.push(`${key} is required.`);
+        if (v === undefined || v === null || (typeof v === "string" && v.trim() === ""))
+          problems.push(`${key} is required.`);
       }
       if (problems.length > 0) throw new JsonSourceError(problems);
       return { values: values as JsonValues<F>, body };
@@ -218,14 +292,22 @@ function jsonValue(key: string, kind: JsonFieldKind, raw: string, problems: stri
   if (kind === "text" && !raw.startsWith('"')) return raw === "" || raw === "null" ? null : raw;
   let value: unknown;
   try {
-    value = raw === "" || (kind === "list" && raw === "null") ? (kind === "list" ? [] : false) : JSON.parse(raw);
+    value =
+      raw === "" || (kind === "list" && raw === "null")
+        ? kind === "list"
+          ? []
+          : false
+        : JSON.parse(raw);
   } catch {
     problems.push(`${key}: the value is not valid JSON.`);
     return undefined;
   }
   if (kind === "text" && typeof value === "string") return value;
-  if (kind === "list" && Array.isArray(value) && value.every((t) => typeof t === "string")) return value.map((t) => t.trim()).filter(Boolean);
+  if (kind === "list" && Array.isArray(value) && value.every((t) => typeof t === "string"))
+    return value.map((t) => t.trim()).filter(Boolean);
   if (kind === "flag" && typeof value === "boolean") return value;
-  problems.push(`${key} must be ${kind === "text" ? "a string" : kind === "list" ? 'a list of strings, such as ["a", "b"]' : "true or false"}.`);
+  problems.push(
+    `${key} must be ${kind === "text" ? "a string" : kind === "list" ? 'a list of strings, such as ["a", "b"]' : "true or false"}.`,
+  );
   return undefined;
 }

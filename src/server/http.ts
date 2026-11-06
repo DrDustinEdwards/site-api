@@ -65,7 +65,15 @@ export function json(status: number, body: unknown): Response {
  */
 export function fail(code: ErrorCode, message: string, extra: Partial<ErrorBody> = {}): Response {
   const status = STATUS[code];
-  const body = { error: code, message, type: `${ERROR_TYPE_BASE}${code}`, title: TITLE[code], status, detail: message, ...extra };
+  const body = {
+    error: code,
+    message,
+    type: `${ERROR_TYPE_BASE}${code}`,
+    title: TITLE[code],
+    status,
+    detail: message,
+    ...extra,
+  };
   return new Response(JSON.stringify(body), {
     status,
     headers: { ...BASE_HEADERS, "content-type": "application/problem+json; charset=utf-8" },
@@ -73,7 +81,11 @@ export function fail(code: ErrorCode, message: string, extra: Partial<ErrorBody>
 }
 
 export class BadRequest extends Error {
-  constructor(readonly code: ErrorCode, message: string, readonly field?: string) {
+  constructor(
+    readonly code: ErrorCode,
+    message: string,
+    readonly field?: string,
+  ) {
     super(message);
   }
 }
@@ -83,7 +95,17 @@ export class BadRequest extends Error {
  * not an object, so nothing is refused for it.
  */
 function knownKeys(schema: z.ZodType): Set<string> | null {
-  const def = (schema as unknown as { def?: { type?: string; shape?: Record<string, unknown>; options?: z.ZodType[]; innerType?: z.ZodType; in?: z.ZodType } }).def;
+  const def = (
+    schema as unknown as {
+      def?: {
+        type?: string;
+        shape?: Record<string, unknown>;
+        options?: z.ZodType[];
+        innerType?: z.ZodType;
+        in?: z.ZodType;
+      };
+    }
+  ).def;
   if (!def) return null;
   if (def.type === "object" && def.shape) return new Set(Object.keys(def.shape));
   if (def.type === "union" && def.options) {
@@ -108,16 +130,29 @@ function refuseUnknown(schema: z.ZodType, value: unknown, where: "body" | "query
   const known = knownKeys(schema);
   if (!known) return;
   const unknown = Object.keys(value).find((k) => !known.has(k));
-  if (unknown !== undefined) throw new BadRequest("unknown-field", `The ${where} has a field the contract does not name: ${unknown}.`, unknown);
+  if (unknown !== undefined)
+    throw new BadRequest(
+      "unknown-field",
+      `The ${where} has a field the contract does not name: ${unknown}.`,
+      unknown,
+    );
 }
 
 /** A route that takes no query refuses any key in one (v0.22.0). */
 export function refuseAnyQuery(url: URL): void {
   const first = [...url.searchParams.keys()][0];
-  if (first !== undefined) throw new BadRequest("unknown-field", `This route takes no query, so ${first} is not a field it names.`, first);
+  if (first !== undefined)
+    throw new BadRequest(
+      "unknown-field",
+      `This route takes no query, so ${first} is not a field it names.`,
+      first,
+    );
 }
 
-export async function readBody<T extends z.ZodType>(request: Request, schema: T): Promise<z.infer<T>> {
+export async function readBody<T extends z.ZodType>(
+  request: Request,
+  schema: T,
+): Promise<z.infer<T>> {
   const declared = Number(request.headers.get("content-length") ?? "0");
   if (declared > MAX_BODY_BYTES) throw new BadRequest("too-large", "The body is too large.");
   // Counted as it arrives (site-runtime's one reader), so an understated or missing Content-Length cannot make the
@@ -164,7 +199,12 @@ export function checked<T extends z.ZodType>(schema: T, value: unknown, what: st
  * One route. `query` (v0.22.0) is true for a route that reads its query through readQuery, which refuses an unknown key
  * itself; on any other route, the handler refuses a query with any key before the route runs.
  */
-export type Route = { method: string; pattern: RegExp; query?: boolean; run: (m: RegExpMatchArray, url: URL, request: Request) => Promise<Response> };
+export type Route = {
+  method: string;
+  pattern: RegExp;
+  query?: boolean;
+  run: (m: RegExpMatchArray, url: URL, request: Request) => Promise<Response>;
+};
 
 export const ID = "([^/]+)";
 
@@ -192,10 +232,21 @@ export interface Failure {
 
 /** The contract's name and words for a failure, for the single routes and for one file of a bulk. */
 export function describeFailure(error: unknown, log: Log): Failure {
-  if (error instanceof BadRequest) return { code: error.code, message: error.message, ...(error.field !== undefined ? { field: error.field } : {}) };
-  if (error instanceof VersionConflictError) return { code: "version-conflict", message: error.message, currentVersion: error.currentVersion };
+  if (error instanceof BadRequest)
+    return {
+      code: error.code,
+      message: error.message,
+      ...(error.field !== undefined ? { field: error.field } : {}),
+    };
+  if (error instanceof VersionConflictError)
+    return {
+      code: "version-conflict",
+      message: error.message,
+      currentVersion: error.currentVersion,
+    };
   if (error instanceof NotFoundError) return { code: "not-found", message: error.message };
-  if (error instanceof MediaInUseError) return { code: "refused", message: error.message, usedBy: error.usedBy };
+  if (error instanceof MediaInUseError)
+    return { code: "refused", message: error.message, usedBy: error.usedBy };
   if (error instanceof RefusedError) return { code: "refused", message: error.message };
   if (error instanceof ContractBreach) {
     log({ siteApi: "contract-breach", detail: error.message });

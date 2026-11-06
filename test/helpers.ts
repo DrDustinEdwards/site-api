@@ -21,7 +21,9 @@ export function site<A extends SiteAdapter = ReturnType<typeof memoryAdapter>>(
   const fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const request = new Request(input, init);
     if (api.matches(request)) return api.handle(request);
-    return new Response("<html>the site's own page</html>", { status: path404(request) ? 404 : 200 });
+    return new Response("<html>the site's own page</html>", {
+      status: path404(request) ? 404 : 200,
+    });
   }) as typeof globalThis.fetch;
   return { api, fetch, logs, adapter };
 }
@@ -36,7 +38,10 @@ export function req(path: string, init: RequestInit & { key?: string | null } = 
   const { key = KEY, headers, ...rest } = init;
   return new Request(`${ORIGIN}${path}`, {
     ...rest,
-    headers: { ...(key === null ? {} : { authorization: `Bearer ${key}` }), ...(headers as Record<string, string>) },
+    headers: {
+      ...(key === null ? {} : { authorization: `Bearer ${key}` }),
+      ...(headers as Record<string, string>),
+    },
   });
 }
 
@@ -45,21 +50,46 @@ export function body(value: unknown): RequestInit {
 }
 
 /** A PNG the reference site can measure (its IHDR), with tEXt chunks for embedded metadata. CRCs are left zero. */
-export function png(width: number, height: number, text: Record<string, string> = {}, salt = 0): Uint8Array {
+export function png(
+  width: number,
+  height: number,
+  text: Record<string, string> = {},
+  salt = 0,
+): Uint8Array {
   const chunk = (type: string, data: number[]) => {
     const length = [24, 16, 8, 0].map((s) => (data.length >>> s) & 255);
-    return [...length, ...[...type].map((c) => c.charCodeAt(0)), ...data, 0, 0, 0, salt];
+    return [...length, ...Array.from(type).map((c) => c.charCodeAt(0)), ...data, 0, 0, 0, salt];
   };
   const be = (n: number) => [24, 16, 8, 0].map((s) => (n >>> s) & 255);
-  const texts = Object.entries(text).flatMap(([k, v]) => chunk("tEXt", [...[...k].map((c) => c.charCodeAt(0)), 0, ...[...v].map((c) => c.charCodeAt(0))]));
-  return Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, ...chunk("IHDR", [...be(width), ...be(height), 8, 2, 0, 0, 0]), ...texts]);
+  const texts = Object.entries(text).flatMap(([k, v]) =>
+    chunk("tEXt", [
+      ...Array.from(k).map((c) => c.charCodeAt(0)),
+      0,
+      ...Array.from(v).map((c) => c.charCodeAt(0)),
+    ]),
+  );
+  return Uint8Array.from([
+    0x89,
+    0x50,
+    0x4e,
+    0x47,
+    0x0d,
+    0x0a,
+    0x1a,
+    0x0a,
+    ...chunk("IHDR", [...be(width), ...be(height), 8, 2, 0, 0, 0]),
+    ...texts,
+  ]);
 }
 
 /**
  * A fetch that answers the outbound guard's DNS over HTTPS (v0.22.0) the way a public resolver would: every name a public
  * address, except those `names` maps to their own. Every other request goes to `fetch`.
  */
-export function withDns(fetch: typeof globalThis.fetch, names: Record<string, string> = {}): typeof globalThis.fetch {
+export function withDns(
+  fetch: typeof globalThis.fetch,
+  names: Record<string, string> = {},
+): typeof globalThis.fetch {
   return (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(String(input instanceof Request ? input.url : input));
     if (url.origin !== "https://cloudflare-dns.com") return fetch(input, init);
@@ -68,6 +98,8 @@ export function withDns(fetch: typeof globalThis.fetch, names: Record<string, st
     const v6 = ip.includes(":");
     const type = url.searchParams.get("type") === "AAAA" ? 28 : 1;
     const Answer = (type === 28) === v6 ? [{ name, type, data: ip }] : [];
-    return new Response(JSON.stringify({ Status: 0, Answer }), { headers: { "content-type": "application/dns-json" } });
+    return new Response(JSON.stringify({ Status: 0, Answer }), {
+      headers: { "content-type": "application/dns-json" },
+    });
   }) as typeof globalThis.fetch;
 }

@@ -12,7 +12,11 @@ export function insightRoutes(insight: InsightAdapter): Route[] {
       pattern: /^\/insight\/not-found$/,
       run: async (_m, url) => {
         const query = readQuery(url, NotFoundQuery);
-        const rows = await insight.notFound({ days: query.days, limit: query.limit, includeProbes: query.includeProbes === "true" });
+        const rows = await insight.notFound({
+          days: query.days,
+          limit: query.limit,
+          includeProbes: query.includeProbes === "true",
+        });
         return json(200, checked(NotFoundReport, { rows }, "not-found report"));
       },
     },

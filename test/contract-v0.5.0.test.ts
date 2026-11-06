@@ -9,10 +9,20 @@ import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import * as contract from "../src/contract.js";
 import { additiveOnly, added, now, widened, type JsonSchema } from "./additive.js";
-import { V0170_CODES, V0170_ROUTES, V0170_SCHEMAS, V0170_WIDEN, V0220_ROUTES, withV0170, withV0220 } from "./v0.17.0.js";
+import {
+  V0170_CODES,
+  V0170_ROUTES,
+  V0170_SCHEMAS,
+  V0170_WIDEN,
+  V0220_ROUTES,
+  withV0170,
+  withV0220,
+} from "./v0.17.0.js";
 import { V0190_ROUTES, V0190_SCHEMAS, asOfV0190, withV0190 } from "./v0.19.0.js";
 
-const V050 = JSON.parse(readFileSync(new URL("./fixtures/contract-v0.5.0.json", import.meta.url), "utf8")) as {
+const V050 = JSON.parse(
+  readFileSync(new URL("./fixtures/contract-v0.5.0.json", import.meta.url), "utf8"),
+) as {
   version: string;
   schemaHash: string;
   routes: Array<Record<string, string>>;
@@ -21,29 +31,63 @@ const V050 = JSON.parse(readFileSync(new URL("./fixtures/contract-v0.5.0.json", 
 asOfV0190(V050.schemas);
 
 /** What every file may carry from v0.13.0 (contract-v0.12.0.test.ts holds the rest of v0.13.0). */
-const V0130_ITEM = ["color", "credit", "downloadUrl", "license", "licenseExpires", "placeholder", "sourceUrl", "takenAt", "usedCount"];
+const V0130_ITEM = [
+  "color",
+  "credit",
+  "downloadUrl",
+  "license",
+  "licenseExpires",
+  "placeholder",
+  "sourceUrl",
+  "takenAt",
+  "usedCount",
+];
 
 /** Every v0.5.0 schema later versions extend, and exactly the optional properties each adds (v0.10.0: scheduled updates, and a file's focal point and caption). */
-const ADDED: Record<string, string[]> = withV0220(withV0190(withV0170({
-  Capabilities: [
-    "contentTags", "mediaCaption", "mediaChanges", "mediaCredit", "mediaDuplicates", "mediaEmbedded", "mediaFilters", "mediaFocus",
-    "mediaHistory", "mediaImport", "mediaLenses", "mediaReplace", "mediaReplaceKeepsSize", "mediaResize", "mediaResizePass",
-    "mediaSuggestions", "mediaTransform", "mediaUsage", "mentionReset", "scheduledUpdates", "insightNotFound",
-  ].sort(),
-  MediaItem: ["caption", "focus", ...V0130_ITEM].sort(),
-  MediaDetail: ["caption", "focus", "twins", ...V0130_ITEM].sort(),
-  MediaUploadQuery: ["resize"],
-  Meta: [],
-  ContentSummary: ["scheduledUpdate", "tags", "version"],
-  ContentDoc: ["scheduledUpdate", "tags"],
-  WriteResult: ["scheduledUpdate"],
-  ListQuery: ["dir", "sort"],
-  ContentList: ["sorted", "total"],
-  MediaListQuery: ["changedSince", "dir", "kind", "lens", "orientation", "sort"],
-  MediaList: ["changeCursor", "moreChanges", "removed", "sorted", "total"],
-  MentionListQuery: ["q", "targetId"],
-  MentionList: ["filtered"],
-}), V050.schemas), V050.schemas);
+const ADDED: Record<string, string[]> = withV0220(
+  withV0190(
+    withV0170({
+      Capabilities: [
+        "contentTags",
+        "mediaCaption",
+        "mediaChanges",
+        "mediaCredit",
+        "mediaDuplicates",
+        "mediaEmbedded",
+        "mediaFilters",
+        "mediaFocus",
+        "mediaHistory",
+        "mediaImport",
+        "mediaLenses",
+        "mediaReplace",
+        "mediaReplaceKeepsSize",
+        "mediaResize",
+        "mediaResizePass",
+        "mediaSuggestions",
+        "mediaTransform",
+        "mediaUsage",
+        "mentionReset",
+        "scheduledUpdates",
+        "insightNotFound",
+      ].sort(),
+      MediaItem: ["caption", "focus", ...V0130_ITEM].sort(),
+      MediaDetail: ["caption", "focus", "twins", ...V0130_ITEM].sort(),
+      MediaUploadQuery: ["resize"],
+      Meta: [],
+      ContentSummary: ["scheduledUpdate", "tags", "version"],
+      ContentDoc: ["scheduledUpdate", "tags"],
+      WriteResult: ["scheduledUpdate"],
+      ListQuery: ["dir", "sort"],
+      ContentList: ["sorted", "total"],
+      MediaListQuery: ["changedSince", "dir", "kind", "lens", "orientation", "sort"],
+      MediaList: ["changeCursor", "moreChanges", "removed", "sorted", "total"],
+      MentionListQuery: ["q", "targetId"],
+      MentionList: ["filtered"],
+    }),
+    V050.schemas,
+  ),
+  V050.schemas,
+);
 
 /** The one v0.5.0 schema v0.6.0 widens rather than extends: a decision may also be reset. */
 const WIDENED = "MentionDecideInput";
@@ -57,16 +101,23 @@ const exported = Object.entries(contract)
 describe("the v0.5.0 contract", () => {
   it("is the recorded v0.5.0", () => {
     expect(V050.version).toBe("0.5.0");
-    expect(V050.schemaHash).toBe("ec6a11c73e583361280e77801084b0c566f815a2e9675e21c1d9d622084db86c");
+    expect(V050.schemaHash).toBe(
+      "ec6a11c73e583361280e77801084b0c566f815a2e9675e21c1d9d622084db86c",
+    );
     expect(V050.routes.length).toBe(29);
   });
 
   it("keeps every v0.5.0 route exactly (the upload's answer named MediaUploadResult from v0.13.0), and adds only the routes later versions name", () => {
     for (const route of V050.routes) {
-      const expected = route.method === "POST" && route.path === "/media" ? { ...route, response: "MediaUploadResult" } : route;
+      const expected =
+        route.method === "POST" && route.path === "/media"
+          ? { ...route, response: "MediaUploadResult" }
+          : route;
       expect(contract.ROUTES, JSON.stringify(route)).toContainEqual(expected);
     }
-    const fresh = contract.ROUTES.filter((r) => !V050.routes.some((old) => old.method === r.method && old.path === r.path));
+    const fresh = contract.ROUTES.filter(
+      (r) => !V050.routes.some((old) => old.method === r.method && old.path === r.path),
+    );
     expect(fresh.map((r) => `${r.method} ${r.path}`)).toEqual([
       "PUT /content/:id/tags",
       "GET /content/:id/schedule",
@@ -88,7 +139,9 @@ describe("the v0.5.0 contract", () => {
     ]);
   });
 
-  for (const name of Object.keys(V050.schemas).filter((n) => !(n in ADDED) && n !== WIDENED && n !== "ErrorCode")) {
+  for (const name of Object.keys(V050.schemas).filter(
+    (n) => !(n in ADDED) && n !== WIDENED && n !== "ErrorCode",
+  )) {
     it(`keeps ${name} identical`, () => {
       expect(now(name)).toEqual(V050.schemas[name]);
     });
@@ -110,7 +163,10 @@ describe("the v0.5.0 contract", () => {
     const after = now(WIDENED);
     const decision = (s: JsonSchema) => (s.properties!.decision as { enum: string[] }).enum;
     expect(decision(after)).toEqual([...decision(before), "reset"]);
-    const strip = (s: JsonSchema) => ({ ...s, properties: { ...s.properties, decision: undefined, actor: undefined } });
+    const strip = (s: JsonSchema) => ({
+      ...s,
+      properties: { ...s.properties, decision: undefined, actor: undefined },
+    });
     expect(added(before, after)).toEqual(["actor"]);
     expect(strip(after)).toEqual(strip(before));
   });
@@ -118,16 +174,52 @@ describe("the v0.5.0 contract", () => {
   it("adds only the new schemas v0.6.0, v0.10.0, v0.13.0, v0.16.0 and v0.17.0 name", () => {
     const v060 = ["ContentTag", "ContentTagsInput", "ContentTags", "MediaLens", "SortDir"];
     const v0100 = [
-      "ScheduleCancelQuery", "ScheduledUpdate", "ScheduledUpdateSummary",
-      "MediaCaption", "MediaCaptionInput", "MediaFocus", "MediaFocusInput", "MediaReplaceQuery", "MediaReplaceResult",
+      "ScheduleCancelQuery",
+      "ScheduledUpdate",
+      "ScheduledUpdateSummary",
+      "MediaCaption",
+      "MediaCaptionInput",
+      "MediaFocus",
+      "MediaFocusInput",
+      "MediaReplaceQuery",
+      "MediaReplaceResult",
     ];
     const v0130 = [
-      "MediaColor", "MediaCredit", "MediaCreditInput", "MediaHistory", "MediaImportInput", "MediaKind", "MediaLicense",
-      "MediaOrientation", "MediaPlaceholder", "MediaResize", "MediaResizeOutcome", "MediaResizePassInput",
-      "MediaResizePassResult", "MediaRevertInput", "MediaRevision", "MediaSourceUrl", "MediaSuggestions",
-      "MediaTransformInput", "MediaTransformOp", "MediaTransformResult", "MediaTwin", "MediaUploadResult",
+      "MediaColor",
+      "MediaCredit",
+      "MediaCreditInput",
+      "MediaHistory",
+      "MediaImportInput",
+      "MediaKind",
+      "MediaLicense",
+      "MediaOrientation",
+      "MediaPlaceholder",
+      "MediaResize",
+      "MediaResizeOutcome",
+      "MediaResizePassInput",
+      "MediaResizePassResult",
+      "MediaRevertInput",
+      "MediaRevision",
+      "MediaSourceUrl",
+      "MediaSuggestions",
+      "MediaTransformInput",
+      "MediaTransformOp",
+      "MediaTransformResult",
+      "MediaTwin",
+      "MediaUploadResult",
     ];
-    expect(exported.filter((n) => !(n in V050.schemas)).sort()).toEqual([...v060, ...v0100, ...v0130, "NotFoundQuery", "NotFoundReport", "NotFoundRow", ...V0170_SCHEMAS, ...V0190_SCHEMAS].sort());
+    expect(exported.filter((n) => !(n in V050.schemas)).sort()).toEqual(
+      [
+        ...v060,
+        ...v0100,
+        ...v0130,
+        "NotFoundQuery",
+        "NotFoundReport",
+        "NotFoundRow",
+        ...V0170_SCHEMAS,
+        ...V0190_SCHEMAS,
+      ].sort(),
+    );
   });
 
   it("parses v0.5.0 bodies with the v0.6.0 schemas", () => {
@@ -136,15 +228,45 @@ describe("the v0.5.0 contract", () => {
       packageVersion: "0.5.0",
       schemaHash: V050.schemaHash,
       site: { id: "memory", name: "Memory", origin: "https://memory.example" },
-      capabilities: { content: true, preview: true, media: false, inbox: false, insight: false, publications: false, mentions: true },
+      capabilities: {
+        content: true,
+        preview: true,
+        media: false,
+        inbox: false,
+        insight: false,
+        publications: false,
+        mentions: true,
+      },
     };
     expect(contract.Meta.safeParse(meta).success).toBe(true);
-    const row = { id: "a", kind: "post", title: "A", status: "draft", path: null, publishAt: null, publishedAt: null, updatedAt: null };
+    const row = {
+      id: "a",
+      kind: "post",
+      title: "A",
+      status: "draft",
+      path: null,
+      publishAt: null,
+      publishedAt: null,
+      updatedAt: null,
+    };
     expect(contract.ContentList.safeParse({ items: [row], nextCursor: null }).success).toBe(true);
     expect(contract.MediaList.safeParse({ items: [], nextCursor: null }).success).toBe(true);
     const counts = { unverified: 0, pending: 0, approved: 0, rejected: 0, failed: 0 };
-    expect(contract.MentionList.safeParse({ items: [], nextCursor: null, counts, expiring: { failed: 0, rejected: 0 } }).success).toBe(true);
-    expect(contract.MentionDecideInput.safeParse({ decision: "approve", expectedVersion: "m1", changeId: "c1" }).success).toBe(true);
+    expect(
+      contract.MentionList.safeParse({
+        items: [],
+        nextCursor: null,
+        counts,
+        expiring: { failed: 0, rejected: 0 },
+      }).success,
+    ).toBe(true);
+    expect(
+      contract.MentionDecideInput.safeParse({
+        decision: "approve",
+        expectedVersion: "m1",
+        changeId: "c1",
+      }).success,
+    ).toBe(true);
   });
 
   it("changes the schema hash on purpose", async () => {
