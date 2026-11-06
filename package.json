@@ -59,6 +59,8 @@
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run",
     "lint": "oxlint --type-aware --deny-warnings --report-unused-disable-directives-severity=error",
+    "format": "oxfmt",
+    "format:check": "oxfmt --check",
     "bloat": "devkit-no-bloat"
   },
   "dependencies": {
@@ -68,9 +70,10 @@
     "zod": "4.6.7"
   },
   "devDependencies": {
-    "@dustinedwards/devkit": "github:DrDustinEdwards/devkit#v0.23.0",
+    "@dustinedwards/devkit": "github:DrDustinEdwards/devkit#v0.24.0",
     "@types/node": "22.20.5",
     "@vitest/coverage-v8": "4.1.12",
+    "oxfmt": "0.77.0",
     "oxlint": "1.92.0",
     "oxlint-tsgolint": "7.0.2006",
     "typescript": "5.9.3",
