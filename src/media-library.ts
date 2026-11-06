@@ -36,7 +36,6 @@ import {
 import { kindOf, orientationOf, sha256Hex, transformFocus, turnsSize } from "./media.js";
 import { mediaRev, mediaVersion, toArrayBuffer } from "./media-kit.js";
 import { placeholderAndColor, prepareUpload, type UploadImages } from "./media-upload.js";
-import type { R2ObjectLike } from "./r2.js";
 
 // ---------- What a site gives the library
 
@@ -138,15 +137,22 @@ export interface MediaLibraryStore {
   changedSince(from: number, head: number, limit: number): Promise<Array<{ key: string; seq: number }>>;
 }
 
+/** The parts of an R2 object the library reads: no index signature, so Workers' own R2Object fits it. */
+export interface MediaObject {
+  etag: string;
+  httpMetadata?: { contentType?: string; cacheControl?: string; contentDisposition?: string; contentEncoding?: string; contentLanguage?: string };
+  customMetadata?: Record<string, string>;
+}
+
 /** The parts of an R2 bucket binding the library uses, so a site passes its binding straight in. */
 export interface MediaBucket {
-  head(key: string): Promise<R2ObjectLike | null>;
-  get(key: string): Promise<(R2ObjectLike & { body: ReadableStream; arrayBuffer(): Promise<ArrayBuffer> }) | null>;
+  head(key: string): Promise<MediaObject | null>;
+  get(key: string): Promise<(MediaObject & { body: ReadableStream; arrayBuffer(): Promise<ArrayBuffer> }) | null>;
   put(
     key: string,
     value: ArrayBuffer | Uint8Array | ReadableStream,
-    options?: { httpMetadata?: R2ObjectLike["httpMetadata"]; customMetadata?: Record<string, string>; onlyIf?: { etagMatches: string } },
-  ): Promise<R2ObjectLike | null>;
+    options?: { httpMetadata?: MediaObject["httpMetadata"]; customMetadata?: Record<string, string>; onlyIf?: { etagMatches: string } },
+  ): Promise<MediaObject | null>;
   delete(keys: string | string[]): Promise<void>;
   list(options: { prefix: string; cursor?: string }): Promise<{ objects: Array<{ key: string }>; truncated: boolean; cursor?: string }>;
 }
