@@ -1,10 +1,12 @@
-# site-api's checks, on every push and every pull request. Every site and Carrel install this package
+# site-api's checks, on every pull request and every push to main. Every site and Carrel install this package
 # by git tag, so a release is only as good as these. No secrets: the tests run in Node against the
 # in-memory test site, and the conformance suite is part of `npm test`.
 name: CI
 
 on:
+  # A branch's run comes from its pull request; a push runs only on main, so no commit runs twice.
   push:
+    branches: [main]
   pull_request:
 
 permissions:
