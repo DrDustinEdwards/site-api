@@ -67,7 +67,7 @@ export const MediaFocus = z
 export const MediaCaption = z.string().max(2000);
 
 /** Where the site serves a file, or offers it: a path on the site, such as /media/2026/09/photo.webp, or a full https URL. */
-const MediaAddress = z.string().min(1).max(2000).refine((u) => u.startsWith("/") || /^https:\/\//.test(u), "A path or an https URL");
+const MediaAddress = z.string().min(1).max(2000).refine((u) => u.startsWith("/") || u.startsWith("https://"), "A path or an https URL");
 
 /** The longest placeholder a file may carry (v0.13.0): a tiny blurred picture, never the picture itself. */
 export const MAX_PLACEHOLDER_CHARS = 2048;

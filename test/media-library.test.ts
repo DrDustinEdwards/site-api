@@ -8,6 +8,7 @@ import { d1MediaStore, mediaLibrary, MEDIA_LIBRARY_SQL, type D1BatchLike, type M
 import { runConformance } from "../src/conformance.js";
 import { memoryAdapter } from "../src/testing.js";
 import { KEY, ORIGIN, png, site } from "./helpers.js";
+import { must } from "../src/must.js";
 
 /** SQLite as D1, with D1's batch: the statements run in one transaction. */
 function d1(sql: string): D1BatchLike & { db: DatabaseSync } {
@@ -58,7 +59,7 @@ function bucket(): MediaBucket & { objects: Map<string, { bytes: Uint8Array; eta
     get: async (key) => {
       const o = objects.get(key);
       if (!o) return null;
-      return { ...view(key)!, body: new Response(o.bytes.slice()).body!, arrayBuffer: async () => o.bytes.slice().buffer };
+      return { ...must(view(key)), body: must(new Response(o.bytes.slice()).body), arrayBuffer: async () => o.bytes.slice().buffer };
     },
     put: async (key, value, options = {}) => {
       if (options.onlyIf && objects.get(key)?.etag !== options.onlyIf.etagMatches) return null;
@@ -74,7 +75,7 @@ function bucket(): MediaBucket & { objects: Map<string, { bytes: Uint8Array; eta
 }
 
 const sizeOf = (bytes: Uint8Array) => {
-  const be = (at: number) => ((bytes[at]! << 24) | (bytes[at + 1]! << 16) | (bytes[at + 2]! << 8) | bytes[at + 3]!) >>> 0;
+  const be = (at: number) => ((must(bytes[at]) << 24) | (must(bytes[at + 1]) << 16) | (must(bytes[at + 2]) << 8) | must(bytes[at + 3])) >>> 0;
   return { width: be(16), height: be(20) };
 };
 
@@ -134,42 +135,42 @@ describe("media library", () => {
     expect(item).toMatchObject({ width: 800, height: 600, version: "r0" });
 
     // A stale version is refused before anything changes.
-    await expect(adapter.setAlt!(item.id, { alt: "A heron", expectedVersion: "r9", changeId: "c-a" })).rejects.toMatchObject({ name: "VersionConflictError" });
-    const { version } = await adapter.setFocus!(item.id, { focus: "0.25x0.75", expectedVersion: "r0", changeId: "c-f" });
-    expect(media.objects.get(item.id)!.customMetadata).toMatchObject({ focus: "0.25x0.75" });
+    await expect(must(adapter.setAlt).call(adapter, item.id, { alt: "A heron", expectedVersion: "r9", changeId: "c-a" })).rejects.toMatchObject({ name: "VersionConflictError" });
+    const { version } = await must(adapter.setFocus).call(adapter, item.id, { focus: "0.25x0.75", expectedVersion: "r0", changeId: "c-f" });
+    expect(must(media.objects.get(item.id)).customMetadata).toMatchObject({ focus: "0.25x0.75" });
 
     // Trash twice at one version is one write.
-    const trashed = await adapter.trash!(item.id, { expectedVersion: version, changeId: "c-t" });
-    expect(await adapter.trash!(item.id, { expectedVersion: trashed.version, changeId: "c-t2" })).toEqual(trashed);
-    const restored = await adapter.restore!(item.id, { expectedVersion: trashed.version, changeId: "c-r" });
+    const trashed = await must(adapter.trash).call(adapter, item.id, { expectedVersion: version, changeId: "c-t" });
+    expect(await must(adapter.trash).call(adapter, item.id, { expectedVersion: trashed.version, changeId: "c-t2" })).toEqual(trashed);
+    const restored = await must(adapter.restore).call(adapter, item.id, { expectedVersion: trashed.version, changeId: "c-r" });
 
     // A replace with a picture over the size; its shrink keeps the focal point on the row and on the object.
-    const replaced = await adapter.replace!(item.id, { bytes: png(2000, 1500), contentType: "image/png", filename: "heron-2.png", expectedVersion: restored.version, changeId: "c-p" });
+    const replaced = await must(adapter.replace).call(adapter, item.id, { bytes: png(2000, 1500), contentType: "image/png", filename: "heron-2.png", expectedVersion: restored.version, changeId: "c-p" });
     expect(replaced.item).toMatchObject({ width: 2000, filename: "heron-2.png", focus: null, version: "r4" });
-    await adapter.setFocus!(item.id, { focus: "0.5x0.5", expectedVersion: "r4", changeId: "c-f2" });
-    const shrunk = await adapter.shrink!(item.id, { expectedVersion: "r5", changeId: "c-s" });
+    await must(adapter.setFocus).call(adapter, item.id, { focus: "0.5x0.5", expectedVersion: "r4", changeId: "c-f2" });
+    const shrunk = await must(adapter.shrink).call(adapter, item.id, { expectedVersion: "r5", changeId: "c-s" });
     expect(shrunk).toMatchObject({ resized: true, item: { width: 1000, height: 750, focus: "0.5x0.5", version: "r6" } });
-    expect(media.objects.get(item.id)!.customMetadata).toMatchObject({ focus: "0.5x0.5" });
+    expect(must(media.objects.get(item.id)).customMetadata).toMatchObject({ focus: "0.5x0.5" });
 
-    const history = await adapter.history!(item.id);
-    expect(history!.map((r) => [r.reason, r.width, r.current])).toEqual([
+    const history = await must(adapter.history).call(adapter, item.id);
+    expect(must(history).map((r) => [r.reason, r.width, r.current])).toEqual([
       ["resize", 1000, true],
       ["replace", 2000, false],
       ["upload", 800, false],
     ]);
-    const reverted = await adapter.revert!(item.id, { to: history![2]!.rev, expectedVersion: "r6", changeId: "c-v" });
+    const reverted = await must(adapter.revert).call(adapter, item.id, { to: must(must(history)[2]).rev, expectedVersion: "r6", changeId: "c-v" });
     expect(reverted.item).toMatchObject({ width: 800, height: 600, focus: null, version: "r7" });
-    expect(sizeOf(media.objects.get(item.id)!.bytes)).toEqual({ width: 800, height: 600 });
+    expect(sizeOf(must(media.objects.get(item.id)).bytes)).toEqual({ width: 800, height: 600 });
 
     // Every change is in the log, once per file.
-    const changes = await adapter.changes!({ since: "0", limit: 10 });
+    const changes = await must(adapter.changes).call(adapter, { since: "0", limit: 10 });
     expect(changes).toMatchObject({ items: [{ id: item.id, version: "r7" }], removed: [], more: false });
 
     // A delete takes the row, its revisions, the object and every copy kept beside it.
     await adapter.delete(item.id, { changeId: "c-d" });
     expect([...media.objects.keys()]).toEqual([]);
     expect(db.db.prepare("SELECT count(*) AS n FROM media_revisions").get()).toEqual({ n: 0 });
-    expect((await adapter.changes!({ since: changes.cursor, limit: 10 })).removed).toEqual([item.id]);
+    expect((await must(adapter.changes).call(adapter, { since: changes.cursor, limit: 10 })).removed).toEqual([item.id]);
   });
 
   it("finds a re-upload, counts uses, refuses a delete in use and keeps copies in a backups bucket", async () => {
@@ -180,14 +181,14 @@ describe("media library", () => {
     expect(first).toMatchObject({ width: 1000, resizedFrom: { width: 1600, height: 1200 }, usedCount: 0 });
     // The camera file sent again is found by the bytes it was uploaded with, before the shrink changed them.
     const original = db.db.prepare("SELECT sha256 FROM media_revisions WHERE reason = 'upload'").get() as { sha256: string };
-    expect((await adapter.findByHash!(original.sha256))!.id).toBe(first.id);
+    expect(must((await must(adapter.findByHash).call(adapter, original.sha256))).id).toBe(first.id);
     expect([...backups.objects.keys()]).toEqual([expect.stringMatching(new RegExp(`^media/revisions/${first.id}/[0-9a-f]{64}$`))]);
 
     const list = await adapter.list({ lens: "unattached", limit: 50 });
     expect(list.items.map((i) => i.id)).toEqual([first.id]);
 
     uses.set(first.id, [{ type: "post", id: "a", title: "A walk", detail: "body" }]);
-    expect((await adapter.get(first.id))!).toMatchObject({ usedCount: 1, usedBy: [{ id: "a" }] });
+    expect(must((await adapter.get(first.id)))).toMatchObject({ usedCount: 1, usedBy: [{ id: "a" }] });
     await expect(adapter.delete(first.id, { changeId: "c-1" })).rejects.toMatchObject({ name: "MediaInUseError" });
 
     // The site's own tables refuse in the same statement, even when its check missed the use.
@@ -206,13 +207,13 @@ describe("media library", () => {
   it("stores a quarter turn as a new file on a site whose pages hold the size, and refuses a replace of another size", async () => {
     const { adapter } = library({ replaceKeepsSize: true });
     const item = await upload(adapter, png(800, 600));
-    await expect(adapter.replace!(item.id, { bytes: png(600, 800), contentType: "image/png", filename: "x.png", expectedVersion: "r0", changeId: "c-1" })).rejects.toMatchObject({
+    await expect(must(adapter.replace).call(adapter, item.id, { bytes: png(600, 800), contentType: "image/png", filename: "x.png", expectedVersion: "r0", changeId: "c-1" })).rejects.toMatchObject({
       name: "RefusedError",
     });
-    const turned = await adapter.transform!(item.id, { op: "rotate-90", asNewFile: true, expectedVersion: "r0", changeId: "c-2" });
+    const turned = await must(adapter.transform).call(adapter, item.id, { op: "rotate-90", asNewFile: true, expectedVersion: "r0", changeId: "c-2" });
     expect(turned.item).toMatchObject({ width: 600, height: 800, alt: "A heron on the river bank", version: "r0" });
     expect(turned.item.id).not.toBe(item.id);
-    expect((await adapter.get(item.id))!).toMatchObject({ width: 800, version: "r0" });
+    expect(must((await adapter.get(item.id)))).toMatchObject({ width: 800, version: "r0" });
   });
   it("keeps a site's older copies and hashes through a replace, and gives two uploads of one file at once their own keys", async () => {
     const { adapter, media, db } = library();
@@ -221,11 +222,11 @@ describe("media library", () => {
     media.objects.set("old/copy.png", { bytes: png(400, 300), etag: "e-old" });
     db.db.prepare("UPDATE media SET sha256 = '' WHERE key = ?").run(item.id);
     db.db.prepare("UPDATE media_revisions SET bytes = 1, width = 400, height = 300, sha256 = 'x', copy_key = 'old/copy.png' WHERE media_key = ?").run(item.id);
-    const replaced = await adapter.replace!(item.id, { bytes: png(700, 500), contentType: "image/png", filename: "heron.png", expectedVersion: "r0", changeId: "c-1" });
+    const replaced = await must(adapter.replace).call(adapter, item.id, { bytes: png(700, 500), contentType: "image/png", filename: "heron.png", expectedVersion: "r0", changeId: "c-1" });
     const rows = db.db.prepare("SELECT id, copy_key FROM media_revisions WHERE media_key = ? ORDER BY id").all(item.id) as Array<{ id: number; copy_key: string | null }>;
     expect(rows.map((r) => r.copy_key)).toEqual(["old/copy.png", expect.stringMatching(/^history\/.+\/[0-9a-f]{64}$/), null]);
     // A revert still finds the copy the site kept before the switch.
-    const back = await adapter.revert!(item.id, { to: String(rows[0]!.id), expectedVersion: replaced.item.version!, changeId: "c-2" });
+    const back = await must(adapter.revert).call(adapter, item.id, { to: String(must(rows[0]).id), expectedVersion: must(replaced.item.version), changeId: "c-2" });
     expect(back.item).toMatchObject({ width: 400, height: 300 });
 
     const bytes = png(320, 240);

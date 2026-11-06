@@ -5,10 +5,11 @@
 
 import { MAX_ALT_CHARS, type MediaItem, type MediaKind, type MediaOrientation, type MediaTransformOp, type MediaUploadLimits } from "./contract.js";
 import { guardedFetch, OutboundRefusal } from "./outbound.js";
+import { must } from "./must.js";
 
 /** The media type without parameters, lower case: "image/png; x=1" is "image/png". */
 export function essence(contentType: string | null): string {
-  return (contentType ?? "").split(";")[0]!.trim().toLowerCase();
+  return must((contentType ?? "").split(";")[0]).trim().toLowerCase();
 }
 
 type UploadRefusal = { code: "invalid" | "too-large"; message: string };

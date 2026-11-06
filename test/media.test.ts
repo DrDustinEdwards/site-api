@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 import { createSiteClient, SiteApiError } from "../src/client.js";
 import { memoryAdapter } from "../src/testing.js";
 import { KEY, ORIGIN, req, site } from "./helpers.js";
+import { must } from "../src/must.js";
 
 const PNG = Uint8Array.from(
   atob("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="),
@@ -16,7 +17,7 @@ const JPEG = Uint8Array.from([0xff, 0xd8, 0xff, 0xe0, 0, 16, 0x4a, 0x46, 0x49, 0
 function spied(options: Parameters<typeof memoryAdapter>[0] = {}) {
   const adapter = memoryAdapter(options);
   const calls = vi.fn();
-  const media = adapter.media!;
+  const media = must(adapter.media);
   for (const name of ["list", "get", "upload", "delete"] as const) {
     const fn = media[name] as (...a: unknown[]) => unknown;
     (media as unknown as Record<string, unknown>)[name] = (...args: unknown[]) => {
@@ -82,7 +83,7 @@ describe("PLANT: deleting a file a post uses", () => {
     const error = refused as SiteApiError;
     expect(error.status).toBe(422);
     expect(error.body).toMatchObject({ error: "refused", usedBy: [{ id: "river-post", title: "The river" }] });
-    expect(error.body!.message).toContain("The river (line 6)");
+    expect(must(error.body).message).toContain("The river (line 6)");
     expect(adapter.mediaStore.has(item.id)).toBe(true);
     expect(adapter.deleted).toEqual([]);
 
@@ -223,7 +224,7 @@ describe("PLANT: a media id that climbs out", () => {
 describe("PLANT: a site answering outside the media contract", () => {
   it("is reported as a site failure, and its answer is never passed on", async () => {
     const adapter = memoryAdapter();
-    adapter.media!.list = async () => ({ items: [{ id: "../x", url: "javascript:alert(1)" }], nextCursor: null }) as never;
+    must(adapter.media).list = async () => ({ items: [{ id: "../x", url: "javascript:alert(1)" }], nextCursor: null }) as never;
     const { api, logs } = site(adapter);
     const response = await api.handle(req("/api/carrel/v1/media"));
     expect(response.status).toBe(500);

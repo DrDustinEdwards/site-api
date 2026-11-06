@@ -36,6 +36,7 @@ import {
 import { kindOf, orientationOf, sha256Hex, transformFocus, turnsSize } from "./media.js";
 import { mediaRev, mediaVersion, toArrayBuffer } from "./media-kit.js";
 import { placeholderAndColor, prepareUpload, type UploadImages } from "./media-upload.js";
+import { must } from "./must.js";
 
 // ---------- What a site gives the library
 
@@ -307,7 +308,7 @@ const positive = (n: number | null): number | null => (n !== null && n > 0 ? n :
 /** The whole media group over the site's store and bucket. */
 export function mediaLibrary(options: MediaLibraryOptions): MediaAdapter {
   const { store, bucket, images, resize } = options;
-  const keyOf = options.key ? (file: MediaKeyInput, attempt: number) => options.key!(file, attempt) : datedKey("uploads/");
+  const keyOf = options.key ? (file: MediaKeyInput, attempt: number) => must(options.key).call(options, file, attempt) : datedKey("uploads/");
   const historyBucket = options.history?.bucket ?? bucket;
   const historyPrefix = options.history?.prefix ?? "history/";
   const historyServed = historyBucket === bucket;
@@ -426,7 +427,7 @@ export function mediaLibrary(options: MediaLibraryOptions): MediaAdapter {
   /** The object's custom metadata for a record: the site's fields, and the focal point when there is one. */
   function objectMetadata(record: MediaRecord, held: Record<string, string> = {}): Record<string, string> {
     const { [FOCUS_METADATA]: _old, ...rest } = held;
-    return { ...rest, ...(options.customMetadata?.(record) ?? {}), ...(record.focus ? { [FOCUS_METADATA]: record.focus } : {}) };
+    return { ...rest, ...options.customMetadata?.(record), ...(record.focus ? { [FOCUS_METADATA]: record.focus } : {}) };
   }
 
   /** Bytes as the library stores them; a replace or a shrink is not an upload, so it has no alt and no duplicates key. */
@@ -510,7 +511,7 @@ export function mediaLibrary(options: MediaLibraryOptions): MediaAdapter {
     const key = await claimKey({ filename: file.filename, contentType: file.contentType, sha256: file.uploadSha256, storedSha256: file.sha256, width: file.width, height: file.height, at }, record);
     try {
       await bucket.put(key, file.bytes, {
-        httpMetadata: { ...(options.httpMetadata?.({ ...record, key }) ?? {}), contentType: file.contentType },
+        httpMetadata: { ...options.httpMetadata?.({ ...record, key }), contentType: file.contentType },
         customMetadata: objectMetadata({ ...record, key, rev: 0 }),
       });
     } catch (error) {
@@ -819,7 +820,7 @@ export function mediaLibrary(options: MediaLibraryOptions): MediaAdapter {
         const created = await storeFile({
           bytes,
           contentType: record.contentType,
-          filename: record.filename ?? id.split("/").pop()!,
+          filename: record.filename ?? must(id.split("/").pop()),
           uploadSha256: sha256,
           sha256,
           width,
@@ -907,7 +908,7 @@ export function mediaLibrary(options: MediaLibraryOptions): MediaAdapter {
           return record ? [itemOf(record, options.usage ? (uses ?? new Map()) : undefined)] : [];
         }),
         removed: taken.filter((c) => !records.has(c.key)).map((c) => c.key),
-        cursor: String(more ? taken[taken.length - 1]!.seq : head),
+        cursor: String(more ? must(taken[taken.length - 1]).seq : head),
         more,
       };
     },
@@ -922,13 +923,13 @@ export function mediaLibrary(options: MediaLibraryOptions): MediaAdapter {
             const object = await bucket.get(id);
             if (!object) return null;
             try {
-              return await options.suggest!(object.body, id);
+              return await must(options.suggest).call(options, object.body, id);
             } catch (error) {
               throw new RefusedError(`No suggestion was made: ${error instanceof Error ? error.message : String(error)}`);
             }
           },
           async suggestFile({ bytes }: { bytes: Uint8Array; contentType: string }) {
-            return options.suggest!(new Response(toArrayBuffer(bytes)).body!);
+            return must(options.suggest).call(options, must(new Response(toArrayBuffer(bytes)).body));
           },
         }
       : {}),

@@ -48,6 +48,7 @@ import { addressRefusal, OutboundRefusal } from "../outbound.js";
 import { duplicateKey, stripMetadata } from "../media-upload.js";
 import type { SiteApiStore } from "../store.js";
 import { BadRequest, ContractBreach, ID, checked, describeFailure, fail, json, pathParam, readBody, readQuery, type Log, type Route } from "./http.js";
+import { must } from "../must.js";
 
 /** How many trashed files one page of the empty-trash gather asks the site for. */
 const TRASH_PAGE = 200;
@@ -84,7 +85,7 @@ export function mediaRoutes(media: MediaAdapter, log: Log, siteStore?: Pick<Site
         if (wrongType) throw new BadRequest(wrongType.code, wrongType.message);
         const decorative = query.decorative === "yes";
         checkAlt(query.alt, decorative, query.filename);
-        return store(await uploaded(request, contentType), contentType, { ...query, alt: decorative ? "" : query.alt!.trim(), decorative });
+        return store(await uploaded(request, contentType), contentType, { ...query, alt: decorative ? "" : must(query.alt).trim(), decorative });
       },
     },
     // v0.19.0: the model's alt text and tags for a file not yet stored, for the upload form to offer. Nothing is stored.
@@ -115,7 +116,7 @@ export function mediaRoutes(media: MediaAdapter, log: Log, siteStore?: Pick<Site
         const decorative = input.decorative === true;
         checkAlt(input.alt, decorative, input.filename ?? nameOf(input.url));
         const { bytes, contentType, address } = await imported(input.url);
-        return store(bytes, contentType, { ...input, filename: input.filename ?? nameOf(address), alt: decorative ? "" : input.alt!.trim(), decorative }, input.url);
+        return store(bytes, contentType, { ...input, filename: input.filename ?? nameOf(address), alt: decorative ? "" : must(input.alt).trim(), decorative }, input.url);
       },
     },
     {
@@ -425,7 +426,7 @@ export function mediaRoutes(media: MediaAdapter, log: Log, siteStore?: Pick<Site
     let response: Response;
     let address: string;
     try {
-      ({ response, address } = await fetchImport(media.importFetch!, url));
+      ({ response, address } = await fetchImport(must(media.importFetch), url));
     } catch (error) {
       if (error instanceof OutboundRefusal) throw new RefusedError(error.message);
       throw error;
@@ -571,7 +572,7 @@ async function bulkOne(
     const expectedVersion = item.expectedVersion;
     if (!expectedVersion) throw new BadRequest("invalid", `expectedVersion: ${op} needs the version the caller last saw.`);
     if (op === "trash" || op === "restore") {
-      const result = await (op === "trash" ? m.trash!(id, { expectedVersion, changeId }) : m.restore!(id, { expectedVersion, changeId }));
+      const result = await (op === "trash" ? must(m.trash).call(m, id, { expectedVersion, changeId }) : must(m.restore).call(m, id, { expectedVersion, changeId }));
       return { ok: true, id, changeId, version: checked(MediaWriteResult, { id, version: result.version, changeId }, `media ${op}`).version };
     }
     // Tags: the new set is worked out from what the site holds now, and refused if that is not the
@@ -586,7 +587,7 @@ async function bulkOne(
     }
     const next = [...held].sort();
     if (!MediaTagsInput.shape.tags.safeParse(next).success) throw new RefusedError("A file carries at most 12 tags.");
-    const result = await m.setTags!(id, { tags: next, expectedVersion, changeId });
+    const result = await must(m.setTags).call(m, id, { tags: next, expectedVersion, changeId });
     return { ok: true, id, changeId, version: checked(MediaWriteResult, { id, version: result.version, changeId }, "media tags").version };
   } catch (error) {
     const usedBy = error instanceof MediaInUseError ? error.usedBy : undefined;

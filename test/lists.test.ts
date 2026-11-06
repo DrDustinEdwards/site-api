@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 import { createSiteClient } from "../src/client.js";
 import { memoryAdapter, type MemoryAdapterOptions } from "../src/testing.js";
 import { KEY, ORIGIN, req, site } from "./helpers.js";
+import { must } from "../src/must.js";
 
 const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]);
 
@@ -20,9 +21,9 @@ describe("media lenses and sort (v0.6.0)", () => {
     const { adapter, client: c } = client();
     const used = await c.media.upload({ bytes: PNG, contentType: "image/png", filename: "used.png", alt: "In a post", changeId: "u1" });
     // Stored before v0.19.0, with no alt and no one's choice.
-    const bare = await adapter.media!.upload({ bytes: PNG, contentType: "image/png", filename: "bare.png", alt: "", changeId: "u2" });
+    const bare = await must(adapter.media).upload({ bytes: PNG, contentType: "image/png", filename: "bare.png", alt: "", changeId: "u2" });
     await c.saveDraft("p", { source: `# P\n![x](/media/${used.id})\n`, expectedVersion: null, changeId: "c1" });
-    adapter.mediaStore.get(used.id)!.item.bytes = 2 * 1024 * 1024;
+    must(adapter.mediaStore.get(used.id)).item.bytes = 2 * 1024 * 1024;
     expect((await c.media.list({ lens: "unattached" })).items.map((i) => i.id)).toEqual([bare.id]);
     expect((await c.media.list({ lens: "no-alt" })).items.map((i) => i.id)).toEqual([bare.id]);
     expect((await c.media.list({ lens: "large" })).items.map((i) => i.id)).toEqual([used.id]);
@@ -34,7 +35,7 @@ describe("media lenses and sort (v0.6.0)", () => {
 
   it("PLANT: answers a lens the site does not name with 501, and an unknown lens or sort with 400, before the adapter", async () => {
     const { adapter, api } = client({ mediaLenses: false });
-    const spy = vi.spyOn(adapter.media!, "list");
+    const spy = vi.spyOn(must(adapter.media), "list");
     expect((await api.handle(req("/api/carrel/v1/media?lens=no-alt"))).status).toBe(501);
     for (const q of ["lens=pretty", "sort=hue", "dir=up"]) expect((await api.handle(req(`/api/carrel/v1/media?${q}`))).status, q).toBe(400);
     expect(spy).not.toHaveBeenCalled();
@@ -60,7 +61,7 @@ describe("mention search and the one-post filter (v0.6.0)", () => {
 
   it("PLANT: refuses a search too long or an empty post id before the adapter", async () => {
     const { adapter, api } = client();
-    const spy = vi.spyOn(adapter.mentions!, "list");
+    const spy = vi.spyOn(must(adapter.mentions), "list");
     for (const q of [`q=${"x".repeat(201)}`, "targetId="]) expect((await api.handle(req(`/api/carrel/v1/mentions?${q}`))).status, q).toBe(400);
     expect(spy).not.toHaveBeenCalled();
   });
@@ -73,7 +74,7 @@ describe("the 404 report (v0.16.0)", () => {
       { path: "/wp-admin", kind: "probe" as const, hits: 2, referrers: [{ host: "", hits: 2 }] },
     ];
     const { adapter, client: c } = client({ notFound: rows });
-    const spy = vi.spyOn(adapter.insight!, "notFound");
+    const spy = vi.spyOn(must(adapter.insight), "notFound");
     expect((await c.meta()).capabilities).toMatchObject({ insight: true, insightNotFound: true });
     expect(await c.insight.notFound()).toEqual({ rows: rows.slice(0, 1) });
     expect(spy).toHaveBeenLastCalledWith({ days: 30, limit: 50, includeProbes: false });

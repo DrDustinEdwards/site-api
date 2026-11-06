@@ -11,6 +11,7 @@ import * as contract from "../src/contract.js";
 import { additiveOnly, added, now, widened, type JsonSchema } from "./additive.js";
 import { V0170_CODES, V0170_ROUTES, V0170_SCHEMAS, V0170_WIDEN, V0220_ROUTES, withV0170, withV0220 } from "./v0.17.0.js";
 import { V0190_ROUTES, V0190_SCHEMAS, asOfV0190, withV0190 } from "./v0.19.0.js";
+import { must } from "../src/must.js";
 
 const V0120 = JSON.parse(readFileSync(new URL("./fixtures/contract-v0.12.0.json", import.meta.url), "utf8")) as {
   version: string;
@@ -90,8 +91,8 @@ describe("the v0.12.0 contract", () => {
   });
 
   it("answers an upload with MediaItem and three optional properties more, so a v0.12.0 reader's MediaItem still parses it", () => {
-    additiveOnly(V0120.schemas.MediaItem!, now("MediaUploadResult"), "MediaUploadResult");
-    expect(added(V0120.schemas.MediaItem!, now("MediaUploadResult")).sort()).toEqual([...ITEM, ...ADDED.MediaItem!.filter((p) => !ITEM.includes(p)), "duplicateOf", "embedded", "resizedFrom"].sort());
+    additiveOnly(must(V0120.schemas.MediaItem), now("MediaUploadResult"), "MediaUploadResult");
+    expect(added(must(V0120.schemas.MediaItem), now("MediaUploadResult")).sort()).toEqual([...ITEM, ...must(ADDED.MediaItem).filter((p) => !ITEM.includes(p)), "duplicateOf", "embedded", "resizedFrom"].sort());
   });
 
   for (const name of Object.keys(V0120.schemas).filter((n) => !(n in ADDED) && n !== "MediaLens" && n !== "ErrorCode")) {
@@ -102,17 +103,17 @@ describe("the v0.12.0 contract", () => {
 
   for (const [name, props] of Object.entries(ADDED)) {
     it(`extends ${name} by optional properties only: ${props.join(", ") || "none of its own"}`, () => {
-      additiveOnly(V0120.schemas[name]!, now(name), name, WIDEN);
-      expect(added(V0120.schemas[name]!, now(name)).sort()).toEqual(props);
+      additiveOnly(must(V0120.schemas[name]), now(name), name, WIDEN);
+      expect(added(must(V0120.schemas[name]), now(name)).sort()).toEqual(props);
     });
   }
 
   it("widens the lenses by duplicates, license-expired and oversized, and nothing else", () => {
-    widened(V0120.schemas.MediaLens!, now("MediaLens"), NEW_LENSES, "MediaLens");
+    widened(must(V0120.schemas.MediaLens), now("MediaLens"), NEW_LENSES, "MediaLens");
   });
 
   it("widens the error codes by in-progress (v0.17.0) and unknown-field (v0.22.0), and nothing else", () => {
-    widened(V0120.schemas.ErrorCode!, now("ErrorCode"), V0170_CODES, "ErrorCode");
+    widened(must(V0120.schemas.ErrorCode), now("ErrorCode"), V0170_CODES, "ErrorCode");
   });
 
   it("adds only the new schemas v0.13.0, v0.17.0 and v0.17.0 name", () => {

@@ -9,6 +9,7 @@
 import type { PublishHook } from "./hooks.js";
 import { guardedFetch, outboundRefusal } from "./outbound.js";
 import type { SiteApiStore } from "./store.js";
+import { must } from "./must.js";
 
 const MAX_REDIRECTS = 5;
 const TIMEOUT_MS = 5000;
@@ -23,14 +24,14 @@ type Tag = { name: string; attrs: string; start: number; end: number; closing: b
 function* tags(html: string): Generator<Tag> {
   const pattern = /<(\/?)([a-zA-Z][\w-]*)\b((?:[^>"']|"[^"]*"|'[^']*')*)>/g;
   for (let m = pattern.exec(html); m; m = pattern.exec(html)) {
-    yield { name: m[2]!.toLowerCase(), attrs: m[3]!, start: m.index, end: m.index + m[0].length, closing: m[1] === "/" };
+    yield { name: must(m[2]).toLowerCase(), attrs: must(m[3]), start: m.index, end: m.index + m[0].length, closing: m[1] === "/" };
   }
 }
 
 function attr(attrs: string, name: string): string | null {
   const m = new RegExp(`(?:^|\\s)${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s"'>]+))`, "i").exec(attrs);
   if (!m) return null;
-  return (m[1] ?? m[2] ?? m[3]!).replace(/&(amp|quot|#39|lt|gt);/g, (_, e: string) => ({ amp: "&", quot: '"', "#39": "'", lt: "<", gt: ">" })[e]!);
+  return (m[1] ?? m[2] ?? must(m[3])).replace(/&(amp|quot|#39|lt|gt);/g, (_, e: string) => must(({ amp: "&", quot: '"', "#39": "'", lt: "<", gt: ">" })[e]));
 }
 
 const words = (value: string | null) => (value ?? "").toLowerCase().split(/\s+/).filter(Boolean);
@@ -90,8 +91,8 @@ export function outboundLinks(html: string, pageUrl: string): string[] {
 export function endpointOf(linkHeader: string | null, html: string, pageUrl: string): string | null {
   for (const part of (linkHeader ?? "").split(/,(?=\s*<)/)) {
     const m = /<([^>]*)>(.*)/.exec(part);
-    const rel = m && /;\s*rel\s*=\s*(?:"([^"]*)"|([^\s;,]+))/i.exec(m[2]!);
-    if (m && rel && words(rel[1] ?? rel[2]!).includes("webmention")) return resolve(m[1]!, pageUrl);
+    const rel = m && /;\s*rel\s*=\s*(?:"([^"]*)"|([^\s;,]+))/i.exec(must(m[2]));
+    if (m && rel && words(rel[1] ?? must(rel[2])).includes("webmention")) return resolve(must(m[1]), pageUrl);
   }
   for (const tag of tags(unread(html))) {
     if (tag.closing || (tag.name !== "link" && tag.name !== "a")) continue;

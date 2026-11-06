@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { createSiteClient, SiteApiError } from "../src/client.js";
 import { memoryAdapter } from "../src/testing.js";
 import { KEY, ORIGIN, body, req, site } from "./helpers.js";
+import { must } from "../src/must.js";
 
 function client(adapter = memoryAdapter()) {
   const s = site(adapter);
@@ -25,7 +26,7 @@ describe("content list (v0.6.0)", () => {
     const page = await c.list({ limit: 1 });
     expect(page.items[0]).toMatchObject({ id: "a", version: a.version, tags: ["one", "two"] });
     expect(page.total).toBe(3);
-    expect((await c.list({ limit: 2, cursor: page.nextCursor! })).items.map((i) => [i.id, i.tags])).toEqual([["b", []], ["c", undefined]]);
+    expect((await c.list({ limit: 2, cursor: must(page.nextCursor) })).items.map((i) => [i.id, i.tags])).toEqual([["b", []], ["c", undefined]]);
   });
 
   it("sorts as asked and says so; without a sort it says nothing", async () => {
@@ -90,7 +91,7 @@ describe("content tags (v0.6.0)", () => {
     const error = await c.setTags("a", { tags: ["x"], expectedVersion: a.version, changeId: "t1" }).catch((e: unknown) => e);
     expect(error).toBeInstanceOf(SiteApiError);
     expect(error).toMatchObject({ status: 501 });
-    expect(adapter.store.get("a")!.doc.version).toBe(a.version);
+    expect(must(adapter.store.get("a")).doc.version).toBe(a.version);
     expect((await c.meta()).capabilities.contentTags).toBeUndefined();
   });
 });

@@ -11,6 +11,7 @@ import * as contract from "../src/contract.js";
 import { additiveOnly, now, widened, type JsonSchema } from "./additive.js";
 import { V0170_ADDED, V0170_CODES, V0170_WIDEN, V0220_ADDED } from "./v0.17.0.js";
 import { V0190_ROUTES } from "./v0.19.0.js";
+import { must } from "../src/must.js";
 const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as { version: string };
 
 const V010 = JSON.parse(readFileSync(new URL("./fixtures/contract-v0.1.0.json", import.meta.url), "utf8")) as {
@@ -71,12 +72,12 @@ describe("the v0.1.0 contract", () => {
 
   for (const name of EXTENDED) {
     it(`extends ${name} by optional properties only`, () => {
-      additiveOnly(V010.schemas[name]!, now(name), name, V0170_WIDEN);
+      additiveOnly(must(V010.schemas[name]), now(name), name, V0170_WIDEN);
     });
   }
 
   it("widens the error codes by in-progress (v0.17.0) and unknown-field (v0.22.0), and nothing else", () => {
-    widened(V010.schemas.ErrorCode!, now("ErrorCode"), V0170_CODES, "ErrorCode");
+    widened(must(V010.schemas.ErrorCode), now("ErrorCode"), V0170_CODES, "ErrorCode");
   });
 
   it("names what v0.2.0 added to the extended schemas", () => {

@@ -7,6 +7,7 @@ import { memoryAdapter } from "../src/testing.js";
 import { d1SiteApiStore, goneResponse, SITE_API_STORE_SQL } from "../src/store.js";
 import { d1 } from "./d1.js";
 import { KEY, ORIGIN, allow, site } from "./helpers.js";
+import { must } from "../src/must.js";
 
 function failing(report: Awaited<ReturnType<typeof runConformance>>) {
   return report.checks.filter((c) => !c.ok).map((c) => c.name);
@@ -113,7 +114,7 @@ describe("conformance", () => {
 
   it("PLANT: fails a site that decides a mention it does not hold", async () => {
     const adapter = memoryAdapter();
-    adapter.mentions!.decide = async () => ({ status: "approved", version: "m9", purged: null });
+    must(adapter.mentions).decide = async () => ({ status: "approved", version: "m9", purged: null });
     const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: site(adapter).fetch });
     expect(failing(report)).toEqual(["mention decide of an unknown id: refused, or not implemented where the site has no mentions"]);
   });
@@ -172,14 +173,14 @@ describe("conformance", () => {
 
   it("PLANT: fails a site that resets a mention it does not hold", async () => {
     const adapter = memoryAdapter();
-    adapter.mentions!.reset = async () => ({ status: "pending", version: "m9", purged: null });
+    must(adapter.mentions).reset = async () => ({ status: "pending", version: "m9", purged: null });
     const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: site(adapter).fetch });
     expect(failing(report)).toEqual(["mention reset of an unknown id: refused, or not implemented where the site has no reset"]);
   });
 
   it("PLANT: fails a site that deletes a mention it does not hold", async () => {
     const adapter = memoryAdapter();
-    adapter.mentions!.delete = async () => ({ purged: null });
+    must(adapter.mentions).delete = async () => ({ purged: null });
     const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: site(adapter).fetch });
     expect(failing(report)).toEqual(["mention delete of an unknown id: refused, or not implemented where the site has no mentions"]);
   });
@@ -187,8 +188,8 @@ describe("conformance", () => {
   it("PLANT: fails a site that ignores the version on a mention decision", async () => {
     const adapter = memoryAdapter();
     adapter.receiveMention({ sourceUrl: "https://a.example/post", targetId: "first-post" });
-    const decide = adapter.mentions!.decide;
-    adapter.mentions!.decide = (id, input) => decide(id, { ...input, expectedVersion: adapter.mentionStore.get(id)?.version ?? input.expectedVersion });
+    const decide = must(adapter.mentions).decide;
+    must(adapter.mentions).decide = (id, input) => decide(id, { ...input, expectedVersion: adapter.mentionStore.get(id)?.version ?? input.expectedVersion });
     const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: site(adapter).fetch });
     expect(failing(report)).toEqual(["mention decide on a stale version: refused, whatever mention is first"]);
   });
@@ -233,7 +234,7 @@ describe("conformance", () => {
 
   it("changes nothing on a conforming site: no content, no file stored, no file deleted", async () => {
     const s = site();
-    await s.adapter.media!.upload({ bytes: new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), contentType: "image/png", filename: "real.png", alt: "", changeId: "seed" });
+    await must(s.adapter.media).upload({ bytes: new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), contentType: "image/png", filename: "real.png", alt: "", changeId: "seed" });
     await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: s.fetch });
     expect(s.adapter.store.size).toBe(0);
     expect(s.adapter.deletedContent).toEqual([]);
@@ -243,7 +244,7 @@ describe("conformance", () => {
 
   it("with probeMediaUpload, uploads a file of its own and deletes that file and no other", async () => {
     const s = site();
-    await s.adapter.media!.upload({ bytes: new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), contentType: "image/png", filename: "real.png", alt: "", changeId: "seed" });
+    await must(s.adapter.media).upload({ bytes: new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), contentType: "image/png", filename: "real.png", alt: "", changeId: "seed" });
     const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: s.fetch, probeMediaUpload: true });
     expect(failing(report)).toEqual([]);
     expect(report.checks.find((c) => c.name.startsWith("media round trip"))).toMatchObject({ name: "media round trip: upload, read, delete its own file", ok: true });
@@ -259,7 +260,7 @@ describe("conformance", () => {
 
   it("PLANT: fails a site that answers a delete of a file it does not hold as done", async () => {
     const adapter = memoryAdapter();
-    adapter.media!.delete = async () => {};
+    must(adapter.media).delete = async () => {};
     const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: site(adapter).fetch });
     expect(failing(report)).toEqual(["media delete of an unknown id: refused"]);
   });
@@ -274,7 +275,7 @@ describe("conformance", () => {
 
   it("PLANT: fails a site whose alt write accepts a stale version on a file it does not hold", async () => {
     const adapter = memoryAdapter();
-    adapter.media!.setAlt = async () => ({ version: "x" });
+    must(adapter.media).setAlt = async () => ({ version: "x" });
     const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: site(adapter).fetch });
     expect(failing(report)).toEqual(["media alt of an unknown id: refused, or not implemented where the site lacks it"]);
   });
@@ -299,7 +300,7 @@ describe("conformance", () => {
 
   it("changes no file on a conforming site when the write probes run", async () => {
     const s = site();
-    const item = await s.adapter.media!.upload({ bytes: new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), contentType: "image/png", filename: "real.png", alt: "kept", changeId: "seed" });
+    const item = await must(s.adapter.media).upload({ bytes: new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), contentType: "image/png", filename: "real.png", alt: "kept", changeId: "seed" });
     await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: s.fetch });
     expect(s.adapter.mediaStore.get(item.id)?.item).toEqual(item);
   });
@@ -397,7 +398,7 @@ describe("conformance", () => {
       ["a delete answers 410 on the old path", false],
       ["cleaned up", false],
     ]);
-    expect(post[5]!.detail).toBe("probe-hook");
+    expect(must(post[5]).detail).toBe("probe-hook");
     expect(adapter.store.size).toBe(0);
   });
 
@@ -408,7 +409,7 @@ describe("conformance", () => {
     expect(adapter.store.size).toBe(0);
     const page = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: liveSite({ contentDelete: false }).fetch, probePosts: true });
     expect(failing(page)).toEqual([]);
-    expect(page.probes.filter((p) => p.name.startsWith("probe post:")).every((p) => p.skipped && /cannot delete/.test(p.detail!))).toBe(true);
+    expect(page.probes.filter((p) => p.name.startsWith("probe post:")).every((p) => p.skipped && /cannot delete/.test(must(p.detail)))).toBe(true);
   });
 
   it("skips the write probe when told to", async () => {

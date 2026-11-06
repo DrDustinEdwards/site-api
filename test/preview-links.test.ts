@@ -7,6 +7,7 @@ import { d1SiteApiStore, SITE_API_STORE_SQL } from "../src/store.js";
 import { memoryAdapter } from "../src/testing.js";
 import { d1 } from "./d1.js";
 import { KEY, ORIGIN, allow } from "./helpers.js";
+import { must } from "../src/must.js";
 
 function mounted(withStore = true) {
   const adapter = memoryAdapter({ site: { id: "memory", name: "Memory site", origin: ORIGIN } });
@@ -45,7 +46,7 @@ describe("preview links (v0.17.0)", () => {
     expect([head.status, head.headers.get("x-robots-tag"), await head.text()]).toEqual([200, "noindex, nofollow", ""]);
 
     const [listed] = (await c.previewLinks.list("a")).items;
-    await c.previewLinks.revoke(listed!.id, { changeId: "c5" });
+    await c.previewLinks.revoke(must(listed).id, { changeId: "c5" });
     // v0.22.0: a revoked link is as if it never was.
     expect((await fetch(link.url)).status).toBe(404);
     expect((await c.previewLinks.list("a")).items).toEqual([]);

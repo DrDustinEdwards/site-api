@@ -4,6 +4,7 @@
 import { describe, expect, it } from "vitest";
 
 import { JsonSourceError, joinSource, jsonSource, missingAltFields, postFieldsOf, searchFieldsOf, setPostFields, setSearchFields, setTags, splitSource, tagsOf } from "../src/frontmatter.js";
+import { must } from "../src/must.js";
 
 const SOURCE = [
   "---",
@@ -38,13 +39,13 @@ describe("reads", () => {
 
 describe("writes", () => {
   it("changes only the tags line and returns every other byte of the file as it was", () => {
-    const out = joinSource({ ...parts, front: setTags(parts.front!, ["cloudflare", "workers", "edge"]) });
+    const out = joinSource({ ...parts, front: setTags(must(parts.front), ["cloudflare", "workers", "edge"]) });
     expect(out).toBe(SOURCE.replace("tags: [cloudflare, workers]", "tags: [cloudflare, workers, edge]"));
   });
 
   it("writes an emptied tag list as tags: [], leaves the same list alone, and adds the key when missing", () => {
-    expect(setTags(parts.front!, [])).toContain("tags: []");
-    expect(setTags(parts.front!, ["cloudflare", "workers"])).toBe(parts.front);
+    expect(setTags(must(parts.front), [])).toContain("tags: []");
+    expect(setTags(must(parts.front), ["cloudflare", "workers"])).toBe(parts.front);
     expect(setTags("title: x", ["a"])).toBe("title: x\ntags: [a]");
   });
 
@@ -55,7 +56,7 @@ describe("writes", () => {
 
 describe("edge sources", () => {
   it("writes the tags of a CRLF frontmatter as CRLF", () => {
-    const front = splitSource("---\r\ntitle: Hello\r\ntags: [old]\r\n---\r\nBody\r\n").front!;
+    const front = must(splitSource("---\r\ntitle: Hello\r\ntags: [old]\r\n---\r\nBody\r\n").front);
     expect(setTags(front, ["new"])).toBe("title: Hello\r\ntags: [new]");
   });
 
@@ -104,7 +105,7 @@ describe("jsonSource", () => {
 
 describe("search fields", () => {
   it("round-trips through the frontmatter and a jsonSource site, and a blank removes the key", () => {
-    const front = setSearchFields(parts.front!, { searchTitle: 'Say "hi": a guide', description: "One line.", noindex: true, image: " " });
+    const front = setSearchFields(must(parts.front), { searchTitle: 'Say "hi": a guide', description: "One line.", noindex: true, image: " " });
     expect(searchFieldsOf(front)).toEqual({ searchTitle: 'Say "hi": a guide', description: "One line.", image: "", imageAlt: "", canonical: "", noindex: true });
     expect(jsonSource({ searchTitle: "text", noindex: "flag" }).read(`---\n${readLines(front, ["searchTitle", "noindex"])}\n---\n`).values).toEqual({ searchTitle: 'Say "hi": a guide', noindex: true });
     const cleared = setSearchFields(front, { searchTitle: "", description: "One table.", noindex: false });
@@ -114,7 +115,7 @@ describe("search fields", () => {
 
 describe("post fields (v0.17.0)", () => {
   it("keeps authors in order with a comma in a name, reads a hand-written list, and a blank or a bad part removes the key", () => {
-    const front = setPostFields(parts.front!, { authors: ["Smith, Jr.", " Ada "], excerpt: "Short.", series: "Notes", seriesPart: 2 });
+    const front = setPostFields(must(parts.front), { authors: ["Smith, Jr.", " Ada "], excerpt: "Short.", series: "Notes", seriesPart: 2 });
     expect(postFieldsOf(front)).toEqual({ authors: ["Smith, Jr.", "Ada"], excerpt: "Short.", series: "Notes", seriesPart: 2, featureImage: "", featureImageAlt: "", featureImageDecorative: false });
     expect(jsonSource({ authors: "list" }).read(`---\n${readLines(front, ["authors"])}\n---\n`).values).toEqual({ authors: ["Smith, Jr.", "Ada"] });
     expect(postFieldsOf("authors:\n  - Ada\n  - Grace\nseriesPart: 0").authors).toEqual(["Ada", "Grace"]);
@@ -125,7 +126,7 @@ describe("post fields (v0.17.0)", () => {
   // v0.22.0 (A2, D8): a feature or share image with no alt blocks, unless the post marks it decorative.
   it("names a feature or share image with no alt text, where the site renders it, and passes one marked decorative", () => {
     const declared = { searchFields: ["image", "imageAlt"], postFields: ["featureImage", "featureImageAlt"] };
-    const bare = setSearchFields(setPostFields(parts.front!, { featureImage: "/media/a.png" }), { image: "/media/b.png" });
+    const bare = setSearchFields(setPostFields(must(parts.front), { featureImage: "/media/a.png" }), { image: "/media/b.png" });
     expect(missingAltFields(bare, declared)).toEqual(["imageAlt", "featureImageAlt"]);
     expect(missingAltFields(bare, {})).toEqual([]);
     const decorative = setPostFields(bare, { featureImageDecorative: true });

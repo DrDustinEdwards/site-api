@@ -6,6 +6,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { NotFoundError, RefusedError, VersionConflictError } from "../src/adapter.js";
 import { answerWrite, mediaRev, mediaSuggester, previewDocument, type SuggestEnv } from "../src/media-kit.js";
+import { must } from "../src/must.js";
 
 describe("media kit", () => {
   it("answers a write as its version, or as the error the handler maps to 404, 409 or 422", () => {
@@ -43,7 +44,7 @@ describe("media kit", () => {
     const output = async () => ({ response: () => new Response("jpeg") });
     const images = { input: () => ({ output, transform: () => ({ output }) }) };
     const env: SuggestEnv = { AI: { run }, IMAGES: images };
-    const picture = () => new Response("png").body!;
+    const picture = () => must(new Response("png").body);
 
     const capped = mediaSuggester({ app: "sample", describe: "on a sample site", beforeCall: () => Promise.reject(new Error("cap")) });
     await expect(capped(env, picture())).rejects.toThrow("cap");
@@ -64,15 +65,15 @@ describe("media kit", () => {
     const suggest = mediaSuggester({ app: "sample", describe: "on a sample site" });
     const custom = "https://ai.example.com/anthropic";
     const gatewayOn = async (env: Partial<SuggestEnv>) => {
-      await suggest({ AI: { run }, IMAGES: images, ...env }, new Response("png").body!);
-      return (run.mock.calls.at(-1)?.[2] as { gateway?: { id: string } }).gateway?.id;
+      await suggest({ AI: { run }, IMAGES: images, ...env }, must(new Response("png").body));
+      return (run.mock.calls.at(-1)?.[2] as { gateway?: { id: string } } | undefined)?.gateway?.id;
     };
     expect(await gatewayOn({ AI_GATEWAY_BASE_URL: custom, AI_GATEWAY_ID: "sample-gw" })).toBe("sample-gw");
     expect(run.mock.calls.at(-1)?.[2]).toMatchObject({ gateway: { metadata: { app: "sample", feature: "media-suggest" } }, signal: expect.any(AbortSignal) });
     expect(await gatewayOn({ AI_GATEWAY_BASE_URL: custom })).toBeUndefined();
-    expect(await suggest({ AI: { run }, IMAGES: images }, new Response("png").body!)).toEqual({ tags: ["dog"], alt: null, model: expect.any(String) });
+    expect(await suggest({ AI: { run }, IMAGES: images }, must(new Response("png").body))).toEqual({ tags: ["dog"], alt: null, model: expect.any(String) });
     // A word on the list of Claude's tells is no leftover: this is Llama's text, so it is offered (W4).
     run.mockResolvedValueOnce({ response: { alt: "A haunting view of a pier at dusk.", tags: ["pier"] } });
-    expect((await suggest({ AI: { run }, IMAGES: images }, new Response("png").body!)).alt).toBe("A haunting view of a pier at dusk.");
+    expect((await suggest({ AI: { run }, IMAGES: images }, must(new Response("png").body))).alt).toBe("A haunting view of a pier at dusk.");
   });
 });

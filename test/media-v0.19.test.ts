@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 import { createSiteClient, SiteApiError } from "../src/client.js";
 import { memoryAdapter, type MemoryAdapterOptions } from "../src/testing.js";
 import { KEY, ORIGIN, png, req, site, withDns } from "./helpers.js";
+import { must } from "../src/must.js";
 
 function setup(options: MemoryAdapterOptions = {}) {
   const s = site(memoryAdapter(options));
@@ -22,7 +23,7 @@ describe("alt at upload (B2, B3)", () => {
   it("PLANT: refuses an upload or an import with no alt and no decorative choice, or an alt that is the file's name, before the adapter", async () => {
     const remote = vi.fn(async () => new Response(png(4, 4) as Uint8Array<ArrayBuffer>, { headers: { "content-type": "image/png" } })) as unknown as typeof fetch;
     const { adapter, client } = setup({ mediaImportFetch: withDns(remote) });
-    const upload = vi.spyOn(adapter.media!, "upload");
+    const upload = vi.spyOn(must(adapter.media), "upload");
     const file = { bytes: png(4, 4), contentType: "image/png", filename: "river-dusk.png", changeId: "u1" };
     expect(await refusal(client.media.upload(file))).toMatch(/^400 alt: Say what the picture shows/);
     expect(await refusal(client.media.upload({ ...file, alt: "River dusk" }))).toMatch(/^400 alt: Alt text says what the picture shows, not its file name/);
@@ -38,8 +39,8 @@ describe("alt at upload (B2, B3)", () => {
     const described = await client.media.upload({ ...file, bytes: png(5, 5), filename: "b.png", alt: "The Paluxy River at dusk", changeId: "u2" });
     expect(plain).toMatchObject({ alt: "", decorative: true });
     expect(described.alt).toBe("The Paluxy River at dusk");
-    expect(await refusal(client.media.setAlt(described.id, { alt: "", expectedVersion: described.version!, changeId: "a1" }))).toMatch(/^400 alt: Say what/);
-    await client.media.setAlt(described.id, { alt: " ", decorative: true, expectedVersion: described.version!, changeId: "a2" });
+    expect(await refusal(client.media.setAlt(described.id, { alt: "", expectedVersion: must(described.version), changeId: "a1" }))).toMatch(/^400 alt: Say what/);
+    await client.media.setAlt(described.id, { alt: " ", decorative: true, expectedVersion: must(described.version), changeId: "a2" });
     expect((await client.media.list({ lens: "no-alt" })).items).toEqual([]);
   });
 
@@ -47,8 +48,8 @@ describe("alt at upload (B2, B3)", () => {
     const { adapter, client } = setup();
     const photo = new Uint8Array(readFileSync(new URL("./fixtures/photo.jpg", import.meta.url)));
     const file = await client.media.upload({ bytes: photo, contentType: "image/jpeg", filename: "a.jpg", alt: "A test picture", changeId: "u1" });
-    await client.media.replace(file.id, { bytes: photo, contentType: "image/jpeg", filename: "a.jpg", expectedVersion: file.version!, changeId: "r1" });
-    const stored = Buffer.from(adapter.mediaStore.get(file.id)!.bytes).toString("latin1");
+    await client.media.replace(file.id, { bytes: photo, contentType: "image/jpeg", filename: "a.jpg", expectedVersion: must(file.version), changeId: "r1" });
+    const stored = Buffer.from(must(adapter.mediaStore.get(file.id)).bytes).toString("latin1");
     expect(["GPS", "SN-SAMPLE", "Sample City"].filter((p) => stored.includes(p))).toEqual([]);
   });
 });
@@ -66,12 +67,12 @@ describe("suggestions before an upload (B4)", () => {
 
   it("PLANT: answers 501 on a site without it and 400 for what is not a picture or not an address it may fetch, before the model", async () => {
     const { adapter, api } = setup();
-    const suggest = vi.spyOn(adapter.media!, "suggestFile");
+    const suggest = vi.spyOn(must(adapter.media), "suggestFile");
     const send = (query: string, type = "image/png") => api.handle(req(`/api/carrel/v1/media/suggestions${query}`, { method: "POST", body: new Blob([png(4, 4) as Uint8Array<ArrayBuffer>]), headers: { "content-type": type } }));
     expect((await send("", "application/pdf")).status).toBe(400);
     expect((await send("?url=https%3A%2F%2Fexample.com%2Fa.png")).status).toBe(501);
     expect(suggest).not.toHaveBeenCalled();
-    delete adapter.media!.suggestFile;
+    delete must(adapter.media).suggestFile;
     expect((await site(adapter).api.handle(req("/api/carrel/v1/media/suggestions", { method: "POST" }))).status).toBe(501);
   });
 });

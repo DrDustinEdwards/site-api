@@ -5,6 +5,7 @@ import { createSiteClient, SiteApiError } from "../src/client.js";
 import { schemaHash } from "../src/contract.js";
 import { MEMORY_MEDIA_LIMITS, memoryAdapter } from "../src/testing.js";
 import { KEY, ORIGIN, site } from "./helpers.js";
+import { must } from "../src/must.js";
 
 function client(adapter = memoryAdapter()) {
   const s = site(adapter);
@@ -106,7 +107,7 @@ describe("client round trip", () => {
 
     const revisions = await c.revisions("series-part-1");
     expect(revisions.items).toHaveLength(5);
-    expect(revisions.items[0]!.message).toContain("chg-5");
+    expect(must(revisions.items[0]).message).toContain("chg-5");
 
     const diff = await c.diff("series-part-1", created.version);
     expect(diff.to).toBe(scheduled.version);
@@ -128,7 +129,7 @@ describe("client round trip", () => {
     }
     const first = await c.list({ limit: 2 });
     expect(first.items.map((i) => i.id)).toEqual(["a", "b"]);
-    const second = await c.list({ limit: 2, cursor: first.nextCursor! });
+    const second = await c.list({ limit: 2, cursor: must(first.nextCursor) });
     expect(second).toEqual({ items: [expect.objectContaining({ id: "c" })], nextCursor: null, total: 3 });
   });
 

@@ -6,6 +6,7 @@ import { d1SiteApiStore, SITE_API_STORE_SQL } from "../src/store.js";
 import { memoryAdapter } from "../src/testing.js";
 import { d1 } from "./d1.js";
 import { KEY, allow, body, png, req } from "./helpers.js";
+import { must } from "../src/must.js";
 
 function replaying() {
   const adapter = memoryAdapter();
@@ -28,7 +29,7 @@ describe("replay (v0.17.0)", () => {
     const again = await send("/content/a/draft", { method: "PUT", ...save });
     expect(first.status).toBe(200);
     expect(again).toEqual({ ...first, replayed: "true" });
-    expect(adapter.store.get("a")!.history).toHaveLength(1);
+    expect(must(adapter.store.get("a")).history).toHaveLength(1);
 
     const other = await send("/content/a/draft", { method: "PUT", ...body({ source: "# B\n", expectedVersion: null, changeId: "c1" }) });
     expect(other.status).toBe(422);

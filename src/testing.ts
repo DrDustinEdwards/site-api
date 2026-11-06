@@ -6,6 +6,7 @@ import { joinSource, POST_FIELDS, postFieldsOf, setTags as writeTags, splitSourc
 import { LARGE_MEDIA_BYTES, MEDIA_LENSES } from "./contract.js";
 import type { ContentDoc, ContentStatus, ContentSummary, MediaEmbeddedField, MediaLens, MediaItem, MediaResize, MediaRevision, MediaTransformOp, MediaUploadLimits, MediaUse, MentionItem, MentionStatus, NotFoundRow, Revision, ScheduledUpdate, SiteInfo, WriteResult } from "./contract.js";
 import { kindOf, orientationOf, transformFocus, turnsSize } from "./media.js";
+import { must } from "./must.js";
 
 interface Stored {
   doc: ContentDoc;
@@ -142,9 +143,9 @@ function summaryOf(doc: ContentDoc): ContentSummary {
 
 function titleOf(source: string, id: string): string {
   const front = source.match(/^---\r?\n[\s\S]*?^title:\s*["']?(.+?)["']?\s*$/m);
-  if (front) return front[1]!;
+  if (front) return must(front[1]);
   const heading = source.match(/^#\s+(.+)$/m);
-  return heading ? heading[1]!.trim() : id;
+  return heading ? must(heading[1]).trim() : id;
 }
 
 export function memoryAdapter(
@@ -512,9 +513,9 @@ export function memoryAdapter(
         const taken = order.slice(0, limit);
         const more = order.length > limit;
         return {
-          items: taken.filter(([id]) => mediaStore.has(id)).map(([id]) => shown(mediaStore.get(id)!.item)),
+          items: taken.filter(([id]) => mediaStore.has(id)).map(([id]) => shown(must(mediaStore.get(id)).item)),
           removed: taken.filter(([id]) => !mediaStore.has(id)).map(([id]) => id),
-          cursor: String(more ? taken[taken.length - 1]![1] : changeSeq),
+          cursor: String(more ? must(taken[taken.length - 1])[1] : changeSeq),
           more,
         };
       },
@@ -719,7 +720,7 @@ export function memoryAdapter(
     receiveMention,
     ...(mentionsAdapter ? { mentions: mentionsAdapter } : {}),
     ...(options.notFound
-      ? { insight: { notFound: async (q) => options.notFound!.filter((row) => q.includeProbes || row.kind === "page").slice(0, q.limit) } }
+      ? { insight: { notFound: async (q) => must(options.notFound).filter((row) => q.includeProbes || row.kind === "page").slice(0, q.limit) } }
       : {}),
     store,
     redirects,
@@ -736,7 +737,7 @@ export function memoryAdapter(
           .filter((d) => !query.status || d.status === query.status || (query.status === "draft" && d.hasDraft === true))
           .filter((d) => Boolean(d.trashedAt) === Boolean(query.trashed))
           .filter((d) => !query.kind || d.kind === query.kind)
-          .filter((d) => !query.tag || (withTags(d).tags ?? []).some((t) => t.toLowerCase() === query.tag!.toLowerCase()))
+          .filter((d) => !query.tag || (withTags(d).tags ?? []).some((t) => t.toLowerCase() === must(query.tag).toLowerCase()))
           .filter((d) => !query.author || (withTags(d).authors ?? []).includes(query.author))
           .filter((d) => !query.publishedAfter || (d.publishedAt !== null && at(d.publishedAt) >= at(query.publishedAfter)))
           .filter((d) => !query.publishedBefore || (d.publishedAt !== null && at(d.publishedAt) < at(query.publishedBefore)))
@@ -812,7 +813,7 @@ export function memoryAdapter(
               store.delete(id);
               const moved = { ...previous, doc: { ...previous.doc, id: input.newId } };
               const written = commit(input.newId, moved, { status: previous.doc.status, publishAt: previous.doc.publishAt }, input.changeId, `Rename from ${id}`, input.actor);
-              if (previousPath) redirects.set(previousPath, store.get(input.newId)!.doc.path!);
+              if (previousPath) redirects.set(previousPath, must(must(store.get(input.newId)).doc.path));
               return { ...written, previousPath };
             },
             // A live item leaves the site as it goes to the trash, and comes back a draft.

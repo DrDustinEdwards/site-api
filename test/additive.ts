@@ -5,10 +5,11 @@
 import { expect } from "vitest";
 import { z } from "zod";
 import * as contract from "../src/contract.js";
+import { must } from "../src/must.js";
 
 export type JsonSchema = { properties?: Record<string, unknown>; required?: string[]; [k: string]: unknown };
 
-export const now = (name: string) => z.toJSONSchema((contract as unknown as Record<string, z.ZodType>)[name]!, { io: "input" }) as JsonSchema;
+export const now = (name: string) => z.toJSONSchema(must((contract as unknown as Record<string, z.ZodType>)[name]), { io: "input" }) as JsonSchema;
 
 /**
  * `widen` names the enums a later version may extend (path, such as "MediaListQuery.sort", to exactly the values it adds
@@ -19,12 +20,12 @@ export function additiveOnly(before: JsonSchema, after: JsonSchema, where: strin
     const next = after.properties?.[prop] as JsonSchema | undefined;
     const path = `${where}.${prop}`;
     expect(next, `${path} is gone`).toBeDefined();
-    if (path in widen) widened(schema as JsonSchema, next!, widen[path]!, path);
-    else if ((schema as JsonSchema).type === "object") additiveOnly(schema as JsonSchema, next!, path, widen);
+    if (path in widen) widened(schema as JsonSchema, must(next), must(widen[path]), path);
+    else if ((schema as JsonSchema).type === "object") additiveOnly(schema as JsonSchema, must(next), path, widen);
     else if ((schema as JsonSchema).type === "array" && ((schema as JsonSchema).items as JsonSchema | undefined)?.type === "object") {
-      additiveOnly((schema as JsonSchema).items as JsonSchema, next!.items as JsonSchema, `${path}[]`, widen);
+      additiveOnly((schema as JsonSchema).items as JsonSchema, must(next).items as JsonSchema, `${path}[]`, widen);
       const { items: _a, ...restBefore } = schema as JsonSchema;
-      const { items: _b, ...restAfter } = next!;
+      const { items: _b, ...restAfter } = must(next);
       expect(restAfter, `${where}.${prop}`).toEqual(restBefore);
     } else expect(next, `${where}.${prop}`).toEqual(schema);
   }

@@ -29,6 +29,7 @@ import {
   failure,
   eachItem,
 } from "./kit.js";
+import { must } from "../must.js";
 
 
 export type MentionFilter = MentionStatus | "all";
@@ -228,9 +229,9 @@ export async function runMentionsIntent(source: ContentSource, input: IntentInpu
   const all = [...early, ...outcomes];
   const extra: Partial<IntentResult> = conflict ? { conflict } : {};
   let tail = "";
-  if (inverses.length > 0 && inverses.every((i) => i.intent === inverses[0]!.intent)) {
+  if (inverses.length > 0 && inverses.every((i) => i.intent === must(inverses[0]).intent)) {
     extra.undo = {
-      intent: inverses[0]!.intent,
+      intent: must(inverses[0]).intent,
       fields: { ids: inverses.map((i) => i.id), versions: inverses.map((i) => i.version), statuses: inverses.map((i) => i.status) },
     };
   } else if (inverses.length > 0) {
