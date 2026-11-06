@@ -165,7 +165,8 @@ export async function guardedFetch(
   const maxRedirects = options.maxRedirects ?? 5;
   let url = address;
   for (let hop = 0; ; hop++) {
-    const refusal = options.refuse?.(url) ?? (await outboundRefusal(url, { ...options, dnsFetch }));
+    // Both run: the caller's rule never stands in for the guard, so an empty answer from it cannot skip the DNS check.
+    const refusal = options.refuse?.(url) || (await outboundRefusal(url, { ...options, dnsFetch }));
     if (refusal) throw new OutboundRefusal(refusal);
     const response = await doFetch(url, { ...init, redirect: "manual" });
     const location = response.headers.get("location");
