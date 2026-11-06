@@ -13,7 +13,10 @@ import {
   type IntentInput,
   type Outcome,
   type IntentResult,
+  type IntentInput as Input,
   PER_PAGE,
+  askFirst,
+  texts,
   NOT_YOURS,
   text,
   refused,
@@ -140,6 +143,24 @@ export async function runMentionsIntent(source: ContentSource, input: IntentInpu
   if (intent === "reset" && !canReset) return refused("This site does not take a mention decision back.");
 
   if (intent === "sweep") {
+    // The sweep removes the only copy of what each sender sent, so it asks first, with what it would remove.
+    if (text(input, "confirm") !== "sweep") {
+      const { expiring } = await source.client.mentions.list({ limit: 1 });
+      const n = expiring.failed + expiring.rejected;
+      const title = `Remove ${n} expired mention${n === 1 ? "" : "s"}?`;
+      return {
+        ok: false,
+        message: title,
+        confirm: {
+          intent: "sweep",
+          title,
+          lead: "The site removes these permanently. Nothing else has a copy of them.",
+          action: `Remove ${n}`,
+          items: [`${expiring.failed} failed`, `${expiring.rejected} rejected`],
+          fields: { confirm: "sweep" },
+        },
+      };
+    }
     const change = changeId();
     try {
       const { removed } = await source.client.mentions.sweep({ changeId: change });
@@ -151,6 +172,8 @@ export async function runMentionsIntent(source: ContentSource, input: IntentInpu
     }
   }
 
+  const { seen, names } = await withSeen(source, input, intent === "delete" && text(input, "confirm") === "");
+  input = seen;
   const { targets, invalid } = targetsOf(input, MentionId);
   const tooMany = checkCount(targets.length + invalid.length, "mention");
   if (tooMany) return tooMany;
@@ -159,6 +182,19 @@ export async function runMentionsIntent(source: ContentSource, input: IntentInpu
     if (t.version === null) early.push({ id: t.id, ok: false, message: "The page did not say which version of this mention you saw, so nothing was sent. Reload and try again." });
   }
   const sendable = targets.filter((t): t is { id: string; version: string; status: string | null } => t.version !== null);
+
+  // A delete removes the only copy of what each sender sent, so it asks first, with the count to type.
+  if (intent === "delete" && sendable.length > 0) {
+    const ask = askFirst(input, {
+      intent: "delete",
+      title: `Delete ${sendable.length} mention${sendable.length === 1 ? "" : "s"} permanently?`,
+      lead: `Each mention below is removed from ${source.site.name}. This removes the only copy of what the sender sent; nothing else has one. Reject it instead if you may want it back.`,
+      action: `Delete ${sendable.length}`,
+      items: sendable.map((t) => names.get(t.id) ?? `Mention ${t.id}`),
+      fields: { ids: sendable.map((t) => t.id), versions: sendable.map((t) => t.version), statuses: sendable.map((t) => t.status ?? "") },
+    });
+    if (ask) return ask;
+  }
 
   // Each done mention's inverse: the opposite decision between approved and rejected, a reset (v0.6.0)
   // for a decision on a waiting mention, and the decision that was taken back for a reset.
@@ -202,6 +238,43 @@ export async function runMentionsIntent(source: ContentSource, input: IntentInpu
   }
   if (intent !== "delete" && noUndo > 0) tail += canReset ? "" : " A decision on a waiting mention has no Undo on this site.";
   return result(all, summarize(all, DONE_MENTIONS[intent], "mention") + tail, extra);
+}
+
+/** How many pages of the queue the kit reads for what a form did not post. */
+const SEEN_PAGES = 10;
+
+/**
+ * The input with what the kit reads for each mention: its version and the status it had. MentionsList's row form posts
+ * one `version` and its bulk form none, and neither posts the statuses, which the kit needs to choose each Undo. A
+ * version the form names is kept, so a mention changed since is still refused as stale; for the rest the site's own is
+ * read. An input that carries statuses (an Undo, or a caller that knows them) is passed on as it came. `names` is each
+ * mention as a person reads it, for a confirm.
+ */
+async function withSeen(source: ContentSource, input: Input, wantNames: boolean): Promise<{ seen: Input; names: Map<string, string> }> {
+  const ids = texts(input, "ids");
+  const names = new Map<string, string>();
+  const known = texts(input, "statuses").length > 0;
+  if (ids.length === 0 || (known && !wantNames)) return { seen: input, names };
+  const name = (m: MentionItem) => `${m.authorName ?? "An unnamed sender"} on ${m.targetId}`;
+  const found = new Map<string, MentionItem>();
+  let cursor: string | undefined;
+  for (let page = 0; page < SEEN_PAGES && found.size < ids.length; page++) {
+    const list = await source.client.mentions.list({ limit: 200, ...(cursor ? { cursor } : {}) });
+    for (const m of list.items) if (ids.includes(m.id)) found.set(m.id, m);
+    if (!list.nextCursor) break;
+    cursor = list.nextCursor;
+  }
+  for (const [id, m] of found) names.set(id, name(m));
+  if (known) return { seen: input, names };
+  const posted = texts(input, "versions");
+  const single = ids.length === 1 ? text(input, "version") : "";
+  const seen: Record<string, string | string[]> = {};
+  const keys = input instanceof FormData ? [...new Set(input.keys())] : Object.keys(input);
+  for (const key of keys) if (key !== "ids" && key !== "versions" && key !== "statuses" && key !== "version") seen[key] = texts(input, key);
+  seen.ids = ids;
+  seen.versions = ids.map((id, i) => posted[i] || single || text(input, `version:${id}`) || found.get(id)?.version || "");
+  seen.statuses = ids.map((id) => found.get(id)?.status ?? "");
+  return { seen, names };
 }
 
 const DECIDED: Record<MentionIntent, string> = { approve: "Approved.", reject: "Rejected.", reset: "Back to waiting.", delete: "Deleted.", sweep: "" };

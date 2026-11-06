@@ -640,14 +640,21 @@ describe("mentions", () => {
     expect(adapter.mentionStore.get(a)!.status).toBe("pending");
   });
 
-  it("deletes and sweeps for someone who may decide, and refuses both to someone who may not", async () => {
+  it("asks before a delete or a sweep and removes nothing until told, for someone who may decide; refuses someone who may not", async () => {
     const { adapter, source } = setup();
-    const a = adapter.receiveMention({ sourceUrl: "https://a.example/1", targetId: "p" });
-    expect(await runMentionsIntent({ ...source, can: EDITOR }, { intent: "delete", ids: [a], versions: [adapter.mentionStore.get(a)!.version] })).toMatchObject({ ok: false });
-    expect(await runMentionsIntent(source, { intent: "delete", ids: [a], versions: [adapter.mentionStore.get(a)!.version] })).toMatchObject({ ok: true, message: "Deleted 1 mention." });
+    const a = adapter.receiveMention({ sourceUrl: "https://a.example/1", targetId: "p", authorName: "Ana" });
+    expect(await runMentionsIntent({ ...source, can: EDITOR }, { intent: "delete", ids: [a], confirm: "1" })).toMatchObject({ ok: false });
+    // The bulk form posts no versions: the kit reads the site's, and names each mention in the confirm.
+    const ask = await runMentionsIntent(source, { intent: "delete", ids: [a] });
+    expect(ask.confirm).toMatchObject({ intent: "delete", typeToConfirm: "1", items: ["Ana on p"], fields: { ids: [a], versions: [adapter.mentionStore.get(a)!.version] } });
+    expect(adapter.mentionStore.has(a)).toBe(true);
+    expect(await runMentionsIntent(source, { ...ask.confirm!.fields, intent: "delete", confirm: "1" })).toMatchObject({ ok: true, message: "Deleted 1 mention." });
     expect(adapter.mentionStore.has(a)).toBe(false);
     adapter.receiveMention({ sourceUrl: "https://a.example/old", targetId: "p", status: "failed", receivedAt: new Date(Date.now() - 40 * 86_400_000) });
-    expect(await runMentionsIntent(source, { intent: "sweep" })).toEqual({ ok: true, message: "Removed 1 failed and 0 rejected mention past their retention window." });
+    const sweep = await runMentionsIntent(source, { intent: "sweep" });
+    expect(sweep.confirm).toMatchObject({ intent: "sweep", items: ["1 failed", "0 rejected"], fields: { confirm: "sweep" } });
+    expect(adapter.mentionStore.size).toBe(1);
+    expect(await runMentionsIntent(source, { intent: "sweep", confirm: "sweep" })).toEqual({ ok: true, message: "Removed 1 failed and 0 rejected mention past their retention window." });
   });
 });
 

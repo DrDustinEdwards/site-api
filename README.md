@@ -215,6 +215,13 @@ Additive: every v0.4.0 route and body is unchanged, and the schema hash and pack
 - **Versions.** A mention's `version` is opaque, like a content version, and must move whenever its status, its verification or its decision does, and not when another mention changes. A write with a version the site no longer holds is `409 version-conflict` with `currentVersion`; a missing mention is `404`. dustinedwards.info's table has no `updated_at` and no version column, so its adapter derives one: a hash of `status`, `received_at`, `verified_at` and `decided_at` (a re-send resets all three timestamps and the status, an approve or reject sets the status and `decided_at`). It checks the version and then writes with the same values in the `WHERE`, so a change between the check and the write matches no row and is reported as a conflict.
 - **Conformance** adds, for every site: the list in shape (or `501` where the site has no group), writes without the key or with a wrong one refused, a decide and a delete of an id no site holds refused (`404`, or `501` without the group), and, where the site has the group, a decide with a stale version refused on the first real mention, a sweep with no change id refused (`400`, before anything is removed), and an unknown status refused. It never decides, deletes or sweeps anything real.
 
+## Changes in v0.26.0
+
+No route, body or schema changes. `runMentionsIntent` now does what Carrel did around it, so a site's own admin gets the same steps:
+
+- **It asks first.** A `delete` answers a `confirm` with the count to type and each mention named ("Ana on post-a"); a `sweep` answers one with what it would remove, and runs once the form posts `confirm=sweep`. Nothing is removed until then.
+- **It reads what the form did not post.** MentionsList's row form posts one `version` and its bulk form none, and neither posts the statuses that choose each Undo. The kit reads them from the site's list (up to ten pages of 200). A version the form names is kept, so a mention changed since is still refused as stale. An input that carries `statuses`, as an Undo does, goes on as it came.
+
 ## Changes in v0.25.0
 
 Additive. `guardedFetch` takes `refuse`, the caller's own rule for the first address and every redirect, run before the guard's: a string refuses with `OutboundRefusal`. A site that checks something the guard does not (dustinedwards.info's webmention verifier refuses a hop back onto itself) passes it here instead of following redirects by hand, so it gets the DNS check too.
