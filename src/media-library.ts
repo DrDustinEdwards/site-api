@@ -209,7 +209,8 @@ export interface MediaLibraryOptions {
   replaceKeepsSize?: boolean;
   /**
    * The site's reference check: for each key asked (every library file when `keys` is absent), the places that use it.
-   * Keys with no use may be left out. Throw when the check cannot run: a delete is then refused, never made. Absent: the
+   * The library asks at most 90 keys a call, so a check that binds each key stays under D1's 100. Keys with no use may
+   * be left out. Throw when the check cannot run: a delete is then refused, never made. Absent: the
    * site counts no uses, and a delete removes the file.
    */
   usage?(keys?: string[]): Promise<Map<string, MediaUse[]>>;
@@ -296,7 +297,10 @@ const TRANSFORMS: Record<MediaTransformOp, { rotate?: 90 | 180 | 270; flip?: "h"
 
 const OFFSET = /^(0|[1-9]\d{0,8})$/;
 const SEQ = /^(0|[1-9]\d{0,15})$/;
-const RACED = "The file changed on the site while this was being written. Nothing was changed; try again.";
+const RACED = "The file changed on the site while this was being written, so its bytes were kept as they were. Reload it and try again.";
+
+/** Every revision a delete or a revert looks through; the history panel shows the newest 100. */
+const ALL_REVISIONS = 10_000;
 
 const positive = (n: number | null): number | null => (n !== null && n > 0 ? n : null);
 
@@ -319,7 +323,10 @@ export function mediaLibrary(options: MediaLibraryOptions): MediaAdapter {
   async function usesOf(keys?: string[]): Promise<Map<string, MediaUse[]>> {
     if (!options.usage) return new Map();
     try {
-      return await options.usage(keys);
+      if (!keys) return await options.usage();
+      const uses = new Map<string, MediaUse[]>();
+      for (let n = 0; n < keys.length; n += 90) for (const [key, used] of await options.usage(keys.slice(n, n + 90))) uses.set(key, used);
+      return uses;
     } catch (error) {
       throw new RefusedError(`The site could not check where its files are used, so nothing was done (${error instanceof Error ? error.message : String(error)}).`);
     }
@@ -434,11 +441,22 @@ export function mediaLibrary(options: MediaLibraryOptions): MediaAdapter {
     return prepared;
   }
 
-  /** A key no row or object holds. */
-  async function freshKey(file: MediaKeyInput): Promise<string> {
+  /**
+   * Claims a key no row or object holds by inserting the file's row under it: the row's primary key is the lock, so two
+   * uploads of the same file at once never share a key. Answers the key.
+   */
+  async function claimKey(file: MediaKeyInput, record: Omit<MediaRecord, "rev" | "key">): Promise<string> {
     for (let attempt = 1; attempt <= 50; attempt++) {
       const key = keyOf(file, attempt);
-      if (!(await store.record(key)) && !(await bucket.head(key))) return key;
+      if ((await store.record(key)) || (await bucket.head(key))) continue;
+      try {
+        await store.insert({ ...record, key });
+        return key;
+      } catch (error) {
+        // Another upload took the key between the check and the insert: try the next.
+        if (await store.record(key)) continue;
+        throw error;
+      }
     }
     throw new RefusedError("No free name was found for this file. Rename it and upload it again.");
   }
@@ -451,8 +469,8 @@ export function mediaLibrary(options: MediaLibraryOptions): MediaAdapter {
   }
 
   /**
-   * Stores a new file: the object, then its row (the object removed again if the row cannot be written), then its first
-   * revisions. Answers the row.
+   * Stores a new file: its row first, which claims the key, then the object (the row removed again if the object cannot
+   * be written), then its first revisions. Answers the row.
    */
   async function storeFile(file: {
     bytes: Uint8Array;
@@ -467,9 +485,7 @@ export function mediaLibrary(options: MediaLibraryOptions): MediaAdapter {
     original?: { bytes: Uint8Array; width: number; height: number };
   }): Promise<MediaRecord> {
     const at = now().toISOString();
-    const key = await freshKey({ filename: file.filename, contentType: file.contentType, sha256: file.uploadSha256, storedSha256: file.sha256, width: file.width, height: file.height, at });
-    const record: Omit<MediaRecord, "rev"> = {
-      key,
+    const record: Omit<MediaRecord, "rev" | "key"> = {
       filename: file.filename.slice(0, 300),
       contentType: file.contentType,
       bytes: file.bytes.byteLength,
@@ -491,14 +507,15 @@ export function mediaLibrary(options: MediaLibraryOptions): MediaAdapter {
       trashedAt: null,
       ...kept(file.fields),
     };
-    await bucket.put(key, file.bytes, {
-      httpMetadata: { ...(options.httpMetadata?.(record) ?? {}), contentType: file.contentType },
-      customMetadata: objectMetadata({ ...record, rev: 0 }),
-    });
+    const key = await claimKey({ filename: file.filename, contentType: file.contentType, sha256: file.uploadSha256, storedSha256: file.sha256, width: file.width, height: file.height, at }, record);
     try {
-      await store.insert(record);
+      await bucket.put(key, file.bytes, {
+        httpMetadata: { ...(options.httpMetadata?.({ ...record, key }) ?? {}), contentType: file.contentType },
+        customMetadata: objectMetadata({ ...record, key, rev: 0 }),
+      });
     } catch (error) {
-      await bucket.delete(key);
+      const claimed = await store.record(key);
+      if (claimed) await store.remove(key, claimed.rev);
       throw error;
     }
     if (file.original) {
@@ -527,21 +544,25 @@ export function mediaLibrary(options: MediaLibraryOptions): MediaAdapter {
     const current = await bucket.get(record.key);
     if (!current) throw new NotFoundError("No such media.");
     const held = new Uint8Array(await current.arrayBuffer());
-    const heldSha = record.sha256 ?? (await sha256Hex(held));
+    // Hashed here, never taken from the row: a copy's name must be its own bytes, or it overwrites another's.
+    const heldSha = await sha256Hex(held);
     const copyKey = await keepCopy(record.key, heldSha, held, record.contentType);
+    // The newest revision names the copy only when it is these bytes and names none yet: a copy recorded under an older
+    // scheme is kept as it is, and a newest row that is other bytes gets a row of its own for these.
     const [latest] = await store.revisions(record.key, 1);
-    const latestId =
-      latest?.id ??
-      (await store.addRevision(record.key, {
-        at: record.uploadedAt,
-        bytes: record.bytes,
+    const isHeld = latest !== undefined && (latest.sha256 ? latest.sha256 === heldSha : !latest.copyKey);
+    if (isHeld && !latest.copyKey) await store.keepCopy(latest.id, copyKey);
+    if (!isHeld) {
+      await store.addRevision(record.key, {
+        at: latest ? now().toISOString() : record.uploadedAt,
+        bytes: held.byteLength,
         width: record.width,
         height: record.height,
-        reason: record.sourceUrl ? "import" : "upload",
+        reason: latest ? "replace" : record.sourceUrl ? "import" : "upload",
         sha256: heldSha,
-        copyKey: null,
-      }));
-    await store.keepCopy(latestId, copyKey);
+        copyKey,
+      });
+    }
     const sha256 = await sha256Hex(next.bytes);
     const after: MediaRecord = { ...record, ...kept(fields), bytes: next.bytes.byteLength, width: next.width, height: next.height, sha256 };
     const written = await bucket.put(record.key, next.bytes, {
@@ -550,8 +571,9 @@ export function mediaLibrary(options: MediaLibraryOptions): MediaAdapter {
       onlyIf: { etagMatches: current.etag },
     });
     if (!written) throw new RefusedError(RACED);
-    await store.addRevision(record.key, { at: now().toISOString(), bytes: next.bytes.byteLength, width: next.width, height: next.height, reason: next.reason, sha256, copyKey: null });
+    // The row first, so it describes the bytes served even if the revision cannot be written.
     const followed = await store.follow(record.key, { ...kept(fields), bytes: next.bytes.byteLength, width: next.width, height: next.height, sha256 });
+    await store.addRevision(record.key, { at: now().toISOString(), bytes: next.bytes.byteLength, width: next.width, height: next.height, reason: next.reason, sha256, copyKey: null });
     await options.afterBytes?.(record.key);
     return followed;
   }
@@ -691,13 +713,13 @@ export function mediaLibrary(options: MediaLibraryOptions): MediaAdapter {
       const uses = await usesOf([id]);
       const using = uses.get(id) ?? [];
       if (using.length > 0) throw new MediaInUseError(using);
-      const copies = historyServed ? (await store.revisions(id)).flatMap((r) => (r.copyKey ? [r.copyKey] : [])) : [];
+      const copies = historyServed ? (await store.revisions(id, ALL_REVISIONS)).flatMap((r) => (r.copyKey ? [r.copyKey] : [])) : [];
       if (!historyServed) {
         // A backups bucket keeps the last bytes too, so a file deleted for good can still be put back by hand.
         const last = await bucket.get(id);
         if (last) {
           const bytes = new Uint8Array(await last.arrayBuffer());
-          await keepCopy(id, record.sha256 ?? (await sha256Hex(bytes)), bytes, record.contentType);
+          await keepCopy(id, await sha256Hex(bytes), bytes, record.contentType);
         }
       }
       const removed = await store.remove(id, record.rev);
@@ -709,7 +731,10 @@ export function mediaLibrary(options: MediaLibraryOptions): MediaAdapter {
         throw new RefusedError("The file came into use while it was being deleted, so it was kept. Check where it is used, then try again.");
       }
       const extra = historyServed ? await listed(`${historyPrefix}${id}/`) : [];
-      await bucket.delete([id, ...new Set([...copies, ...extra])]);
+      // The file first, then its copies, at most 1000 keys a call (R2's limit).
+      await bucket.delete(id);
+      const gone = [...new Set([...copies, ...extra])];
+      for (let n = 0; n < gone.length; n += 1000) await bucket.delete(gone.slice(n, n + 1000));
       await options.onWrite?.({ op: "delete", id, changeId: input.changeId });
     },
 
@@ -852,7 +877,7 @@ export function mediaLibrary(options: MediaLibraryOptions): MediaAdapter {
     async revert(id, input) {
       const record = await recordOf(id);
       atVersion(record, input.expectedVersion);
-      const target = (await store.revisions(id)).find((r) => String(r.id) === input.to);
+      const target = (await store.revisions(id, ALL_REVISIONS)).find((r) => String(r.id) === input.to);
       const copy = target?.copyKey ? await historyBucket.get(target.copyKey) : null;
       if (!target || !copy) throw new NotFoundError("This file has no such earlier version, or its copy is gone.");
       const bytes = new Uint8Array(await copy.arrayBuffer());

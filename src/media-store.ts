@@ -187,7 +187,8 @@ export interface D1MediaStoreOptions {
   /**
    * The site's own check that a file is still used, as a SQL condition on `?` (bound to the file's key) over its own
    * tables, such as `EXISTS (SELECT 1 FROM posts WHERE instr(body, '/media/' || ?) > 0)`. The row is then removed only
-   * while it is false, in the same statement, so a page saved during a delete never loses its file.
+   * while it is false, in the same statement, so a page saved during a delete never loses its file. Every `?` in it is
+   * bound to the key, so it holds no other `?`, not even inside a string literal.
    */
   inUse?: string;
 }

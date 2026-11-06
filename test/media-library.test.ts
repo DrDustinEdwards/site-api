@@ -214,4 +214,23 @@ describe("media library", () => {
     expect(turned.item.id).not.toBe(item.id);
     expect((await adapter.get(item.id))!).toMatchObject({ width: 800, version: "r0" });
   });
+  it("keeps a site's older copies and hashes through a replace, and gives two uploads of one file at once their own keys", async () => {
+    const { adapter, media, db } = library();
+    const item = await upload(adapter, png(800, 600));
+    // A site's older data: no hash on the row, and a revision whose copy sits under another scheme.
+    media.objects.set("old/copy.png", { bytes: png(400, 300), etag: "e-old" });
+    db.db.prepare("UPDATE media SET sha256 = '' WHERE key = ?").run(item.id);
+    db.db.prepare("UPDATE media_revisions SET bytes = 1, width = 400, height = 300, sha256 = 'x', copy_key = 'old/copy.png' WHERE media_key = ?").run(item.id);
+    const replaced = await adapter.replace!(item.id, { bytes: png(700, 500), contentType: "image/png", filename: "heron.png", expectedVersion: "r0", changeId: "c-1" });
+    const rows = db.db.prepare("SELECT id, copy_key FROM media_revisions WHERE media_key = ? ORDER BY id").all(item.id) as Array<{ id: number; copy_key: string | null }>;
+    expect(rows.map((r) => r.copy_key)).toEqual(["old/copy.png", expect.stringMatching(/^history\/.+\/[0-9a-f]{64}$/), null]);
+    // A revert still finds the copy the site kept before the switch.
+    const back = await adapter.revert!(item.id, { to: String(rows[0]!.id), expectedVersion: replaced.item.version, changeId: "c-2" });
+    expect(back.item).toMatchObject({ width: 400, height: 300 });
+
+    const bytes = png(320, 240);
+    const [a, b] = await Promise.all([upload(adapter, bytes), upload(adapter, bytes)]);
+    expect(a.id).not.toBe(b.id);
+    expect(media.objects.has(a.id) && media.objects.has(b.id)).toBe(true);
+  });
 });
