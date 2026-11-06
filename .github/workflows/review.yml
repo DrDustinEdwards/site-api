@@ -20,4 +20,4 @@ jobs:
     permissions:
       id-token: write
       checks: write
-    uses: DrDustinEdwards/devkit/.github/workflows/review.yml@a4c3bbf859fe126913e28c6199ff66fa98e0261d # v0.21.4
+    uses: DrDustinEdwards/devkit/.github/workflows/review.yml@4d0c8fdb2f1794272b31d3c4354059eb2f19a26a # v0.22.0
