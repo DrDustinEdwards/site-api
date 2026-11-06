@@ -12,10 +12,12 @@ import { KEY, allow } from "./helpers.js";
 
 /** A site on a local port: `handle` answers each request as the site's Worker would. */
 async function serve(handle: (request: Request) => Promise<Response>) {
-  const server = createServer(async (req, res) => {
-    const response = await handle(new Request(`http://${req.headers.host}${req.url}`, { headers: req.headers as Record<string, string> }));
-    res.writeHead(response.status, Object.fromEntries(response.headers));
-    res.end(Buffer.from(await response.arrayBuffer()));
+  const server = createServer((req, res) => {
+    void (async () => {
+      const response = await handle(new Request(`http://${req.headers.host}${req.url}`, { headers: req.headers as Record<string, string> }));
+      res.writeHead(response.status, Object.fromEntries(response.headers));
+      res.end(Buffer.from(await response.arrayBuffer()));
+    })();
   });
   await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
   return { origin: `http://127.0.0.1:${(server.address() as AddressInfo).port}`, close: () => server.close() };

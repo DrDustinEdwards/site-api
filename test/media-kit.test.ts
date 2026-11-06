@@ -65,7 +65,7 @@ describe("media kit", () => {
     const custom = "https://ai.example.com/anthropic";
     const gatewayOn = async (env: Partial<SuggestEnv>) => {
       await suggest({ AI: { run }, IMAGES: images, ...env }, new Response("png").body!);
-      return (run.mock.calls.at(-1)?.[2] as { gateway?: { id: string } }).gateway?.id;
+      return (run.mock.calls.at(-1)?.[2] as { gateway?: { id: string } } | undefined)?.gateway?.id;
     };
     expect(await gatewayOn({ AI_GATEWAY_BASE_URL: custom, AI_GATEWAY_ID: "sample-gw" })).toBe("sample-gw");
     expect(run.mock.calls.at(-1)?.[2]).toMatchObject({ gateway: { metadata: { app: "sample", feature: "media-suggest" } }, signal: expect.any(AbortSignal) });

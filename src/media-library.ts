@@ -426,7 +426,7 @@ export function mediaLibrary(options: MediaLibraryOptions): MediaAdapter {
   /** The object's custom metadata for a record: the site's fields, and the focal point when there is one. */
   function objectMetadata(record: MediaRecord, held: Record<string, string> = {}): Record<string, string> {
     const { [FOCUS_METADATA]: _old, ...rest } = held;
-    return { ...rest, ...(options.customMetadata?.(record) ?? {}), ...(record.focus ? { [FOCUS_METADATA]: record.focus } : {}) };
+    return { ...rest, ...options.customMetadata?.(record), ...(record.focus ? { [FOCUS_METADATA]: record.focus } : {}) };
   }
 
   /** Bytes as the library stores them; a replace or a shrink is not an upload, so it has no alt and no duplicates key. */
@@ -510,7 +510,7 @@ export function mediaLibrary(options: MediaLibraryOptions): MediaAdapter {
     const key = await claimKey({ filename: file.filename, contentType: file.contentType, sha256: file.uploadSha256, storedSha256: file.sha256, width: file.width, height: file.height, at }, record);
     try {
       await bucket.put(key, file.bytes, {
-        httpMetadata: { ...(options.httpMetadata?.({ ...record, key }) ?? {}), contentType: file.contentType },
+        httpMetadata: { ...options.httpMetadata?.({ ...record, key }), contentType: file.contentType },
         customMetadata: objectMetadata({ ...record, key, rev: 0 }),
       });
     } catch (error) {

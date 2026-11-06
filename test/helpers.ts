@@ -48,10 +48,10 @@ export function body(value: unknown): RequestInit {
 export function png(width: number, height: number, text: Record<string, string> = {}, salt = 0): Uint8Array {
   const chunk = (type: string, data: number[]) => {
     const length = [24, 16, 8, 0].map((s) => (data.length >>> s) & 255);
-    return [...length, ...[...type].map((c) => c.charCodeAt(0)), ...data, 0, 0, 0, salt];
+    return [...length, ...Array.from(type).map((c) => c.charCodeAt(0)), ...data, 0, 0, 0, salt];
   };
   const be = (n: number) => [24, 16, 8, 0].map((s) => (n >>> s) & 255);
-  const texts = Object.entries(text).flatMap(([k, v]) => chunk("tEXt", [...[...k].map((c) => c.charCodeAt(0)), 0, ...[...v].map((c) => c.charCodeAt(0))]));
+  const texts = Object.entries(text).flatMap(([k, v]) => chunk("tEXt", [...Array.from(k).map((c) => c.charCodeAt(0)), 0, ...Array.from(v).map((c) => c.charCodeAt(0))]));
   return Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, ...chunk("IHDR", [...be(width), ...be(height), 8, 2, 0, 0, 0]), ...texts]);
 }
 
