@@ -165,6 +165,8 @@ export interface MediaKeyInput {
   contentType: string;
   /** The upload's duplicates key (`uploadSha256`), lower case hex. */
   sha256: string;
+  /** The SHA-256 of the bytes stored, which differs from `sha256` only for a converted or shrunk picture. */
+  storedSha256: string;
   width: number | null;
   height: number | null;
   /** ISO 8601. */
@@ -465,7 +467,7 @@ export function mediaLibrary(options: MediaLibraryOptions): MediaAdapter {
     original?: { bytes: Uint8Array; width: number; height: number };
   }): Promise<MediaRecord> {
     const at = now().toISOString();
-    const key = await freshKey({ filename: file.filename, contentType: file.contentType, sha256: file.uploadSha256, width: file.width, height: file.height, at });
+    const key = await freshKey({ filename: file.filename, contentType: file.contentType, sha256: file.uploadSha256, storedSha256: file.sha256, width: file.width, height: file.height, at });
     const record: Omit<MediaRecord, "rev"> = {
       key,
       filename: file.filename.slice(0, 300),
@@ -642,7 +644,8 @@ export function mediaLibrary(options: MediaLibraryOptions): MediaAdapter {
     },
 
     async upload(input): Promise<MediaUploaded> {
-      const prepared = measured(await prepareUpload(images, input, resize ? { resize } : {}));
+      // The limits again: the route checked them, and a site's own upload path calling this did not.
+      const prepared = measured(await prepareUpload(images, input, { limits: options.limits, ...(resize ? { resize } : {}) }));
       const found = prepared.embedded;
       const embeddable: MediaEmbeddedField[] = ["credit", "license", "caption", "takenAt", ...(keepsRights ? (["copyright", "licenseUrl", "acquireLicenseUrl"] as const) : [])];
       const embedded = embeddable.filter((field) => found[field]);
