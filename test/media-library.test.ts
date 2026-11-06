@@ -225,7 +225,7 @@ describe("media library", () => {
     const rows = db.db.prepare("SELECT id, copy_key FROM media_revisions WHERE media_key = ? ORDER BY id").all(item.id) as Array<{ id: number; copy_key: string | null }>;
     expect(rows.map((r) => r.copy_key)).toEqual(["old/copy.png", expect.stringMatching(/^history\/.+\/[0-9a-f]{64}$/), null]);
     // A revert still finds the copy the site kept before the switch.
-    const back = await adapter.revert!(item.id, { to: String(rows[0]!.id), expectedVersion: replaced.item.version, changeId: "c-2" });
+    const back = await adapter.revert!(item.id, { to: String(rows[0]!.id), expectedVersion: replaced.item.version!, changeId: "c-2" });
     expect(back.item).toMatchObject({ width: 400, height: 300 });
 
     const bytes = png(320, 240);
