@@ -219,7 +219,7 @@ Additive: every v0.4.0 route and body is unchanged, and the schema hash and pack
 
 ## Changes in v0.28.0
 
-No route, body or schema changes. `PICTURE_RESIZE` shrinks a stored picture to 2560 px on its longest edge (was 4096), the size WordPress core settled on (about 850 KB for a photo); the sizes visitors are served are variants made on request. A site that needs more passes its own `resize`.
+No route, body or schema changes. It depends on Prelum v0.35.1 (was v0.34.0), so sites can take Prelum 0.35.1 without a conflict. `PICTURE_RESIZE` shrinks a stored picture to 2560 px on its longest edge (was 4096), the size WordPress core settled on (about 850 KB for a photo); the sizes visitors are served are variants made on request. A site that needs more passes its own `resize`.
 
 ## Changes in v0.27.0
 
