@@ -270,7 +270,7 @@ export const MediaUploadQuery = z.object({
     // oxlint-disable-next-line no-control-regex
     .regex(/^[^/\\\u0000-\u001f]+$/, "A file name, with no path"),
   /**
-   * Required (v0.19.0) unless `decorative=yes`: what the picture shows, at most MAX_ALT_CHARS, never its file name, a bare
+   * What the picture shows (v0.30.0: optional; with none the picture is stored with no alt and an alt is written afterward, and the site refuses it where it is placed on a page). Sent, it is checked: what the picture shows, at most MAX_ALT_CHARS, never its file name, a bare
    * "image" or an address. Before v0.19.0 it defaulted to "", which stored a picture with no alt and no one's choice.
    */
   alt: z.string().max(2000).optional(),
@@ -478,7 +478,7 @@ export const MediaImportInput = z.object({
     // oxlint-disable-next-line no-control-regex
     .regex(/^[^/\\\u0000-\u001f]+$/, "A file name, with no path")
     .optional(),
-  /** Required, or `decorative: true` (v0.19.0), as an upload's. */
+  /** An upload's: optional since v0.30.0, and checked when sent. */
   alt: z.string().max(2000).optional(),
   decorative: z.literal(true).optional(),
   resize: z.enum(["no"]).optional(),

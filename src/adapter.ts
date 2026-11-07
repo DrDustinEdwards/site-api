@@ -139,7 +139,7 @@ export interface MediaUpload {
   /** One of the site's declared types, without parameters. */
   contentType: string;
   filename: string;
-  /** What the picture shows: never "" unless `decorative` (v0.19.0), and already checked by altRefusal. */
+  /** What the picture shows: "" only when `decorative` or, since v0.30.0, when none was sent yet; any alt is already checked by altRefusal. */
   alt: string;
   /** v0.19.0: true when the person said the picture is decorative, so its alt is "" on purpose. A site that keeps it answers `decorative`. */
   decorative?: boolean;

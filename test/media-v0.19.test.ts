@@ -19,7 +19,7 @@ const refusal = (promise: Promise<unknown>) =>
   );
 
 describe("alt at upload (B2, B3)", () => {
-  it("PLANT: refuses an upload or an import with no alt and no decorative choice, or an alt that is the file's name, before the adapter", async () => {
+  it("PLANT: refuses an alt that is the file's name, a bare word, too long or sent with decorative, before the adapter; a picture may be stored with none", async () => {
     const remote = vi.fn(
       async () =>
         new Response(png(4, 4) as Uint8Array<ArrayBuffer>, {
@@ -34,9 +34,6 @@ describe("alt at upload (B2, B3)", () => {
       filename: "river-dusk.png",
       changeId: "u1",
     };
-    expect(await refusal(client.media.upload(file))).toMatch(
-      /^400 alt: Say what the picture shows/,
-    );
     expect(await refusal(client.media.upload({ ...file, alt: "River dusk" }))).toMatch(
       /^400 alt: Alt text says what the picture shows, not its file name/,
     );
@@ -47,13 +44,17 @@ describe("alt at upload (B2, B3)", () => {
     expect(
       await refusal(client.media.upload({ ...file, alt: "A river", decorative: true })),
     ).toMatch(/^400 alt: A decorative picture has no alt text/);
-    expect(
-      await refusal(
-        client.media.importUrl({ url: "https://photos.example.com/a.png", changeId: "i1" }),
-      ),
-    ).toMatch(/^400 alt:/);
     expect(upload).not.toHaveBeenCalled();
     expect(remote).not.toHaveBeenCalled();
+
+    // v0.30.0: no alt is allowed at upload, so one can be written afterward; the no-alt lens lists it.
+    const bare = await client.media.upload({
+      ...file,
+      bytes: png(6, 6),
+      filename: "c.png",
+      changeId: "u0",
+    });
+    expect(bare).toMatchObject({ alt: "" });
 
     // A decorative picture is stored with alt "" on purpose, and the no-alt lens leaves it out; clearing an alt is the same choice.
     const plain = await client.media.upload({ ...file, decorative: true });
@@ -81,7 +82,7 @@ describe("alt at upload (B2, B3)", () => {
       expectedVersion: described.version!,
       changeId: "a2",
     });
-    expect((await client.media.list({ lens: "no-alt" })).items).toEqual([]);
+    expect((await client.media.list({ lens: "no-alt" })).items.map((i) => i.id)).toEqual([bare.id]);
   });
 
   it("takes a replacement's private metadata out before the site stores it", async () => {

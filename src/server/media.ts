@@ -121,10 +121,10 @@ export function mediaRoutes(
         const wrongType = checkUpload(contentType, null, media.limits);
         if (wrongType) throw new BadRequest(wrongType.code, wrongType.message);
         const decorative = query.decorative === "yes";
-        checkAlt(query.alt, decorative, query.filename);
+        checkAlt(query.alt, decorative, query.filename, false);
         return store(await uploaded(request, contentType), contentType, {
           ...query,
-          alt: decorative ? "" : query.alt!.trim(),
+          alt: decorative ? "" : (query.alt ?? "").trim(),
           decorative,
         });
       },
@@ -164,7 +164,7 @@ export function mediaRoutes(
           return fail("not-implemented", "This site does not import files from the web.");
         const input = await readBody(request, MediaImportInput);
         const decorative = input.decorative === true;
-        checkAlt(input.alt, decorative, input.filename ?? nameOf(input.url));
+        checkAlt(input.alt, decorative, input.filename ?? nameOf(input.url), false);
         const { bytes, contentType, address } = await imported(input.url);
         return store(
           bytes,
@@ -172,7 +172,7 @@ export function mediaRoutes(
           {
             ...input,
             filename: input.filename ?? nameOf(address),
-            alt: decorative ? "" : input.alt!.trim(),
+            alt: decorative ? "" : (input.alt ?? "").trim(),
             decorative,
           },
           input.url,
@@ -766,9 +766,14 @@ export function mediaRoutes(
   }
 }
 
-/** Refuses, as 400 before anything is read or stored, an alt the contract does not take (altRefusal). */
-function checkAlt(alt: string | undefined, decorative: boolean, filename: string | null): void {
-  const refusal = altRefusal(alt, decorative, filename);
+/** Refuses, as 400 before anything is read or stored, an alt the contract does not take (altRefusal); an upload or import may carry none (v0.30.0). */
+function checkAlt(
+  alt: string | undefined,
+  decorative: boolean,
+  filename: string | null,
+  required = true,
+): void {
+  const refusal = altRefusal(alt, decorative, filename, required);
   if (refusal) throw new BadRequest("invalid", `alt: ${refusal}`);
 }
 
