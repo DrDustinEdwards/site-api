@@ -23,7 +23,7 @@ type Tag = { name: string; attrs: string; start: number; end: number; closing: b
 function* tags(html: string): Generator<Tag> {
   // A tag's attributes are read to 1,024 characters at most: an unbounded run made a page of `<a<a<a...` quadratic
   // (450 KB took 44 s), and a stranger's page is what this reads.
-  const pattern = /<(\/?)([a-zA-Z][\w-]*)\b((?:[^>"']|"[^"]*"|'[^']*'){0,1024})>/g;
+  const pattern = /<(\/?)([a-zA-Z][\w-]*)\b((?:[^>"'<]|"[^"]*"|'[^']*'){0,1024})>/g;
   for (let m = pattern.exec(html); m; m = pattern.exec(html)) {
     yield {
       name: m[2]!.toLowerCase(),
