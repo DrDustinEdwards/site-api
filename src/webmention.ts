@@ -157,7 +157,7 @@ async function getPage(
     throw new Error(`${url} answered ${response.status}`);
   }
   const html = /html/i.test(response.headers.get("content-type") ?? "")
-    ? await readText(response)
+    ? await readResponseText(response)
     : "";
   return { url, link: response.headers.get("link"), html };
 }
@@ -166,7 +166,7 @@ async function getPage(
 const limit = (deadline: AbortSignal) =>
   AbortSignal.any([AbortSignal.timeout(TIMEOUT_MS), deadline]);
 
-async function readText(response: Response): Promise<string> {
+async function readResponseText(response: Response): Promise<string> {
   if (!response.body) return "";
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
