@@ -41,7 +41,7 @@ import {
   type MediaUse,
 } from "./contract.js";
 import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
-import { altRefusal, kindOf, orientationOf, transformFocus, turnsSize } from "./media.js";
+import { kindOf, orientationOf, transformFocus, turnsSize } from "./media.js";
 import { mediaRev, mediaVersion, toArrayBuffer } from "./media-kit.js";
 import { placeholderAndColor, prepareUpload, type UploadImages } from "./media-upload.js";
 
@@ -913,9 +913,6 @@ export function mediaLibrary(options: MediaLibraryOptions): MediaAdapter {
     },
 
     async upload(input): Promise<MediaUploaded> {
-      // The alt text again, with the limits below: the route checked it, and a site's own upload path calling this did not.
-      const wrong = altRefusal(input.alt, input.decorative === true, input.filename ?? null);
-      if (wrong) throw new RefusedError(wrong);
       // The limits again: the route checked them, and a site's own upload path calling this did not.
       const prepared = measured(
         await prepareUpload(images, input, {

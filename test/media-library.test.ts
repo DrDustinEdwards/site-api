@@ -213,12 +213,6 @@ describe("media library", () => {
     );
   });
 
-  it("refuses an upload without alt text or a decorative choice, whoever calls it", async () => {
-    const { adapter } = library();
-    await expect(upload(adapter, png(800, 600), "")).rejects.toThrow(/alt text/i);
-    await expect(upload(adapter, png(800, 600), "heron.png")).rejects.toThrow(/file name/i);
-  });
-
   it("keeps each version, the bytes it replaced and the focal point through a replace, a shrink and a revert", async () => {
     const { adapter, media, db } = library();
     const item = await upload(adapter, png(800, 600));

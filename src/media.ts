@@ -153,14 +153,17 @@ const words = (s: string) =>
     .trim();
 
 /**
- * Why an alt text cannot be stored (v0.19.0, checklist B2 and B3), or null: an upload, an import and an alt write need
- * alt or an explicit decorative choice, never both; and an alt is at most MAX_ALT_CHARS, and is not the file's name, an
- * address, or a word such as "image" or "photo".
+ * Why an alt text cannot be stored (v0.19.0, checklist B2 and B3), or null: an alt write needs alt or an explicit
+ * decorative choice, never both; and an alt is at most MAX_ALT_CHARS, and is not the file's name, an address, or a word
+ * such as "image" or "photo". An upload or an import passes `required: false` (v0.30.0): a picture may be stored with no
+ * alt so that one can be written for it afterward, and the missing alt is refused where the picture is placed on a page
+ * (`placementAltRefusal`).
  */
 export function altRefusal(
   alt: string | undefined,
   decorative: boolean,
   filename: string | null,
+  required = true,
 ): string | null {
   const text = (alt ?? "").trim();
   if (decorative)
@@ -168,7 +171,9 @@ export function altRefusal(
       ? "A decorative picture has no alt text: send the alt text or mark it decorative, not both."
       : null;
   if (!text)
-    return "Say what the picture shows in its alt text, or mark it decorative if it adds nothing a reader would miss.";
+    return required
+      ? "Say what the picture shows in its alt text, or mark it decorative if it adds nothing a reader would miss."
+      : null;
   if (text.length > MAX_ALT_CHARS)
     return `Alt text is at most ${MAX_ALT_CHARS} characters; put the rest in the caption.`;
   const said = words(text);

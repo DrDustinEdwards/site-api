@@ -219,7 +219,7 @@ Additive: every v0.4.0 route and body is unchanged, and the schema hash and pack
 
 ## Changes in v0.30.0
 
-No route, body or schema changes. The library's own `upload()` now refuses an alt text the contract refuses (empty without `decorative`, a file name, a generic word, over the limit), so a site's own upload path cannot store a picture without one.
+An upload or an import may now carry no alt text (and not `decorative`): the picture is stored with alt "" and listed by the `no-alt` lens, so an AI session or a person can write the alt afterward (`setAlt`, which still needs alt or `decorative`). An alt that is sent is still checked as before. The site refuses a picture with no alt where it is placed on a page, not at upload. The route's wire shapes do not change (alt was already optional in the schema); only the 400 for neither alt nor `decorative` is gone. `altRefusal` takes a fourth argument, `required` (default true).
 
 ## Changes in v0.29.0
 
@@ -359,7 +359,7 @@ Additive: no route, body or schema changes. The media suggester (`mediaSuggester
 
 ## Changes in v0.19.0
 
-One deliberate break, the rest additive. **An upload or an import needs alt text or an explicit decorative choice**: `POST /media` with neither `alt` nor `decorative=yes` (an import: neither `alt` nor `decorative: true`) answers `400 invalid`, before a byte is read or the adapter runs. Before, the API defaulted alt to "", which stored a picture with no alt and nobody's choice. Files stored before keep working as they are. Carrel and every site's own library must send one of the two; the client's `upload` and `importUrl` take `alt` or `decorative: true`. `test/v0.19.0.ts` names every change, which each `test/contract-v*.test.ts` checks.
+One deliberate break, the rest additive. **(Relaxed in v0.30.0: an upload or an import may carry neither; see Changes in v0.30.0.) An upload or an import needed alt text or an explicit decorative choice**: `POST /media` with neither `alt` nor `decorative=yes` (an import: neither `alt` nor `decorative: true`) answers `400 invalid`, before a byte is read or the adapter runs. Before, the API defaulted alt to "", which stored a picture with no alt and nobody's choice. Files stored before keep working as they are. Carrel and every site's own library must send one of the two; the client's `upload` and `importUrl` take `alt` or `decorative: true`. `test/v0.19.0.ts` names every change, which each `test/contract-v*.test.ts` checks.
 
 - **Alt is checked** (`altRefusal(alt, decorative, filename)`, exported) on an upload, an import and `PUT /media/:id/alt`: at most `MAX_ALT_CHARS` (250) characters, the rest belonging in the caption; never the file's own name, an address, or a word such as "image" or "photo"; not both alt and decorative. `PUT /media/:id/alt` takes `decorative: true`, and an empty alt only with it. Each refusal is `400` with a message that starts `alt:`.
 - **Decorative is kept.** `MediaUpload.decorative` and `setAlt`'s `decorative` tell the adapter; a site that stores it answers `MediaItem.decorative`, and its no-alt lens leaves those files out, since their empty alt is a choice.

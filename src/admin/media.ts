@@ -740,14 +740,14 @@ const EMBEDDED_WORDS: Record<string, string> = {
 const decorativeOf = (input: IntentInput) =>
   ["yes", "on", "1", "true"].includes(text(input, "decorative"));
 
-/** The alt an upload or an import sends, or decorative (v0.19.0): one of them, checked as the site checks it. */
+/** The alt an upload or an import sends, or decorative (v0.19.0), or neither (v0.30.0): checked as the site checks it. */
 function altOf(
   input: IntentInput,
   filename: string | null,
 ): { ok: true; fields: { alt: string } | { decorative: true } } | { ok: false; message: string } {
   const alt = text(input, "alt").trim();
   const decorative = decorativeOf(input);
-  const wrong = altRefusal(alt, decorative, filename);
+  const wrong = altRefusal(alt, decorative, filename, false);
   return wrong
     ? { ok: false, message: wrong }
     : { ok: true, fields: decorative ? { decorative: true } : { alt } };
