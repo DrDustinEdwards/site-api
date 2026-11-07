@@ -6,7 +6,7 @@ import { memoryAdapter } from "../src/testing.js";
 import { createSiteApi, indexNowHook, type PublishEvent, type PublishHook } from "../src/index.js";
 import {
   d1SiteApiStore,
-  goneResponse,
+  tombstoneResponse,
   SITE_API_STORE_SQL,
   SITE_API_STORE_SQL_V0_22,
   tombstoned,
@@ -306,7 +306,7 @@ describe("tombstones (v0.22.0, F5)", () => {
       (await tombstoned(new Response("x", { status: 404 }), "/blog/never", store)).status,
     ).toBe(404);
 
-    const page = goneResponse(
+    const page = tombstoneResponse(
       new Request(`${ORIGIN}/blog/a`, { headers: { accept: "text/html" } }),
     );
     expect([
@@ -314,7 +314,7 @@ describe("tombstones (v0.22.0, F5)", () => {
       page.headers.get("cache-control"),
       page.headers.get("content-type"),
     ]).toEqual([410, "no-store", "text/html; charset=utf-8"]);
-    const problem = goneResponse(
+    const problem = tombstoneResponse(
       new Request(`${ORIGIN}/blog/a`, { headers: { accept: "application/problem+json" } }),
     );
     expect([

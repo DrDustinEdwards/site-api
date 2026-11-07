@@ -55,7 +55,7 @@ export interface SiteApiStore {
   /** v0.21.0: remembers the file an upload or import with this key became, replacing an earlier one. */
   putUploadedMedia(sha256: string, mediaId: string, at: string): Promise<void>;
   // ---------- v0.22.0, optional so a site's own store from v0.17.0 still fits; d1SiteApiStore has them all
-  /** Keeps a tombstone for a path whose live item was deleted or trashed, so the site answers it 410 (goneResponse). */
+  /** Keeps a tombstone for a path whose live item was deleted or trashed, so the site answers it 410 (tombstoneResponse). */
   markGone?(path: string, at: string): Promise<void>;
   /** Drops the tombstone: something is live at the path again. */
   clearGone?(path: string): Promise<void>;
@@ -109,9 +109,9 @@ export async function tombstoned(
  * the request asks for JSON over HTML, a small HTML page otherwise. A site's not-found handler answers it when
  * `store.isGone(url.pathname)`:
  *
- *     if (await store.isGone(url.pathname)) return goneResponse(request);
+ *     if (await store.isGone(url.pathname)) return tombstoneResponse(request);
  */
-export function goneResponse(request?: Request): Response {
+export function tombstoneResponse(request?: Request): Response {
   const headers = {
     "cache-control": "no-store",
     "x-robots-tag": "noindex",
