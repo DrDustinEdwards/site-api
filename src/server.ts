@@ -48,7 +48,7 @@ export type {
   SiteApiStore,
   StoredWrite,
 } from "./store.js";
-export { goneResponse, gonePath, tombstoned } from "./store.js";
+export { tombstoneResponse, gonePath, tombstoned } from "./store.js";
 export { PREVIEW_LINK_PATH } from "./server/preview-links.js";
 
 /** The shape of Cloudflare's `ratelimit` binding, so a site passes its binding straight in. */

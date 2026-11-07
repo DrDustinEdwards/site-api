@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { createSiteApi } from "../src/index.js";
 import { runConformance } from "../src/conformance.js";
 import { memoryAdapter } from "../src/testing.js";
-import { d1SiteApiStore, goneResponse, SITE_API_STORE_SQL } from "../src/store.js";
+import { d1SiteApiStore, tombstoneResponse, SITE_API_STORE_SQL } from "../src/store.js";
 import { d1 } from "./d1.js";
 import { KEY, ORIGIN, allow, site } from "./helpers.js";
 
@@ -551,7 +551,7 @@ describe("conformance", () => {
       )
         return new Response("<p>post</p>");
       if (options.tombstones !== false && (await store.isGone(pathname)))
-        return goneResponse(request);
+        return tombstoneResponse(request);
       return new Response("Not found", { status: 404 });
     }) as typeof globalThis.fetch;
     return { adapter, fetch };
