@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { createSiteClient } from "../src/client.js";
 import { createSiteApi } from "../src/index.js";
 import { memoryAdapter } from "../src/testing.js";
-import { KEY, ORIGIN, allow } from "./helpers.js";
+import { KEY, ORIGIN, allow, body, req } from "./helpers.js";
 
 describe("page changes (v0.9.0)", () => {
   it("names the page a publish, a live save, an unpublish and a delete change, never a draft's, and waits on nothing", async () => {
@@ -42,5 +42,14 @@ describe("page changes (v0.9.0)", () => {
     expect(heard).toEqual([["/blog/a"], ["/blog/a"], ["/blog/a"], ["/blog/a"], ["/blog/a"]]);
     // The first save, to a draft never published, has no page to tell anyone of, so nothing waits on it.
     expect(pending).toHaveLength(5);
+
+    // PLANT: a malformed escape in the id is the route's 400 (ASVS 16.5.4), not a URIError thrown by the handler.
+    const bad = await api.handle(
+      req("/api/carrel/v1/content/%E0%A4%A/publish", {
+        method: "POST",
+        ...body({ expectedVersion: "v1", changeId: "c7" }),
+      }),
+    );
+    expect(bad.status).toBe(400);
   });
 });

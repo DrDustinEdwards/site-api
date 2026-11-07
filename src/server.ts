@@ -539,8 +539,14 @@ export function createSiteApi(config: SiteApiConfig): SiteApi {
       (hooks.length > 0 || store?.markGone) && request.method !== "GET"
         ? PAGE_WRITE.exec(path)
         : null;
-    const action = write ? ACTION[`${request.method} ${write[2] ?? ""}`] : undefined;
-    const id = write ? decodeURIComponent(write[1]!) : "";
+    // A malformed escape in the id is the route's to refuse (400 invalid); decoding it here would throw out of the handler.
+    let id = "";
+    try {
+      id = write ? decodeURIComponent(write[1]!) : "";
+    } catch {
+      id = "";
+    }
+    const action = write && id ? ACTION[`${request.method} ${write[2] ?? ""}`] : undefined;
     let finish: ((response: Response) => Promise<void>) | undefined;
     let response: Response;
     try {
