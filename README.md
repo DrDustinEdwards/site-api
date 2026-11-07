@@ -219,7 +219,7 @@ Additive: every v0.4.0 route and body is unchanged, and the schema hash and pack
 
 ## Changes in v0.31.4
 
-No route, body or schema changes. The embedded-metadata reader found XMP properties with lazy regexes that went quadratic on a packet of many opening tags and no closing one (20,000 openings took 2 s of CPU, and a larger packet in a PNG, WebP or HEIC grows with the square). It now scans for each element in one pass.
+No route, body or schema changes. The embedded-metadata reader found XMP properties with lazy regexes that went quadratic on a packet of many opening tags and no closing one (60,000 openings took about 18 s of CPU, and a larger packet in a PNG, WebP or HEIC grows with the square). It now scans for each element in one pass.
 
 ## Changes in v0.31.3
 
