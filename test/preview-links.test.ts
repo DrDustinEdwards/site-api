@@ -50,6 +50,7 @@ describe("preview links (v0.17.0)", () => {
     expect(open.headers.get("x-robots-tag")).toBe("noindex, nofollow");
     expect(open.headers.get("cache-control")).toBe("private, no-store");
     expect(open.headers.get("referrer-policy")).toBe("no-referrer");
+    expect(open.headers.get("content-security-policy")).toContain("script-src 'none'");
     // v0.22.0: a HEAD meets the same answer, noindex included, with no body.
     const head = await fetch(link.url, { method: "HEAD" });
     expect([head.status, head.headers.get("x-robots-tag"), await head.text()]).toEqual([

@@ -97,7 +97,17 @@ export function previewLinkRoutes(adapter: SiteAdapter, store: SiteApiStore): Ro
   ];
 }
 
+/**
+ * What a preview page may load (OWASP ASVS 5 v3.4.3): the draft's HTML is whatever the author wrote, so no script runs
+ * (a pipeline that let one through would run it on the site's origin, with a link anyone holds), no plugin, no base
+ * or form redirect, and no frame around it. Styles, images, fonts, media and embeds come over https only. The site's own
+ * policy, if it sends one, also applies: a response is held to both.
+ */
+const PREVIEW_CSP =
+  "default-src 'none'; script-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; style-src https: 'unsafe-inline'; img-src https: data:; font-src https:; media-src https:; frame-src https:";
+
 const PRIVATE = {
+  "content-security-policy": PREVIEW_CSP,
   "x-robots-tag": "noindex, nofollow",
   "cache-control": "private, no-store",
   "referrer-policy": "no-referrer",
