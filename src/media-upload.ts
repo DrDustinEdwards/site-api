@@ -337,12 +337,15 @@ function heifItems(b: Uint8Array): HeifItem[] {
     read(2);
     const base = read(baseSize);
     const extents = read(2);
+    // Only the first extent is used. The rest are stepped over by arithmetic: a loop of up to 65,535 reads per item, over
+    // fields of size 0 that never move `at`, was a few million operations per few bytes of file.
     let first: { offset: number; length: number } | undefined;
-    for (let e = 0; e < extents; e++) {
+    if (extents > 0) {
       if (version > 0) read(indexSize);
       const offset = read(offsetSize);
       const length = read(lengthSize);
-      first ??= { offset, length };
+      first = { offset, length };
+      at += ((version > 0 ? indexSize : 0) + offsetSize + lengthSize) * (extents - 1);
     }
     const kind = kinds.get(item);
     // Method 2 (another item's bytes) is not used for metadata.
@@ -471,13 +474,32 @@ function exifDate(value: string | undefined, offset: string | undefined): string
 
 const ENTITIES: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'" };
 const unxml = (s: string) =>
-  s.replace(/&(#x[0-9a-f]+|#\d+|\w+);/gi, (m, e: string) =>
-    e[0] === "#"
-      ? String.fromCodePoint(
-          e[1] === "x" || e[1] === "X" ? Number.parseInt(e.slice(2), 16) : Number(e.slice(1)),
-        )
-      : (ENTITIES[e] ?? m),
-  );
+  s.replace(/&(#x[0-9a-f]+|#\d+|\w+);/gi, (m, e: string) => {
+    if (e[0] !== "#") return ENTITIES[e] ?? m;
+    const code =
+      e[1] === "x" || e[1] === "X" ? Number.parseInt(e.slice(2), 16) : Number(e.slice(1));
+    // A code point past U+10FFFF is no character, and fromCodePoint would throw and take the file's other facts with it.
+    return code <= 0x10ffff ? String.fromCodePoint(code) : m;
+  });
+
+/**
+ * `s` without its tags, found by scanning. `/<[^>]+>/g` re-scans to the end from every `<` that has no `>` after it
+ * (quadratic over a stranger's bytes: half a million `<` inside one property took minutes), so a `<` with no `>` left
+ * ends the scan and the rest stays text. `<>` is not a tag.
+ */
+function stripTags(s: string): string {
+  let out = "";
+  let from = 0;
+  for (;;) {
+    const lt = s.indexOf("<", from);
+    if (lt === -1) break;
+    const gt = s.indexOf(">", lt + 1);
+    if (gt === -1) break;
+    out += s.slice(from, gt === lt + 1 ? gt + 1 : lt);
+    from = gt + 1;
+  }
+  return out + s.slice(from);
+}
 
 /**
  * One property of an XMP packet, written as an attribute or as an element: a plain value, a URL as rdf:resource, or an
@@ -493,7 +515,7 @@ function xmpValue(xmp: string, name: string): string | undefined {
   if (resource) return unxml(resource[1] ?? resource[2] ?? "");
   const inner = element.inner;
   const items = listItems(inner);
-  const plain = (s: string) => unxml(s.replace(/<[^>]+>/g, "")).trim();
+  const plain = (s: string) => unxml(stripTags(s)).trim();
   if (items.length === 0) return plain(inner);
   if (/<rdf:Alt\b/.test(inner))
     return plain(
@@ -586,11 +608,11 @@ function fromIptc(resources: Uint8Array): Facts {
       const length = (data[i + 3]! << 8) | data[i + 4]!;
       // An extended length (the top bit) is only for large binary data sets, never these.
       if (length & 0x8000) break;
-      if (data[i + 1] === 2)
-        found.set(data[i + 2]!, [
-          ...(found.get(data[i + 2]!) ?? []),
-          utf8(data.subarray(i + 5, i + 5 + length)),
-        ]);
+      if (data[i + 1] === 2) {
+        const values = found.get(data[i + 2]!) ?? [];
+        values.push(utf8(data.subarray(i + 5, i + 5 + length)));
+        found.set(data[i + 2]!, values);
+      }
       i += 5 + length;
     }
     at = sizeAt + 4 + size + (size % 2);

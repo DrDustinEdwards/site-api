@@ -108,7 +108,7 @@ import {
 } from "./contract/mentions.js";
 import { NotFoundQuery, NotFoundReport } from "./contract/insight.js";
 
-export const PACKAGE_VERSION = "0.31.5";
+export const PACKAGE_VERSION = "0.31.6";
 export const PREFIX = "/api/carrel/v1";
 
 export const Capabilities = z.object({
