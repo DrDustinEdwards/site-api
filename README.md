@@ -217,6 +217,10 @@ Additive: every v0.4.0 route and body is unchanged, and the schema hash and pack
 - **Versions.** A mention's `version` is opaque, like a content version, and must move whenever its status, its verification or its decision does, and not when another mention changes. A write with a version the site no longer holds is `409 version-conflict` with `currentVersion`; a missing mention is `404`. dustinedwards.info's table has no `updated_at` and no version column, so its adapter derives one: a hash of `status`, `received_at`, `verified_at` and `decided_at` (a re-send resets all three timestamps and the status, an approve or reject sets the status and `decided_at`). It checks the version and then writes with the same values in the `WHERE`, so a change between the check and the write matches no row and is reported as a conflict.
 - **Conformance** adds, for every site: the list in shape (or `501` where the site has no group), writes without the key or with a wrong one refused, a decide and a delete of an id no site holds refused (`404`, or `501` without the group), and, where the site has the group, a decide with a stale version refused on the first real mention, a sweep with no change id refused (`400`, before anything is removed), and an unknown status refused. It never decides, deletes or sweeps anything real.
 
+## Changes in v0.30.0
+
+No route, body or schema changes. The library's own `upload()` now refuses an alt text the contract refuses (empty without `decorative`, a file name, a generic word, over the limit), so a site's own upload path cannot store a picture without one.
+
 ## Changes in v0.29.0
 
 - **Renamed: `goneResponse` is now `tombstoneResponse`.** Same function, same output. site-runtime's `./url` also exports a `goneResponse` (a text 410 for a list of paths), and two shared packages exporting one name made imports ambiguous. A site importing `goneResponse` from `@dustinedwards/site-api/store` or `/server` changes the name.
