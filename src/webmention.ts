@@ -21,7 +21,9 @@ const MAX_TARGETS = 100;
 type Tag = { name: string; attrs: string; start: number; end: number; closing: boolean };
 
 function* tags(html: string): Generator<Tag> {
-  const pattern = /<(\/?)([a-zA-Z][\w-]*)\b((?:[^>"']|"[^"]*"|'[^']*')*)>/g;
+  // A tag's attributes are read to 1,024 characters at most: an unbounded run made a page of `<a<a<a...` quadratic
+  // (450 KB took 44 s), and a stranger's page is what this reads.
+  const pattern = /<(\/?)([a-zA-Z][\w-]*)\b((?:[^>"']|"[^"]*"|'[^']*'){0,1024})>/g;
   for (let m = pattern.exec(html); m; m = pattern.exec(html)) {
     yield {
       name: m[2]!.toLowerCase(),
@@ -46,9 +48,26 @@ function attr(attrs: string, name: string): string | null {
 
 const words = (value: string | null) => (value ?? "").toLowerCase().split(/\s+/).filter(Boolean);
 
-/** The page without what is never read for links: comments, scripts, styles and templates. */
-const unread = (html: string) =>
-  html.replace(/<!--[\s\S]*?-->/g, "").replace(/<(script|style|template)\b[\s\S]*?<\/\1\s*>/gi, "");
+/**
+ * The page without what is never read for links: comments, scripts, styles and templates. One pass with `indexOf`, never a
+ * lazy regex: an opener with no closer is dropped to the end of the page (as a browser reads it), so a page of a
+ * thousand unclosed openers costs one scan, not a thousand.
+ */
+const unread = (html: string) => {
+  const lower = html.replace(/[A-Z]/g, (c) => c.toLowerCase()); // ASCII only, so every index lines up with `html`
+  const opener = /<!--|<(script|style|template)\b/g;
+  let out = "";
+  let at = 0;
+  for (let m = opener.exec(lower); m; m = opener.exec(lower)) {
+    out += html.slice(at, m.index);
+    const closer = m[1] ? lower.indexOf(`</${m[1]}`, m.index) : lower.indexOf("-->", m.index + 4);
+    if (closer < 0) return out;
+    const end = lower.indexOf(">", closer);
+    at = end < 0 ? html.length : end + 1;
+    opener.lastIndex = at;
+  }
+  return out + html.slice(at);
+};
 
 /** The inner HTML of the first element `found` picks, from its start tag to its matching close; null when none. */
 function region(

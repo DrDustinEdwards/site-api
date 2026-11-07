@@ -37,6 +37,17 @@ describe("outboundLinks", () => {
       "https://m.example/",
     ]);
     expect(outboundLinks(`<p><a href="https://x.example/">x</a></p>`, PAGE)).toEqual([]);
+    // A stranger's page of unclosed openers is read in one pass (450 KB of "<a" took 44 s as a quadratic regex).
+    const started = Date.now();
+    for (const junk of ["<a".repeat(200_000), "<!--".repeat(100_000), "<SCRIPT".repeat(60_000)])
+      expect(outboundLinks(`<main>${junk}`, PAGE)).toEqual([]);
+    expect(Date.now() - started).toBeLessThan(5000);
+    expect(
+      outboundLinks(
+        `<main><!-- <a href="https://c.example/"> --><SCRIPT>x</SCRIPT ><a href="https://k.example/">k</a>`,
+        PAGE,
+      ),
+    ).toEqual(["https://k.example/"]);
   });
 });
 
