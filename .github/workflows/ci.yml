@@ -1,12 +1,11 @@
-# site-api's checks, on every pull request and every push to main. Every site and Carrel install this package
+# site-api's checks, on every pull request. Every site and Carrel install this package
 # by git tag, so a release is only as good as these. No secrets: the tests run in Node against the
 # in-memory test site, and the conformance suite is part of `npm test`.
 name: CI
 
 on:
-  # A branch's run comes from its pull request; a push runs only on main, so no commit runs twice.
-  push:
-    branches: [main]
+  # No push to main: the merge was checked as its pull request, and nothing deploys from main (a release is the tag
+  # release.yml makes from the merge of a version bump). devkit README, "No second run on main".
   pull_request:
 
 permissions:
