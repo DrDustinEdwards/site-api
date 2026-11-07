@@ -1,7 +1,8 @@
-// A post's source is YAML frontmatter and a Markdown body. The block reader and writer is Prelum's
-// (`@drdustinedwards/site-helpers/frontmatter`, the one every site uses): a write replaces only the block
-// it names, and every other block, comment and unknown key comes back byte for byte. This module adds the
-// site API's own fields on top. Exported as `@dustinedwards/site-api/frontmatter`.
+// A post's source is YAML frontmatter and a Markdown body. The block reader and writer (splitSource, joinSource,
+// readKey, readList, setBlock, setRawKey) is Prelum's alone (`@drdustinedwards/site-helpers/frontmatter`): a write
+// replaces only the block it names, and every other block, comment and unknown key comes back byte for byte. A site
+// imports those from Prelum. This module is only the site API's own fields on top. Exported as
+// `@dustinedwards/site-api/frontmatter`.
 
 import {
   readKey,
@@ -9,16 +10,6 @@ import {
   setBlock,
   setRawKey,
   splitSource,
-} from "@drdustinedwards/site-helpers/frontmatter";
-
-export {
-  joinSource,
-  readKey,
-  readList,
-  setBlock,
-  setRawKey,
-  splitSource,
-  type Split,
 } from "@drdustinedwards/site-helpers/frontmatter";
 
 /** The tags the frontmatter holds now, in order. */

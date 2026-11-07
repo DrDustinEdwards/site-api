@@ -217,6 +217,16 @@ Additive: every v0.4.0 route and body is unchanged, and the schema hash and pack
 - **Versions.** A mention's `version` is opaque, like a content version, and must move whenever its status, its verification or its decision does, and not when another mention changes. A write with a version the site no longer holds is `409 version-conflict` with `currentVersion`; a missing mention is `404`. dustinedwards.info's table has no `updated_at` and no version column, so its adapter derives one: a hash of `status`, `received_at`, `verified_at` and `decided_at` (a re-send resets all three timestamps and the status, an approve or reject sets the status and `decided_at`). It checks the version and then writes with the same values in the `WHERE`, so a change between the check and the write matches no row and is reported as a conflict.
 - **Conformance** adds, for every site: the list in shape (or `501` where the site has no group), writes without the key or with a wrong one refused, a decide and a delete of an id no site holds refused (`404`, or `501` without the group), and, where the site has the group, a decide with a stale version refused on the first real mention, a sweep with no change id refused (`400`, before anything is removed), and an unknown status refused. It never decides, deletes or sweeps anything real.
 
+## Changes in v0.27.0
+
+Moves the code every site copied into the package. Nothing is added to the wire contract.
+
+- **Log.** `siteApiLog` is the default `log`: site-runtime's scrubbed logger, a missing or wrong key as `authz_fail`, a rate-limited request as `excess_rate_limit_exceeded`. A site passes no `log`.
+- **Cron.** `api.runSchedulesOrThrow()` is `runSchedules` that throws when a schedule failed, so the cron job reports failure.
+- **Routing.** `isSiteApiRequest(url)` is true for the prefix and preview links, the only requests that need the API built.
+- **Media.** `PICTURE_TYPES`, `pictureLimits(maxBytes?)` and `PICTURE_RESIZE` are the limits every site starts from. `mediaLibrary` imports with the Worker's `fetch` unless `importFetch: null`.
+- **Removed.** `./frontmatter` no longer re-exports `splitSource`, `joinSource`, `readKey`, `readList`, `setBlock` and `setRawKey`: import them from `@drdustinedwards/site-helpers/frontmatter`, their only owner. The root no longer exports `sha256Hex`: import it from `@dustinedwards/site-runtime/encoding`.
+
 ## Changes in v0.26.0
 
 No route, body or schema changes. `runMentionsIntent` now does what Carrel did around it, so a site's own admin gets the same steps:

@@ -38,6 +38,7 @@ import {
   servePreviewLink,
 } from "./server/preview-links.js";
 import { claim, REPLAY_DAYS, REPLAYED } from "./server/replay.js";
+import { siteApiLog } from "./log.js";
 import type { SiteApiStore } from "./store.js";
 
 export type {
@@ -68,7 +69,7 @@ export interface SiteApiConfig {
   /** The site's Carrel key, from its secrets. Shorter than 32 characters refuses every request. */
   key: string | undefined;
   limiter: RateLimiter;
-  /** Where refusals and adapter failures are logged. Defaults to console. */
+  /** Where refusals and adapter failures are logged. Defaults to `siteApiLog`: site-runtime's scrubbed logger, a refused request named in the OWASP vocabulary. */
   log?: (entry: Record<string, unknown>) => void;
   /**
    * Run when a public page changes (v0.10.0): a publish, an unpublish, a delete of a live item, a save or tag change to
@@ -122,6 +123,11 @@ export interface SiteApi {
    * pass finds nothing. A site whose adapter has no `schedules` applies nothing.
    */
   runSchedules(options?: { now?: Date; limit?: number }): Promise<ScheduleRun>;
+  /**
+   * `runSchedules` for a cron's job: the same pass, and it throws when a schedule failed, so the job is reported as failed
+   * and the schedule is listed again next pass. Returns the run when none failed.
+   */
+  runSchedulesOrThrow(options?: { now?: Date; limit?: number }): Promise<ScheduleRun>;
   /** v0.17.0: true for a GET (v0.22.0: or a HEAD) under PREVIEW_LINK_PATH, outside the prefix. Mount `servePreviewLink` where this holds. */
   matchesPreviewLink(request: Request): boolean;
   /**
@@ -135,6 +141,11 @@ export interface SiteApi {
 export const MIN_KEY_LENGTH = 32;
 
 const DAY = 24 * 60 * 60 * 1000;
+
+/** True for a request the site API or a preview link answers (or refuses): the only ones that need it built. */
+export function isSiteApiRequest(url: URL): boolean {
+  return insidePrefix(url.pathname) || url.pathname.startsWith(PREVIEW_LINK_PATH);
+}
 
 export function insidePrefix(pathname: string): boolean {
   return pathname === PREFIX || pathname.startsWith(`${PREFIX}/`);
@@ -169,7 +180,7 @@ function bearer(request: Request): string | null {
 
 export function createSiteApi(config: SiteApiConfig): SiteApi {
   const { adapter, limiter } = config;
-  const log = config.log ?? ((entry) => console.warn(JSON.stringify(entry)));
+  const log = config.log ?? siteApiLog;
   const { media, mentions, insight } = adapter;
   const { store } = config;
 
@@ -597,6 +608,11 @@ export function createSiteApi(config: SiteApiConfig): SiteApi {
     matches: (request) => insidePrefix(new URL(request.url).pathname),
     handle,
     runSchedules,
+    async runSchedulesOrThrow(options) {
+      const run = await runSchedules(options);
+      if (run.failed > 0) throw new Error(`${run.failed} site API schedule(s) failed`);
+      return run;
+    },
     // v0.22.0: HEAD as well, so a link checker's HEAD meets the same noindex answer as a browser's GET.
     matchesPreviewLink: (request) =>
       (request.method === "GET" || request.method === "HEAD") &&
