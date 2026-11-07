@@ -357,3 +357,19 @@ describe("publish hooks (v0.17.0)", () => {
     expect(logs.filter((l) => l.siteApi === "hook-gave-up")).toEqual([]);
   });
 });
+
+describe("v0.27.0 runSchedulesOrThrow", () => {
+  it("throws when a schedule failed, so the cron job fails and the schedule is tried again", async () => {
+    const adapter = memoryAdapter();
+    const api = createSiteApi({
+      adapter: {
+        ...adapter,
+        schedules: { ...adapter.schedules!, due: () => Promise.reject(new Error("db down")) },
+      },
+      key: KEY,
+      limiter: allow,
+      log: () => {},
+    });
+    await expect(api.runSchedulesOrThrow()).rejects.toThrow("1 site API schedule(s) failed");
+  });
+});

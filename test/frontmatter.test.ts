@@ -5,7 +5,6 @@ import { describe, expect, it } from "vitest";
 
 import {
   JsonSourceError,
-  joinSource,
   jsonSource,
   missingAltFields,
   postFieldsOf,
@@ -13,9 +12,9 @@ import {
   setPostFields,
   setSearchFields,
   setTags,
-  splitSource,
   tagsOf,
 } from "../src/frontmatter.js";
+import { joinSource, splitSource } from "@drdustinedwards/site-helpers/frontmatter";
 
 const SOURCE = [
   "---",

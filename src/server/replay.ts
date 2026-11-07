@@ -3,7 +3,8 @@
 // request is refused. Without a store nothing here runs, and a write is handled as in v0.14.0.
 
 import { ChangeId } from "../contract.js";
-import { readUpload, sha256Hex } from "../media.js";
+import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
+import { readUpload } from "../media.js";
 import type { SiteApiStore } from "../store.js";
 import { BASE_HEADERS, fail, type Log } from "./http.js";
 

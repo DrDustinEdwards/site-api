@@ -130,12 +130,6 @@ export function checkUpload(
 
 // ---------- v0.13.0
 
-/**
- * The SHA-256 of a file's bytes as lower case hex: the one content hash every site keys duplicates by. site-runtime's, the
- * family's one copy (v0.14.0; the same digest this package wrote itself before).
- */
-export { sha256Hex } from "@dustinedwards/site-runtime/encoding";
-
 /** Alt text that names a kind of file rather than what it shows. */
 const EMPTY_ALT = new Set([
   "image",
