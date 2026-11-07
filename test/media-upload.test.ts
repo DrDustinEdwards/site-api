@@ -99,6 +99,25 @@ describe("readEmbedded", () => {
       licenseUrl: "https://example.com/license",
       takenAt: "2026-05-01T10:20:30",
     });
+    // A hostile packet with thousands of openings and no closing tag is read in linear time, not once per opening.
+    const hostile = `<x:xmpmeta>${"<dc:creator><rdf:li>".repeat(20_000)}</x:xmpmeta>`;
+    const png = (text: string) => {
+      const data = Buffer.concat([Buffer.from("XML:com.adobe.xmp\0\0\0\0\0"), Buffer.from(text)]);
+      const head = Buffer.alloc(8);
+      head.writeUInt32BE(data.length);
+      head.write("iTXt", 4, "latin1");
+      return new Uint8Array(
+        Buffer.concat([
+          Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+          head,
+          data,
+          Buffer.alloc(4),
+        ]),
+      );
+    };
+    const started = Date.now();
+    expect(readEmbedded(png(hostile), "image/png")).toEqual({});
+    expect(Date.now() - started).toBeLessThan(1000);
   });
 });
 

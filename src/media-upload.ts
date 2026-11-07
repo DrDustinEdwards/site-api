@@ -487,20 +487,67 @@ const unxml = (s: string) =>
 function xmpValue(xmp: string, name: string): string | undefined {
   const attribute = new RegExp(`\\s${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)')`).exec(xmp);
   if (attribute) return unxml(attribute[1] ?? attribute[2] ?? "");
-  const element = new RegExp(`<${name}\\b([^>]*?)(?:/>|>([\\s\\S]*?)</${name}\\s*>)`).exec(xmp);
+  const element = xmpElement(xmp, name);
   if (!element) return undefined;
-  const resource = /rdf:resource\s*=\s*(?:"([^"]*)"|'([^']*)')/.exec(element[1] ?? "");
+  const resource = /rdf:resource\s*=\s*(?:"([^"]*)"|'([^']*)')/.exec(element.attributes);
   if (resource) return unxml(resource[1] ?? resource[2] ?? "");
-  const inner = element[2] ?? "";
-  const items = [...inner.matchAll(/<rdf:li\b([^>]*)>([\s\S]*?)<\/rdf:li>/g)];
+  const inner = element.inner;
+  const items = listItems(inner);
   const plain = (s: string) => unxml(s.replace(/<[^>]+>/g, "")).trim();
   if (items.length === 0) return plain(inner);
   if (/<rdf:Alt\b/.test(inner))
-    return plain((items.find((i) => /xml:lang\s*=\s*["']x-default/.test(i[1]!)) ?? items[0]!)[2]!);
+    return plain(
+      (items.find((i) => /xml:lang\s*=\s*["']x-default/.test(i.attributes)) ?? items[0]!).text,
+    );
   return items
-    .map((i) => plain(i[2]!))
+    .map((i) => plain(i.text))
     .filter(Boolean)
     .join(", ");
+}
+
+/**
+ * The first `<name ...>...</name>` (or self-closing `<name .../>`) of a packet, found by scanning, one pass over the text.
+ * A packet is a stranger's bytes: a lazy regex over it re-scans to the end from every opening tag that has no closing one
+ * (quadratic), and many openings fit in a few hundred KB.
+ */
+function xmpElement(xmp: string, name: string): { attributes: string; inner: string } | undefined {
+  const open = `<${name}`;
+  const close = `</${name}`;
+  for (let from = 0; ;) {
+    const at = xmp.indexOf(open, from);
+    if (at === -1) return undefined;
+    from = at + open.length;
+    // The name ends here: a longer name that starts with it is another element.
+    if (/\w/.test(xmp[from] ?? "")) continue;
+    const gt = xmp.indexOf(">", from);
+    if (gt === -1) return undefined;
+    const attributes = xmp.slice(from, gt);
+    if (attributes.endsWith("/")) return { attributes: attributes.slice(0, -1), inner: "" };
+    for (let end = xmp.indexOf(close, gt + 1); end !== -1; end = xmp.indexOf(close, end + 1)) {
+      const after = /^\s*>/.exec(xmp.slice(end + close.length, end + close.length + 64));
+      if (after) return { attributes, inner: xmp.slice(gt + 1, end) };
+    }
+    // No closing tag after this opening, so none after a later one either.
+    return undefined;
+  }
+}
+
+/** The `<rdf:li>` items of an element's contents, found by scanning (see xmpElement). */
+function listItems(inner: string): { attributes: string; text: string }[] {
+  const items = [];
+  for (let from = 0; ;) {
+    const at = inner.indexOf("<rdf:li", from);
+    if (at === -1) break;
+    from = at + 7;
+    if (/\w/.test(inner[from] ?? "")) continue;
+    const gt = inner.indexOf(">", from);
+    if (gt === -1) break;
+    const end = inner.indexOf("</rdf:li>", gt + 1);
+    if (end === -1) break;
+    items.push({ attributes: inner.slice(from, gt), text: inner.slice(gt + 1, end) });
+    from = end + 9;
+  }
+  return items;
 }
 
 /** The IPTC Photo Metadata properties in XMP: Dublin Core, Photoshop, XMP Rights and PLUS. */
