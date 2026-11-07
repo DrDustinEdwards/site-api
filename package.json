@@ -1,6 +1,6 @@
 {
   "name": "@dustinedwards/site-api",
-  "version": "0.31.4",
+  "version": "0.31.5",
   "private": true,
   "description": "The standard site API every Dustin Edwards site includes so Carrel can list, edit and publish its content.",
   "license": "MIT",
@@ -78,7 +78,7 @@
   },
   "peerDependencies": {
     "@drdustinedwards/site-helpers": ">=0.35.1",
-    "@dustinedwards/site-runtime": ">=0.97.0"
+    "@dustinedwards/site-runtime": ">=0.62.0"
   },
   "engines": {
     "node": ">=26.11.1"

@@ -217,6 +217,10 @@ Additive: every v0.4.0 route and body is unchanged, and the schema hash and pack
 - **Versions.** A mention's `version` is opaque, like a content version, and must move whenever its status, its verification or its decision does, and not when another mention changes. A write with a version the site no longer holds is `409 version-conflict` with `currentVersion`; a missing mention is `404`. dustinedwards.info's table has no `updated_at` and no version column, so its adapter derives one: a hash of `status`, `received_at`, `verified_at` and `decided_at` (a re-send resets all three timestamps and the status, an approve or reject sets the status and `decided_at`). It checks the version and then writes with the same values in the `WHERE`, so a change between the check and the write matches no row and is reported as a conflict.
 - **Conformance** adds, for every site: the list in shape (or `501` where the site has no group), writes without the key or with a wrong one refused, a decide and a delete of an id no site holds refused (`404`, or `501` without the group), and, where the site has the group, a decide with a stale version refused on the first real mention, a sweep with no change id refused (`400`, before anything is removed), and an unknown status refused. It never decides, deletes or sweeps anything real.
 
+## Changes in v0.31.5
+
+No route, body or schema changes. The `@dustinedwards/site-runtime` peer range is `>=0.62.0`, not `>=0.97.0`. 0.97.0 was the version site-api's tests ran on, not the lowest it works with: typecheck and all 447 tests pass on site-runtime 0.62.0 and every version measured above it, and fail on 0.61.x. A range set to the newest version made every site-api release require a site-runtime bump in the same install, which Renovate's lockfile step could not resolve on Germomics and julieedwards.info (ERESOLVE).
+
 ## Changes in v0.31.4
 
 No route, body or schema changes. The embedded-metadata reader found XMP properties with lazy regexes that went quadratic on a packet of many opening tags and no closing one (60,000 openings took about 20 s of CPU, and a larger packet in a PNG, WebP or HEIC grows with the square). It now scans for each element in one pass. The webmention tag reader also stops a tag's attributes at an unquoted `<`, so a page of `<a<a<a...` costs a step per opener, not 1,024 (450 KB took 3.4 s, enough to fail a 5 s test bound on a slow runner).
@@ -235,7 +239,7 @@ No route, body or schema changes. A content write whose id held a malformed perc
 
 ## Changes in v0.31.0
 
-`@dustinedwards/site-runtime` and `@drdustinedwards/site-helpers` (Prelum) are now peerDependencies with ranges (site-runtime `>=0.97.0`, Prelum `>=0.35.1`), not exact git-tag dependencies. A site that bumps site-runtime alone now keeps one copy of it instead of getting a second one nested under site-api, so shared singletons and `@dustinedwards/site-runtime/*` imports resolve the same everywhere. A site must depend on both itself (every site already does). The exact tags stay as devDependencies for site-api's own tests.
+`@dustinedwards/site-runtime` and `@drdustinedwards/site-helpers` (Prelum) are now peerDependencies with ranges (site-runtime `>=0.62.0`, Prelum `>=0.35.1`), not exact git-tag dependencies. A site that bumps site-runtime alone now keeps one copy of it instead of getting a second one nested under site-api, so shared singletons and `@dustinedwards/site-runtime/*` imports resolve the same everywhere. A site must depend on both itself (every site already does). The exact tags stay as devDependencies for site-api's own tests.
 
 ## Changes in v0.30.0
 
