@@ -252,7 +252,7 @@ export function pictureLimits(maxBytes = 20 * 1024 * 1024): MediaUploadLimits {
  * What an upload shrinks to unless it says `resize=no` (v0.27.0): a phone photo (4032 pixels) keeps its size, a larger
  * camera file is shrunk and its original is kept in the file's history.
  */
-export const PICTURE_RESIZE: MediaResize = { maxEdge: 4096, quality: 85 };
+export const PICTURE_RESIZE: MediaResize = { maxEdge: 2560, quality: 85 };
 
 export interface MediaLibraryOptions {
   store: MediaLibraryStore;

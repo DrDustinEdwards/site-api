@@ -217,9 +217,13 @@ Additive: every v0.4.0 route and body is unchanged, and the schema hash and pack
 - **Versions.** A mention's `version` is opaque, like a content version, and must move whenever its status, its verification or its decision does, and not when another mention changes. A write with a version the site no longer holds is `409 version-conflict` with `currentVersion`; a missing mention is `404`. dustinedwards.info's table has no `updated_at` and no version column, so its adapter derives one: a hash of `status`, `received_at`, `verified_at` and `decided_at` (a re-send resets all three timestamps and the status, an approve or reject sets the status and `decided_at`). It checks the version and then writes with the same values in the `WHERE`, so a change between the check and the write matches no row and is reported as a conflict.
 - **Conformance** adds, for every site: the list in shape (or `501` where the site has no group), writes without the key or with a wrong one refused, a decide and a delete of an id no site holds refused (`404`, or `501` without the group), and, where the site has the group, a decide with a stale version refused on the first real mention, a sweep with no change id refused (`400`, before anything is removed), and an unknown status refused. It never decides, deletes or sweeps anything real.
 
-## Changes in v0.28.0
+## Changes in v0.29.0
 
 - **Renamed: `goneResponse` is now `tombstoneResponse`.** Same function, same output. site-runtime's `./url` also exports a `goneResponse` (a text 410 for a list of paths), and two shared packages exporting one name made imports ambiguous. A site importing `goneResponse` from `@dustinedwards/site-api/store` or `/server` changes the name.
+
+## Changes in v0.28.0
+
+No route, body or schema changes. It depends on Prelum v0.35.1 (was v0.34.0), so sites can take Prelum 0.35.1 without a conflict. `PICTURE_RESIZE` shrinks a stored picture to 2560 px on its longest edge (was 4096), the size WordPress core settled on (about 850 KB for a photo); the sizes visitors are served are variants made on request. A site that needs more passes its own `resize`.
 
 ## Changes in v0.27.0
 
@@ -266,7 +270,7 @@ const media = mediaLibrary({
     ],
   },
   url: (key) => `/media/${key}`,
-  resize: { maxEdge: 4096, quality: 85 },
+  resize: { maxEdge: 2560, quality: 85 },
   usage: (keys) => usesOf(env, keys), // the site's reference check; absent: nothing counts uses
   suggest: (picture, id) => suggest(env, picture, id),
 });
