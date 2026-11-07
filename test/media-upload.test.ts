@@ -115,8 +115,34 @@ describe("readEmbedded", () => {
         ]),
       );
     };
+    // Nor does one property holding half a million "<" with no ">", or a HEIF location table of thousands of items each
+    // naming 65,535 extents of zero-width fields (the old loops took tens of seconds on each).
+    const tags = `<x:xmpmeta><dc:creator><rdf:li>${"<".repeat(300_000)}</rdf:li></dc:creator></x:xmpmeta>`;
+    const box = (type: string, ...parts: Buffer[]) => {
+      const body = Buffer.concat(parts);
+      const head = Buffer.alloc(8);
+      head.writeUInt32BE(8 + body.length);
+      head.write(type, 4, "latin1");
+      return Buffer.concat([head, body]);
+    };
+    const count = Buffer.from([20_000 >> 8, 20_000 & 255]);
+    const item = Buffer.from([0, 1, 0, 0, 0xff, 0xff]);
+    const heif = new Uint8Array(
+      box(
+        "meta",
+        Buffer.alloc(4),
+        box(
+          "iinf",
+          Buffer.from([0, 0, 0, 0, 0, 1]),
+          box("infe", Buffer.from([2, 0, 0, 0, 0, 1, 0, 0]), Buffer.from("Exif\0")),
+        ),
+        box("iloc", Buffer.alloc(6), count, ...Array.from({ length: 20_000 }, () => item)),
+      ),
+    );
     const started = Date.now();
     expect(readEmbedded(png(hostile), "image/png")).toEqual({});
+    expect(readEmbedded(png(tags), "image/png")).toEqual({ credit: "<".repeat(300) });
+    expect(readEmbedded(heif, "image/heic")).toEqual({});
     expect(Date.now() - started).toBeLessThan(2500);
   });
 });
