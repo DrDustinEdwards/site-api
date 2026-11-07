@@ -157,7 +157,7 @@ async function getPage(
     throw new Error(`${url} answered ${response.status}`);
   }
   const html = /html/i.test(response.headers.get("content-type") ?? "")
-    ? await readText(response)
+    ? await readHtmlPrefix(response)
     : "";
   return { url, link: response.headers.get("link"), html };
 }
@@ -166,7 +166,8 @@ async function getPage(
 const limit = (deadline: AbortSignal) =>
   AbortSignal.any([AbortSignal.timeout(TIMEOUT_MS), deadline]);
 
-async function readText(response: Response): Promise<string> {
+/** The first MAX_BYTES of the body as text, the rest dropped (site-runtime's readText refuses a longer body instead; a long page's early links still count). */
+async function readHtmlPrefix(response: Response): Promise<string> {
   if (!response.body) return "";
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
