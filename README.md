@@ -219,7 +219,7 @@ Additive: every v0.4.0 route and body is unchanged, and the schema hash and pack
 
 ## Changes in v0.31.4
 
-No route, body or schema changes. The embedded-metadata reader found XMP properties with lazy regexes that went quadratic on a packet of many opening tags and no closing one (60,000 openings took about 20 s of CPU, and a larger packet in a PNG, WebP or HEIC grows with the square). It now scans for each element in one pass.
+No route, body or schema changes. The embedded-metadata reader found XMP properties with lazy regexes that went quadratic on a packet of many opening tags and no closing one (60,000 openings took about 20 s of CPU, and a larger packet in a PNG, WebP or HEIC grows with the square). It now scans for each element in one pass. The webmention tag reader also stops a tag's attributes at an unquoted `<`, so a page of `<a<a<a...` costs a step per opener, not 1,024 (450 KB took 3.4 s, enough to fail a 5 s test bound on a slow runner).
 
 ## Changes in v0.31.3
 
