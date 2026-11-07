@@ -13,7 +13,7 @@ import {
   PreviewLinkRevokeQuery,
   PreviewLinkRevokeResult,
 } from "../contract.js";
-import { sha256Hex } from "../media.js";
+import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 import type { SiteApiStore } from "../store.js";
 import {
   BadRequest,

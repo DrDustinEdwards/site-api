@@ -1,7 +1,8 @@
 // v0.17.0: safe retries by change id, on a site that gives the package its D1 store.
 
 import { describe, expect, it } from "vitest";
-import { createSiteApi, sha256Hex } from "../src/index.js";
+import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
+import { createSiteApi } from "../src/index.js";
 import { d1SiteApiStore, SITE_API_STORE_SQL } from "../src/store.js";
 import { memoryAdapter } from "../src/testing.js";
 import { d1 } from "./d1.js";

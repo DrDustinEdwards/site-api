@@ -17,7 +17,6 @@ export {
   imageRights,
   kindOf,
   orientationOf,
-  sha256Hex,
   transformFocus,
   turnsSize,
 } from "./media.js";

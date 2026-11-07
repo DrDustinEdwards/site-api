@@ -28,12 +28,12 @@ import {
   schemaHash,
   type Meta as MetaType,
 } from "./contract.js";
+import { splitSource } from "@drdustinedwards/site-helpers/frontmatter";
 import {
   postFieldsOf,
   searchFieldsOf,
   setPostFields,
   setSearchFields,
-  splitSource,
   type PostValues,
   type SearchValues,
 } from "./frontmatter.js";

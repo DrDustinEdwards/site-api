@@ -8,7 +8,7 @@ import { MEDIA_TRANSFORMS } from "../src/contract.js";
 import { memoryAdapter, type MemoryAdapterOptions } from "../src/testing.js";
 import { readFileSync } from "node:fs";
 import { createSiteApi } from "../src/index.js";
-import { sha256Hex } from "../src/media.js";
+import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 import { stripMetadata } from "../src/media-upload.js";
 import { d1SiteApiStore, SITE_API_STORE_SQL, SITE_API_STORE_SQL_V0_21 } from "../src/store.js";
 import { d1 } from "./d1.js";

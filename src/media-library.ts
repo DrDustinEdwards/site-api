@@ -40,7 +40,8 @@ import {
   type MediaUploadLimits,
   type MediaUse,
 } from "./contract.js";
-import { kindOf, orientationOf, sha256Hex, transformFocus, turnsSize } from "./media.js";
+import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
+import { kindOf, orientationOf, transformFocus, turnsSize } from "./media.js";
 import { mediaRev, mediaVersion, toArrayBuffer } from "./media-kit.js";
 import { placeholderAndColor, prepareUpload, type UploadImages } from "./media-upload.js";
 
@@ -228,6 +229,31 @@ export interface MediaLibraryEvent {
   newId?: string;
 }
 
+/**
+ * The picture types every site takes (v0.27.0). No SVG, which would be script on the site's own origin. HEIC and HEIF (an
+ * iPhone's photos) are taken too and stored as JPEG.
+ */
+export const PICTURE_TYPES = [
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/avif",
+  "image/gif",
+  "image/heic",
+  "image/heif",
+] as const;
+
+/** The upload limits every site starts from (v0.27.0): pictures only, 20 MiB each; a site passes its own `maxBytes` to change the size. */
+export function pictureLimits(maxBytes = 20 * 1024 * 1024): MediaUploadLimits {
+  return { maxBytes, types: [...PICTURE_TYPES] };
+}
+
+/**
+ * What an upload shrinks to unless it says `resize=no` (v0.27.0): a phone photo (4032 pixels) keeps its size, a larger
+ * camera file is shrunk and its original is kept in the file's history.
+ */
+export const PICTURE_RESIZE: MediaResize = { maxEdge: 4096, quality: 85 };
+
 export interface MediaLibraryOptions {
   store: MediaLibraryStore;
   /** The bucket the site serves its files from, under their keys. */
@@ -284,8 +310,11 @@ export interface MediaLibraryOptions {
     picture: ReadableStream,
     id?: string,
   ): Promise<{ tags: string[]; alt: string | null; model: string }>;
-  /** The fetch imports go through (capabilities.mediaImport). The package checks each address and redirect first. */
-  importFetch?: typeof fetch;
+  /**
+   * The fetch imports go through (capabilities.mediaImport). The package checks each address and redirect first. v0.27.0:
+   * the Worker's own `fetch` when absent, so imports are on; `null` turns them off.
+   */
+  importFetch?: typeof fetch | null;
   /** The clock, for tests. */
   now?(): Date;
 }
@@ -792,7 +821,9 @@ export function mediaLibrary(options: MediaLibraryOptions): MediaAdapter {
     ...(options.replaceKeepsSize ? { replaceKeepsSize: true } : {}),
     ...(options.usage ? { usage: true } : {}),
     ...(resize ? { resize } : {}),
-    ...(options.importFetch ? { importFetch: options.importFetch } : {}),
+    ...(options.importFetch !== null
+      ? { importFetch: options.importFetch ?? ((input, init) => fetch(input, init)) }
+      : {}),
 
     async list(query: MediaListQuery): Promise<MediaList> {
       const start =

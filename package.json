@@ -1,6 +1,6 @@
 {
   "name": "@dustinedwards/site-api",
-  "version": "0.26.0",
+  "version": "0.27.0",
   "private": true,
   "description": "The standard site API every Dustin Edwards site includes so Carrel can list, edit and publish its content.",
   "license": "MIT",
@@ -62,7 +62,7 @@
   },
   "dependencies": {
     "@drdustinedwards/site-helpers": "github:DrDustinEdwards/prelum#v0.33.0",
-    "@dustinedwards/site-runtime": "github:DrDustinEdwards/site-runtime#v0.87.0",
+    "@dustinedwards/site-runtime": "github:DrDustinEdwards/site-runtime#v0.88.0",
     "diff": "9.0.0",
     "zod": "4.6.7"
   },

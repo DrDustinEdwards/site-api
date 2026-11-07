@@ -40,7 +40,8 @@ import {
   schemaHash,
   filtersAsked,
 } from "../contract.js";
-import { missingAltFields, splitSource } from "../frontmatter.js";
+import { splitSource } from "@drdustinedwards/site-helpers/frontmatter";
+import { missingAltFields } from "../frontmatter.js";
 import {
   BadRequest,
   BASE_HEADERS,
