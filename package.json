@@ -61,8 +61,8 @@
     "bloat": "devkit-no-bloat"
   },
   "dependencies": {
-    "@drdustinedwards/site-helpers": "github:DrDustinEdwards/prelum#v0.36.0",
-    "@dustinedwards/site-runtime": "github:DrDustinEdwards/site-runtime#v0.91.1",
+    "@drdustinedwards/site-helpers": "github:DrDustinEdwards/prelum#v0.37.0",
+    "@dustinedwards/site-runtime": "github:DrDustinEdwards/site-runtime#v0.92.0",
     "diff": "9.0.0",
     "zod": "4.6.7"
   },
