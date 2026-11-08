@@ -48,78 +48,82 @@ describe("media kit", () => {
     expect(html).toContain("<body><main>Body</main></body>");
   });
 
-  it("stops before the model when beforeCall throws, reads JSON mode's string, and never cuts JSON out of prose", async () => {
-    const run = vi.fn(async () => ({
-      response: '{"alt": " A dog. ", "tags": ["dog", 3]}',
-      usage: { prompt_tokens: 5 },
-    }));
-    const output = async () => ({ response: () => new Response("jpeg") });
-    const images = { input: () => ({ output, transform: () => ({ output }) }) };
-    const env: SuggestEnv = { AI: { run }, IMAGES: images };
-    const picture = () => new Response("png").body!;
-
-    const capped = mediaSuggester({
-      app: "sample",
-      describe: "on a sample site",
-      beforeCall: () => Promise.reject(new Error("cap")),
-    });
-    await expect(capped(env, picture())).rejects.toThrow("cap");
-    expect(run).not.toHaveBeenCalled();
-
-    const afterCall = vi.fn();
-    const suggest = mediaSuggester({ app: "sample", describe: "on a sample site", afterCall });
-    expect(await suggest(env, { body: picture() }, "a.png")).toEqual({
-      tags: ["dog"],
-      alt: "A dog.",
-      model: expect.any(String),
-    });
-    expect(afterCall).toHaveBeenCalledWith(
-      env,
-      expect.objectContaining({ promptTokens: 5, completionTokens: 0 }),
-      "a.png",
+  it("stops before the model when beforeCall throws, calls Claude with the picture, meters what it spent, and withholds a chatbot's leftovers", async () => {
+    const reply = (value: unknown, status = 200) =>
+      new Response(
+        JSON.stringify(
+          status === 200
+            ? {
+                id: "msg_1",
+                type: "message",
+                role: "assistant",
+                stop_reason: "end_turn",
+                content: [{ type: "text", text: JSON.stringify(value) }],
+                usage: { input_tokens: 5, output_tokens: 7 },
+              }
+            : { type: "error", error: { type: "invalid_request_error", message: "bad" } },
+        ),
+        { status, headers: { "content-type": "application/json" } },
+      );
+    const fetchMock = vi.fn(async (..._args: unknown[]) =>
+      reply({ alt: " A dog. ", tags: ["dog", 3] }),
     );
-    run.mockResolvedValueOnce({
-      response: 'Sure: {"alt": "A dog.", "tags": ["dog"]}',
-      usage: { prompt_tokens: 5 },
-    });
-    expect(await suggest(env, picture())).toEqual({
-      tags: [],
-      alt: null,
-      model: expect.any(String),
-    });
-  });
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      const output = async () => ({ response: () => new Response("jpeg") });
+      const images = { input: () => ({ output, transform: () => ({ output }) }) };
+      const env: SuggestEnv = { ANTHROPIC_API_KEY: "sk-ant-test", IMAGES: images };
+      const picture = () => new Response("png").body!;
 
-  it("PLANT: a custom-domain gateway never fails a suggestion and logs the feature, and alt text with a chatbot's leftovers is not offered", async () => {
-    const run = vi.fn(async (_model: string, _input: unknown, _options?: object) => ({
-      response: { alt: "As an AI language model, I see a dog.", tags: ["dog"] },
-    }));
-    const output = async () => ({ response: () => new Response("jpeg") });
-    const images = { input: () => ({ output, transform: () => ({ output }) }) };
-    const suggest = mediaSuggester({ app: "sample", describe: "on a sample site" });
-    const custom = "https://ai.example.com/anthropic";
-    const gatewayOn = async (env: Partial<SuggestEnv>) => {
-      await suggest({ AI: { run }, IMAGES: images, ...env }, new Response("png").body!);
-      return (run.mock.calls.at(-1)?.[2] as { gateway?: { id: string } } | undefined)?.gateway?.id;
-    };
-    expect(await gatewayOn({ AI_GATEWAY_BASE_URL: custom, AI_GATEWAY_ID: "sample-gw" })).toBe(
-      "sample-gw",
-    );
-    expect(run.mock.calls.at(-1)?.[2]).toMatchObject({
-      gateway: { metadata: { app: "sample", feature: "media-suggest" } },
-      signal: expect.any(AbortSignal),
-    });
-    expect(await gatewayOn({ AI_GATEWAY_BASE_URL: custom })).toBeUndefined();
-    expect(await suggest({ AI: { run }, IMAGES: images }, new Response("png").body!)).toEqual({
-      tags: ["dog"],
-      alt: null,
-      model: expect.any(String),
-    });
-    // A word on the list of Claude's tells is no leftover: this is Llama's text, so it is offered (W4).
-    run.mockResolvedValueOnce({
-      response: { alt: "A haunting view of a pier at dusk.", tags: ["pier"] },
-    });
-    expect((await suggest({ AI: { run }, IMAGES: images }, new Response("png").body!)).alt).toBe(
-      "A haunting view of a pier at dusk.",
-    );
+      await expect(
+        mediaSuggester({ app: "sample", describe: "on a sample site" })(
+          { IMAGES: images },
+          picture(),
+        ),
+      ).rejects.toThrow("ANTHROPIC_API_KEY");
+
+      const capped = mediaSuggester({
+        app: "sample",
+        describe: "on a sample site",
+        beforeCall: () => Promise.reject(new Error("cap")),
+      });
+      await expect(capped(env, picture())).rejects.toThrow("cap");
+      expect(fetchMock).not.toHaveBeenCalled();
+
+      const afterCall = vi.fn();
+      const suggest = mediaSuggester({ app: "sample", describe: "on a sample site", afterCall });
+      expect(await suggest(env, { body: picture() }, "a.png")).toEqual({
+        tags: ["dog"],
+        alt: "A dog.",
+        model: "claude-haiku-5-5",
+      });
+      const [url, init] = fetchMock.mock.calls[0] as [string, { body: string }];
+      expect(url).toBe("https://api.anthropic.com/v1/messages");
+      const body = JSON.parse(init.body);
+      expect(body.model).toBe("claude-haiku-5-5");
+      expect(body.messages[0].content[0]).toMatchObject({
+        type: "image",
+        source: { type: "base64", media_type: "image/jpeg" },
+      });
+      expect(afterCall).toHaveBeenCalledWith(
+        env,
+        { model: "claude-haiku-5-5", input: 5, output: 7, cacheRead: 0, cacheWrite: 0 },
+        "a.png",
+      );
+
+      fetchMock.mockResolvedValueOnce(
+        reply({ alt: "As an AI language model, I see a dog.", tags: ["dog"] }),
+      );
+      expect(await suggest(env, picture())).toEqual({
+        tags: ["dog"],
+        alt: null,
+        model: "claude-haiku-5-5",
+      });
+
+      fetchMock.mockImplementation(async () => reply(null, 400));
+      await expect(suggest(env, picture())).rejects.toThrow();
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

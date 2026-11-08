@@ -337,7 +337,7 @@ export interface MediaAdapter {
   ): Promise<{ resized: boolean; item: MediaItem }>;
   /**
    * What the site's model suggests for the file (capabilities.mediaSuggestions): tags and alt text, never applied. The
-   * model is the site's choice (on Dustin's sites, Workers AI through Cloudflare AI Gateway). null when the id does not
+   * model is the site's choice (on Dustin's sites, Claude Haiku 5.5 straight at Anthropic). null when the id does not
    * exist. The package keeps the tags that are tags in the contract's spelling, at most 12.
    */
   suggest?(id: string): Promise<{ tags: string[]; alt: string | null; model: string } | null>;
