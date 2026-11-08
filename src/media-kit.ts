@@ -2,7 +2,7 @@
 // index row's rev, a versioned write's outcome as the contract's answer or error, a fresh ArrayBuffer for R2 and the Images
 // binding, the AI suggester behind `suggest`, and the plain page a preview renders into.
 
-import { anthropicRoute } from "@dustinedwards/site-runtime/ai-gateway";
+import { MODEL_IDS, structured } from "@dustinedwards/site-runtime/anthropic";
 import { toBase64 } from "@dustinedwards/site-runtime/encoding";
 import { escapeHtml } from "@dustinedwards/site-runtime/html";
 import { editImage, type ImagesLike } from "@dustinedwards/site-runtime/image";
@@ -63,51 +63,45 @@ export function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
 
 // ---------- AI suggestions
 
-/** The vision model: natively multimodal, Cloudflare-hosted, with no license prompt to accept first. */
-export const SUGGEST_MODEL = "@cf/meta/llama-4-scout-17b-16e-instruct";
+/** The vision model: Claude's fast role (site-runtime's MODEL_IDS.fast, Haiku 5.5), called straight at Anthropic. */
+export const SUGGEST_MODEL = MODEL_IDS.fast;
 
 /** The longest edge the model is shown: enough to name what is in a picture, and a small request. */
 const VIEW_EDGE = 768;
 
-/** The feature on each AI Gateway log entry, beside the site's `app`, so the suggester's cost splits from the site's other calls. */
+/** The feature on each `anthropic_call` log line, beside the site's `app`, so the suggester's cost splits from the site's other calls. */
 export const SUGGEST_FEATURE = "media-suggest";
 
 /** How long a suggestion may take before the call is abandoned; a person is waiting on it. */
 const SUGGEST_TIMEOUT_MS = 30_000;
 
-/** The answer's shape, asked of the model through Workers AI's JSON mode (`response_format`, in Llama 4 Scout's schema). */
+/** The answer's shape, asked of the model through structured outputs (`output_config.format`). */
 const SUGGESTION_SCHEMA = {
   type: "object",
   properties: { alt: { type: "string" }, tags: { type: "array", items: { type: "string" } } },
   required: ["alt", "tags"],
+  additionalProperties: false,
 };
-
-/** The shape of the Workers AI binding the suggester calls, so a site passes its `AI` binding straight in. */
-export interface AiLike {
-  run(model: string, input: unknown, options?: object): Promise<unknown>;
-}
 
 /** The bindings and variables the suggester reads. */
 export interface SuggestEnv {
-  /** Workers AI. Without it the suggester throws, and the site should leave `suggest` off its adapter. */
-  AI?: AiLike;
+  /** The site's Anthropic key. Without it the suggester throws, and the site should leave `suggest` off its adapter. */
+  ANTHROPIC_API_KEY?: string;
   /** The Images binding, for the smaller copy the model is shown. */
   IMAGES: ImagesLike;
-  /** The site's AI Gateway (`https://gateway.ai.cloudflare.com/v1/{account_id}/{gateway_id}/anthropic`); unset calls Workers AI directly. */
-  AI_GATEWAY_BASE_URL?: string;
-  /** The gateway's id, for an AI_GATEWAY_BASE_URL on a custom domain, whose URL does not name it. */
-  AI_GATEWAY_ID?: string;
 }
 
-/** The tokens one suggestion spent, as Workers AI reports them (0 where it did not). */
+/** The tokens one suggestion spent, as Anthropic reports them (site-runtime's `Usage`, plus the model). */
 export interface SuggestUsage {
   model: string;
-  promptTokens: number;
-  completionTokens: number;
+  input: number;
+  output: number;
+  cacheRead: number;
+  cacheWrite: number;
 }
 
 export interface MediaSuggesterOptions<E extends SuggestEnv> {
-  /** The site's name on each AI Gateway log entry, as site-runtime's anthropicRoute names it ("example"). */
+  /** The site's name on each `anthropic_call` log line ("example"). */
   app: string;
   /** Where the picture is, finishing "...one picture ": "on a personal website", "in a travel blog". */
   describe: string;
@@ -133,7 +127,6 @@ export interface MediaSuggestion {
 function promptFor(describe: string, rules: string[]): string {
   return [
     `You write alt text and library tags for one picture ${describe}.`,
-    'Answer with JSON only, in this shape: {"alt": "...", "tags": ["...", "..."]}.',
     "alt: one plain sentence, at most 25 words, describing what the picture shows: the subject, what it is doing,",
     "and any text that is legible in it. Say only what can be seen. Do not begin with 'Image of', 'Picture of' or",
     "'Photo of'. Do not interpret, praise or guess at feelings, names or places that are not written in the picture.",
@@ -143,57 +136,14 @@ function promptFor(describe: string, rules: string[]): string {
 }
 
 /**
- * The gateway Workers AI runs through: its id as site-runtime's anthropicRoute reads it (from the standard URL, else
- * AI_GATEWAY_ID), with the policy that module sets on Anthropic calls: bodies not logged, and the site and the feature
- * named on each log entry. Undefined when the site has no gateway; a gateway set up wrong (a custom domain with no
- * AI_GATEWAY_ID, a malformed URL) is warned about and skipped, never thrown, so a suggestion still runs.
- */
-function gatewayOf(
-  env: SuggestEnv,
-  app: string,
-): { id: string; collectLog: false; metadata: { app: string; feature: string } } | undefined {
-  let id: string | null;
-  try {
-    const route = anthropicRoute(
-      { AI_GATEWAY_BASE_URL: env.AI_GATEWAY_BASE_URL, AI_GATEWAY_ID: env.AI_GATEWAY_ID },
-      app,
-      SUGGEST_FEATURE,
-    );
-    if (!route.gateway) return undefined;
-    id = route.gatewayId;
-  } catch (error) {
-    console.warn(
-      `${app} media suggester: calling Workers AI without the gateway: ${error instanceof Error ? error.message : String(error)}`,
-    );
-    return undefined;
-  }
-  if (!id) {
-    console.warn(
-      `${app} media suggester: AI_GATEWAY_BASE_URL names no gateway id and AI_GATEWAY_ID is unset; calling Workers AI without the gateway`,
-    );
-    return undefined;
-  }
-  return { id, collectLog: false, metadata: { app, feature: SUGGEST_FEATURE } };
-}
-
-/**
- * The model's answer as tags and alt. JSON mode answers an object, or the same object as a JSON string; anything else
- * (prose around it included) is not the asked shape and reads as no suggestion, never as JSON cut out of free text.
+ * The model's answer as tags and alt: the parsed object structured outputs return. Anything that is not that object
+ * reads as no suggestion.
  */
 export function readSuggestion(answer: unknown): { tags: string[]; alt: string | null } {
-  const body =
-    typeof answer === "object" && answer !== null && "response" in answer
-      ? (answer as { response: unknown }).response
-      : answer;
-  let parsed: unknown = body;
-  if (typeof body === "string") {
-    try {
-      parsed = JSON.parse(body);
-    } catch {
-      parsed = null;
-    }
-  }
-  const record = (parsed ?? {}) as { alt?: unknown; tags?: unknown };
+  const record = (typeof answer === "object" && answer !== null ? answer : {}) as {
+    alt?: unknown;
+    tags?: unknown;
+  };
   const alt = typeof record.alt === "string" && record.alt.trim() ? record.alt.trim() : null;
   const tags = Array.isArray(record.tags)
     ? record.tags.filter((t): t is string => typeof t === "string")
@@ -203,9 +153,10 @@ export function readSuggestion(answer: unknown): { tags: string[]; alt: string |
 
 /**
  * The AI tag and alt-text suggester every site wrote behind its adapter's `suggest`: a 768px JPEG of the picture (through
- * site-runtime's editImage) shown to Workers AI, through the site's AI Gateway when AI_GATEWAY_BASE_URL names one. Nothing
- * here writes: a suggestion reaches the file only when a person accepts it. Send only the site's own uploads, never a
- * visitor's data. The returned function takes the env, the picture (a stream or an R2 object) and, for the hooks, its id.
+ * site-runtime's editImage) shown to Claude Haiku 5.5, called straight at Anthropic with the site's ANTHROPIC_API_KEY
+ * (never through AI Gateway). Nothing here writes: a suggestion reaches the file only when a person accepts it. Send only
+ * the site's own uploads, never a visitor's data. The returned function takes the env, the picture (a stream or an R2
+ * object) and, for the hooks, its id.
  */
 export function mediaSuggester<E extends SuggestEnv>(options: MediaSuggesterOptions<E>) {
   const prompt = promptFor(options.describe, options.rules ?? []);
@@ -214,10 +165,8 @@ export function mediaSuggester<E extends SuggestEnv>(options: MediaSuggesterOpti
     picture: ReadableStream | { body: ReadableStream },
     id?: string,
   ): Promise<MediaSuggestion> {
-    if (!env.AI)
-      throw new Error(
-        "This site has no Workers AI binding (AI), so it cannot suggest tags or alt text.",
-      );
+    if (!env.ANTHROPIC_API_KEY)
+      throw new Error("This site has no ANTHROPIC_API_KEY, so it cannot suggest tags or alt text.");
     await options.beforeCall?.(env, id);
     const stream = "getReader" in picture ? picture : picture.body;
     const view = await editImage(env.IMAGES, stream, {
@@ -225,43 +174,32 @@ export function mediaSuggester<E extends SuggestEnv>(options: MediaSuggesterOpti
       format: "image/jpeg",
       quality: 80,
     });
-    const image = `data:image/jpeg;base64,${toBase64(await view.arrayBuffer())}`;
-    const gateway = gatewayOf(env, options.app);
-    const answer = await env.AI.run(
-      SUGGEST_MODEL,
+    const data = toBase64(await view.arrayBuffer());
+    const result = await structured<{ alt?: unknown; tags?: unknown }>(
+      env,
+      options.app,
       {
+        model: SUGGEST_MODEL,
+        max_tokens: 300,
         messages: [
           {
             role: "user",
             content: [
+              { type: "image", source: { type: "base64", media_type: "image/jpeg", data } },
               { type: "text", text: prompt },
-              { type: "image_url", image_url: { url: image } },
             ],
           },
         ],
-        max_tokens: 300,
-        temperature: 0.2,
-        response_format: { type: "json_schema", json_schema: SUGGESTION_SCHEMA },
       },
-      { ...(gateway ? { gateway } : {}), signal: AbortSignal.timeout(SUGGEST_TIMEOUT_MS) },
+      SUGGESTION_SCHEMA,
+      { feature: SUGGEST_FEATURE, timeoutMs: SUGGEST_TIMEOUT_MS },
     );
-    if (options.afterCall) {
-      const usage = (
-        answer as { usage?: { prompt_tokens?: number; completion_tokens?: number } } | null
-      )?.usage;
-      await options.afterCall(
-        env,
-        {
-          model: SUGGEST_MODEL,
-          promptTokens: usage?.prompt_tokens ?? 0,
-          completionTokens: usage?.completion_tokens ?? 0,
-        },
-        id,
-      );
-    }
-    const { tags, alt } = readSuggestion(answer);
+    // A failed call still spent what it spent where Anthropic reported it, so it is metered before it throws.
+    if (options.afterCall)
+      await options.afterCall(env, { model: SUGGEST_MODEL, ...result.usage }, id);
+    if (!result.ok) throw new Error(result.error);
+    const { tags, alt } = readSuggestion(result.value);
     // Alt text with a high or critical prose finding (a refusal, a cutoff note, a blank, citation markup) is not offered.
-    // checkProse is told the model, so the word lists seen only in Claude's output are left out for Llama's text (W4).
     const flagged =
       alt !== null &&
       checkProse(alt, { model: SUGGEST_MODEL }).some(
