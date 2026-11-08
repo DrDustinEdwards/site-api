@@ -606,6 +606,18 @@ export const MediaSuggestions = z.object({
   alt: z.string().max(2000).nullable(),
   /** The model that made them, as the site names it. */
   model: z.string().min(1).max(200),
+  /**
+   * v0.34.0: the tokens the suggestion spent, as Anthropic reported them, so a caller that pays for the call (Carrel's monthly
+   * cap) counts what was spent. Absent: the site's adapter did not report them.
+   */
+  usage: z
+    .object({
+      input: z.number().int().min(0),
+      output: z.number().int().min(0),
+      cacheRead: z.number().int().min(0),
+      cacheWrite: z.number().int().min(0),
+    })
+    .optional(),
 });
 
 /**

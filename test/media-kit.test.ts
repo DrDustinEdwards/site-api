@@ -96,6 +96,7 @@ describe("media kit", () => {
         tags: ["dog"],
         alt: "A dog.",
         model: "claude-haiku-5-5",
+        usage: { input: 5, output: 7, cacheRead: 0, cacheWrite: 0 },
       });
       const [url, init] = fetchMock.mock.calls[0] as [string, { body: string }];
       expect(url).toBe("https://api.anthropic.com/v1/messages");
@@ -118,6 +119,7 @@ describe("media kit", () => {
         tags: ["dog"],
         alt: null,
         model: "claude-haiku-5-5",
+        usage: { input: 5, output: 7, cacheRead: 0, cacheWrite: 0 },
       });
 
       fetchMock.mockImplementation(async () => reply(null, 400));

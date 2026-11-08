@@ -3,6 +3,7 @@
 
 import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 import { CONTENT_FILTERS, PREVIEW_LINK_MAX_HOURS } from "./contract.js";
+import type { MediaSuggestion } from "./media-kit.js";
 import type {
   Actor,
   Backlink,
@@ -340,17 +341,14 @@ export interface MediaAdapter {
    * model is the site's choice (on Dustin's sites, Claude Haiku 5.5 straight at Anthropic). null when the id does not
    * exist. The package keeps the tags that are tags in the contract's spelling, at most 12.
    */
-  suggest?(id: string): Promise<{ tags: string[]; alt: string | null; model: string } | null>;
+  suggest?(id: string): Promise<MediaSuggestion | null>;
   /**
    * Optional (v0.19.0, capabilities.mediaUploadSuggestions): what the site's model suggests for a file not yet stored, so the
    * upload form fills its alt field with a suggestion the person keeps, changes or replaces before the upload. The package
    * has checked the bytes as an upload's. Nothing is stored. With `mediaSuggester`:
    * `suggestFile: ({ bytes }) => suggest(env, new Response(toArrayBuffer(bytes)).body!)`.
    */
-  suggestFile?(input: {
-    bytes: Uint8Array;
-    contentType: string;
-  }): Promise<{ tags: string[]; alt: string | null; model: string }>;
+  suggestFile?(input: { bytes: Uint8Array; contentType: string }): Promise<MediaSuggestion>;
 }
 
 /** One replace (v0.10.0), already checked by the package. */
