@@ -2,6 +2,7 @@
 // v0.13.0), mounted only when the site's adapter has media.
 
 import { focusOf } from "@dustinedwards/site-runtime/image";
+import type { MediaSuggestion } from "../media-kit.js";
 
 import {
   MediaInUseError,
@@ -778,10 +779,11 @@ function checkAlt(
 }
 
 /** A model's words, in the contract's spelling: what cannot be a tag is dropped, never passed on, and a blank alt is none. */
-function suggestionOf(found: { tags: string[]; alt: string | null; model: string }): {
+function suggestionOf(found: MediaSuggestion): {
   tags: string[];
   alt: string | null;
   model: string;
+  usage?: MediaSuggestion["usage"];
 } {
   const tags = [
     ...new Set(
@@ -799,6 +801,7 @@ function suggestionOf(found: { tags: string[]; alt: string | null; model: string
     tags,
     alt: found.alt?.trim() ? found.alt.trim().slice(0, 2000) : null,
     model: found.model,
+    ...(found.usage ? { usage: found.usage } : {}),
   };
 }
 

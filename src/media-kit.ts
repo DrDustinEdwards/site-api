@@ -118,6 +118,8 @@ export interface MediaSuggestion {
   tags: string[];
   alt: string | null;
   model: string;
+  /** What the call spent, as Anthropic reported it (v0.34.0). */
+  usage?: { input: number; output: number; cacheRead: number; cacheWrite: number };
 }
 
 /**
@@ -205,7 +207,13 @@ export function mediaSuggester<E extends SuggestEnv>(options: MediaSuggesterOpti
       checkProse(alt, { model: SUGGEST_MODEL }).some(
         (issue) => issue.severity === "high" || issue.severity === "critical",
       );
-    return { tags, alt: flagged ? null : alt, model: SUGGEST_MODEL };
+    const { input, output, cacheRead, cacheWrite } = result.usage;
+    return {
+      tags,
+      alt: flagged ? null : alt,
+      model: SUGGEST_MODEL,
+      usage: { input, output, cacheRead, cacheWrite },
+    };
   };
 }
 
