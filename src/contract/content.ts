@@ -71,6 +71,11 @@ export const ContentDoc = ContentSummary.extend({
   format: z.literal("markdown"),
   source: Source,
   version: Version,
+  /**
+   * v0.33.0: the item's transcript, read only, for a session that drafts from it (an episode's summary and chapters).
+   * Part of no version and no source: a save never carries it. Absent: the item has none or the site does not offer it.
+   */
+  transcript: z.string().max(500_000).optional(),
 });
 
 /** The list filters a site may offer (v0.17.0), named in capabilities.contentFilters; `published` is the pair of dates. */
