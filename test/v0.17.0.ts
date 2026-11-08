@@ -37,7 +37,8 @@ export const V0220_ADDED: Record<string, string[]> = {
   Capabilities: ["backlinks", "contentHasDraft", "hooks", "previewLinkHours"],
   ErrorBody: ["field"],
   ContentSummary: ["hasDraft"],
-  ContentDoc: ["hasDraft"],
+  // transcript is v0.33.0: the one read-only property after v0.22.0, listed here so each earlier contract test sees it.
+  ContentDoc: ["hasDraft", "transcript"],
   SaveDraftInput: ACTOR,
   PublishInput: ACTOR,
   ScheduleInput: ACTOR,
