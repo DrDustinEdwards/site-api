@@ -251,6 +251,29 @@ export async function runConformance(config: ConformanceConfig): Promise<Conform
     return `${first.id} at ${newest.version}`;
   });
 
+  // The newest revision is the item as it stands: a site that lists only the states before each edit leaves the live
+  // version out of Carrel's history (and the name of the client that published it) until the next edit.
+  await check("revisions: the newest is the item's current version", async () => {
+    const list = ContentList.parse(
+      await (await doFetch(`${origin}${PREFIX}/content?limit=1`, { headers: auth })).json(),
+    );
+    const first = list.items[0];
+    if (!first) return "no items to read a revision of";
+    const id = encodeURIComponent(first.id);
+    const doc = ContentDoc.parse(
+      await (await doFetch(`${origin}${PREFIX}/content/${id}`, { headers: auth })).json(),
+    );
+    const revisions = RevisionList.parse(
+      await (await doFetch(`${origin}${PREFIX}/content/${id}/revisions`, { headers: auth })).json(),
+    );
+    const newest = revisions.items[0]?.version;
+    if (newest !== doc.version)
+      throw new Error(
+        `the newest revision is ${newest ?? "missing"}, the item's version is ${doc.version}`,
+      );
+    return `${first.id} at ${newest}`;
+  });
+
   if (config.probeWrites !== false) {
     // Only ever the probe id: a site that wrongly accepts one of these deletes nothing real.
     const deleteUrl = `${origin}${PREFIX}/content/${PROBE_ID}?expectedVersion=${STALE_VERSION}&changeId=${probe()}`;

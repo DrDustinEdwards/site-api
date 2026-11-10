@@ -17,7 +17,7 @@ describe("conformance", () => {
     const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: site().fetch });
     expect(failing(report)).toEqual([]);
     expect(report.ok).toBe(true);
-    expect(report.checks.map((c) => c.name).slice(11)).toEqual([
+    expect(report.checks.map((c) => c.name).slice(12)).toEqual([
       "content tags of an unknown id: refused, or not implemented where the site keeps no tags",
       "schedule read and cancel of an unknown id: refused, or not implemented where the site has no scheduled updates",
       "media: upload limits declared",
@@ -110,7 +110,7 @@ describe("conformance", () => {
       fetch: site(memoryAdapter({ media: false })).fetch,
     });
     expect(failing(report)).toEqual([]);
-    expect(report.checks).toHaveLength(34);
+    expect(report.checks).toHaveLength(35);
   });
 
   it("expects 501 on a site with no content delete, and 404 where it has one", async () => {
@@ -329,6 +329,19 @@ describe("conformance", () => {
     expect(failing(report)).toEqual([
       "content delete of an unknown id: refused, or not implemented where the site has no delete",
     ]);
+  });
+
+  it("PLANT: fails a site whose revision list leaves out the current version", async () => {
+    const adapter = memoryAdapter();
+    await adapter.content.saveDraft("a-post", {
+      source: "---\ntitle: A\n---\nOne",
+      expectedVersion: null,
+      changeId: "chg_1",
+    });
+    const revisions = adapter.content.revisions.bind(adapter.content);
+    adapter.content.revisions = async (id) => (await revisions(id))?.slice(1) ?? null;
+    const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: site(adapter).fetch });
+    expect(failing(report)).toContain("revisions: the newest is the item's current version");
   });
 
   it("PLANT: fails a site that offers a delete but does not say so in its capabilities", async () => {
