@@ -34,11 +34,12 @@ export const V0170_ADDED: Record<string, string[]> = {
 const ACTOR = ["actor"];
 const ACTOR_NAME = ["actorName"];
 export const V0220_ADDED: Record<string, string[]> = {
-  Capabilities: ["backlinks", "contentHasDraft", "hooks", "previewLinkHours"],
+  // contentTranscript and transcriptVersion are v0.36.0, listed here for the same reason as transcript.
+  Capabilities: ["backlinks", "contentHasDraft", "contentTranscript", "hooks", "previewLinkHours"],
   ErrorBody: ["field"],
   ContentSummary: ["hasDraft"],
   // transcript is v0.33.0: the one read-only property after v0.22.0, listed here so each earlier contract test sees it.
-  ContentDoc: ["hasDraft", "transcript"],
+  ContentDoc: ["hasDraft", "transcript", "transcriptVersion"],
   SaveDraftInput: ACTOR,
   PublishInput: ACTOR,
   ScheduleInput: ACTOR,
@@ -90,6 +91,10 @@ export const V0170_SCHEMAS = [
   "HookRun",
   "HookRunList",
   "HookRunsQuery",
+  // v0.36.0
+  "TranscriptInput",
+  "TranscriptText",
+  "TranscriptWriteResult",
 ];
 
 /** The routes v0.17.0 adds, in the route table's order, after every earlier one. */
@@ -103,7 +108,12 @@ export const V0170_ROUTES = [
 ];
 
 /** The routes v0.22.0 adds, after the 404 report. */
-export const V0220_ROUTES = ["GET /content/:id/backlinks", "GET /hooks/recent"];
+export const V0220_ROUTES = [
+  "GET /content/:id/backlinks",
+  "GET /hooks/recent",
+  // v0.36.0
+  "PUT /content/:id/transcript",
+];
 
 /** An earlier test's own additions with v0.17.0's merged in, each list sorted. */
 export function withV0170(added: Record<string, string[]>): Record<string, string[]> {

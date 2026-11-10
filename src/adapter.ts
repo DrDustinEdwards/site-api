@@ -38,6 +38,7 @@ import type {
   ScheduledUpdate,
   SearchField,
   SiteInfo,
+  TranscriptInput,
   UnpublishInput,
   WriteResult,
 } from "./contract.js";
@@ -127,6 +128,14 @@ export interface ContentAdapter {
    * the list first. The package checks the id exists before it asks. Absent: `GET /content/:id/backlinks` answers 501.
    */
   backlinks?(id: string): Promise<Backlink[]>;
+  /**
+   * Optional (v0.36.0, capabilities.contentTranscript): replaces the item's transcript, live at once, keeping the one it
+   * replaces in the site's own history. Throws NotFoundError (checked first), VersionConflictError with the
+   * transcriptVersion the site holds (null when it has none) when `expectedTranscriptVersion` is not it, or RefusedError
+   * when the site's rules refuse (a kind that has no transcript). The item's `version` stays as it was; `get` then
+   * answers the new text as `transcript`. The package has checked the text is WebVTT. Answers the item's version.
+   */
+  setTranscript?(id: string, input: TranscriptInput): Promise<{ version: string }>;
 }
 
 export interface PreviewAdapter {
@@ -548,6 +557,7 @@ export function capabilitiesOf(
       : {}),
     ...(options.store && options.hooks?.length ? { hooks: [...options.hooks] } : {}),
     ...(adapter.content.backlinks ? { backlinks: true } : {}),
+    ...(adapter.content.setTranscript ? { contentTranscript: true } : {}),
     ...(adapter.renderVersion ? { render: { version: adapter.renderVersion } } : {}),
     ...(adapter.insight ? { insightNotFound: true } : {}),
   };
@@ -575,6 +585,14 @@ export function contentFiltersOf(adapter: SiteAdapter): ContentFilter[] {
  */
 export async function contentVersion(parts: readonly unknown[]): Promise<string> {
   return (await sha256Hex(JSON.stringify(parts))).slice(0, 32);
+}
+
+/**
+ * A transcript's version (v0.36.0): contentVersion of its text, so the site and Carrel name the same one without a
+ * column. The package puts it on every read that carries a transcript; an adapter checks a transcript write against it.
+ */
+export function transcriptVersion(transcript: string): Promise<string> {
+  return contentVersion(["transcript", transcript]);
 }
 
 /** The expectedVersion on a write is not what the site holds. currentVersion null: no such id. */

@@ -332,6 +332,31 @@ export async function runConformance(config: ConformanceConfig): Promise<Conform
       },
     );
     await check(
+      "content transcript of an unknown id: refused, or not implemented where transcripts are read only",
+      async () => {
+        const response = await doFetch(`${origin}${PREFIX}/content/${PROBE_ID}/transcript`, {
+          method: "PUT",
+          headers: { ...auth, "content-type": "application/json" },
+          body: JSON.stringify({
+            transcript: "WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nConformance probe.\n",
+            expectedTranscriptVersion: STALE_VERSION,
+            changeId: probe(),
+          }),
+        });
+        const offered = (meta as MetaType | null)?.capabilities.contentTranscript === true;
+        expectStatus(
+          response,
+          offered ? 404 : 501,
+          offered ? "unknown content transcript" : "content transcript on a site without it",
+        );
+        const code = await errorCode(response);
+        const expected = offered ? "not-found" : "not-implemented";
+        if (code !== expected)
+          throw new Error(`error code ${code ?? "missing"}, expected ${expected}`);
+        return offered ? "404 not-found" : "501 not-implemented";
+      },
+    );
+    await check(
       "schedule read and cancel of an unknown id: refused, or not implemented where the site has no scheduled updates",
       async () => {
         const path = `${origin}${PREFIX}/content/${PROBE_ID}/schedule`;
