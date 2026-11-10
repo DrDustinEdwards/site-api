@@ -55,6 +55,8 @@ import {
   ScheduleCancelQuery,
   ScheduleInput,
   ScheduledUpdate,
+  TranscriptInput,
+  TranscriptWriteResult,
   UnpublishInput,
   WriteResult,
 } from "./contract/content.js";
@@ -108,7 +110,7 @@ import {
 } from "./contract/mentions.js";
 import { NotFoundQuery, NotFoundReport } from "./contract/insight.js";
 
-export const PACKAGE_VERSION = "0.35.0";
+export const PACKAGE_VERSION = "0.36.0";
 export const PREFIX = "/api/carrel/v1";
 
 export const Capabilities = z.object({
@@ -221,6 +223,11 @@ export const Capabilities = z.object({
    * answered at `GET /hooks/recent?changeId=`, so a check can see that each one ran. Absent: the site keeps no hook runs.
    */
   hooks: z.array(z.string().min(1).max(200)).optional(),
+  /**
+   * v0.36.0: true when the site replaces an item's transcript, `PUT /content/:id/transcript`, and a read carries
+   * `transcriptVersion` beside `transcript`. Absent: that route answers 501 and the transcript stays read only.
+   */
+  contentTranscript: z.boolean().optional(),
 });
 
 export const Meta = z.object({
@@ -586,6 +593,14 @@ export const ROUTES = [
     query: "HookRunsQuery",
     response: "HookRunList",
   },
+  // v0.36.0: an item's transcript, 501 where the adapter lacks it.
+  {
+    group: "content",
+    method: "PUT",
+    path: "/content/:id/transcript",
+    request: "TranscriptInput",
+    response: "TranscriptWriteResult",
+  },
   { group: "inbox", method: "*", path: "/inbox/*", response: "not-implemented" },
   { group: "insight", method: "*", path: "/insight/*", response: "not-implemented" },
   { group: "publications", method: "*", path: "/publications/*", response: "not-implemented" },
@@ -668,6 +683,8 @@ const HASHED = {
   BacklinkList,
   HookRunsQuery,
   HookRunList,
+  TranscriptInput,
+  TranscriptWriteResult,
 };
 
 /** JSON with sorted keys, so the hash depends on the contract and not on property order. */

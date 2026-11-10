@@ -7,6 +7,7 @@ import {
   hasContentTrash,
   NotFoundError,
   RefusedError,
+  transcriptVersion,
   VersionConflictError,
   type SiteAdapter,
 } from "../adapter.js";
@@ -34,6 +35,8 @@ import {
   ScheduleCancelQuery,
   ScheduleInput,
   ScheduledUpdate,
+  TranscriptInput,
+  TranscriptWriteResult,
   UnpublishInput,
   Version,
   WriteResult,
@@ -134,7 +137,12 @@ export function contentRoutes(
       run: async (m) => {
         const doc = await adapter.content.get(id(m));
         if (!doc) throw new NotFoundError();
-        return json(200, checked(ContentDoc, doc, "content"));
+        // v0.36.0: the package names the transcript's version, so no site keeps a column for it.
+        const named =
+          adapter.content.setTranscript && doc.transcript !== undefined
+            ? { ...doc, transcriptVersion: await transcriptVersion(doc.transcript) }
+            : doc;
+        return json(200, checked(ContentDoc, named, "content"));
       },
     },
     {
@@ -305,6 +313,31 @@ export function contentRoutes(
             WriteResult,
             await adapter.content.setTags(contentId, { ...input, tags }),
             "content tags",
+          ),
+        );
+      },
+    },
+    {
+      method: "PUT",
+      pattern: new RegExp(`^/content/${ID}/transcript$`),
+      run: async (m, _u, request) => {
+        const contentId = id(m);
+        if (!adapter.content.setTranscript)
+          return fail("not-implemented", "This site does not take transcripts through the API.");
+        const input = await readBody(request, TranscriptInput);
+        const transcript = input.transcript.replace(/\r\n/g, "\n");
+        const written = await adapter.content.setTranscript(contentId, { ...input, transcript });
+        return json(
+          200,
+          checked(
+            TranscriptWriteResult,
+            {
+              id: contentId,
+              version: written.version,
+              transcriptVersion: await transcriptVersion(transcript),
+              changeId: input.changeId,
+            },
+            "content transcript",
           ),
         );
       },

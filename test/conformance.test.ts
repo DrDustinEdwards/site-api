@@ -19,6 +19,7 @@ describe("conformance", () => {
     expect(report.ok).toBe(true);
     expect(report.checks.map((c) => c.name).slice(12)).toEqual([
       "content tags of an unknown id: refused, or not implemented where the site keeps no tags",
+      "content transcript of an unknown id: refused, or not implemented where transcripts are read only",
       "schedule read and cancel of an unknown id: refused, or not implemented where the site has no scheduled updates",
       "media: upload limits declared",
       "media list: answers in the contract's shape",
@@ -110,7 +111,7 @@ describe("conformance", () => {
       fetch: site(memoryAdapter({ media: false })).fetch,
     });
     expect(failing(report)).toEqual([]);
-    expect(report.checks).toHaveLength(35);
+    expect(report.checks).toHaveLength(36);
   });
 
   it("expects 501 on a site with no content delete, and 404 where it has one", async () => {
@@ -329,6 +330,15 @@ describe("conformance", () => {
     expect(failing(report)).toEqual([
       "content delete of an unknown id: refused, or not implemented where the site has no delete",
     ]);
+  });
+
+  it("PLANT: fails a site that writes a transcript for an id it does not hold", async () => {
+    const adapter = memoryAdapter();
+    adapter.content.setTranscript = async () => ({ version: "v1" });
+    const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: site(adapter).fetch });
+    expect(failing(report)).toContain(
+      "content transcript of an unknown id: refused, or not implemented where transcripts are read only",
+    );
   });
 
   it("PLANT: fails a site whose revision list leaves out the current version", async () => {

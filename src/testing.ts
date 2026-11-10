@@ -5,6 +5,7 @@ import {
   MediaInUseError,
   NotFoundError,
   RefusedError,
+  transcriptVersion,
   VersionConflictError,
   type DueSchedule,
   type MediaAdapter,
@@ -56,6 +57,8 @@ export interface MemoryAdapterOptions {
   contentDelete?: boolean;
   /** false for a site that keeps no post tags through the API (a v0.5.0 site): the tags route then answers 501. On by default. */
   contentTags?: boolean;
+  /** false for a site whose transcripts are read only (before v0.36.0): the transcript route then answers 501. On by default. */
+  contentTranscript?: boolean;
   /** false for a v0.14.0 content group (v0.17.0): no settable publish date, rename, trash, list filters or post fields. On by default. */
   contentExtras?: boolean;
   /** false for a media manager with no alt, tag, trash, focal point, caption or replace writes (a v0.2.0 site): those routes then answer 501. On by default. */
@@ -199,6 +202,8 @@ export function memoryAdapter(options: MemoryAdapterOptions = {}): SiteAdapter &
   receiveMention(fields: ReceivedMention): string;
   /** The permanent redirects a rename left (v0.17.0), old path to new. */
   redirects: Map<string, string>;
+  /** Each item's transcript (v0.33.0), by id, read back on `get`; set one to seed it, as a site's admin would. */
+  transcripts: Map<string, string>;
 } {
   const site = options.site ?? {
     id: "memory",
@@ -210,6 +215,7 @@ export function memoryAdapter(options: MemoryAdapterOptions = {}): SiteAdapter &
   const schedules = options.schedules !== false;
   const contentExtras = options.contentExtras !== false;
   const redirects = new Map<string, string>();
+  const transcripts = new Map<string, string>();
   let counter = 0;
 
   function expect(id: string, expectedVersion: string | null): Stored | undefined {
@@ -1096,6 +1102,7 @@ export function memoryAdapter(options: MemoryAdapterOptions = {}): SiteAdapter &
       : {}),
     store,
     redirects,
+    transcripts,
     mediaStore,
     deleted,
     deletedContent,
@@ -1179,8 +1186,28 @@ export function memoryAdapter(options: MemoryAdapterOptions = {}): SiteAdapter &
       },
       async get(id) {
         const doc = store.get(id)?.doc;
-        return doc ? withTags(doc) : null;
+        if (!doc) return null;
+        const transcript = transcripts.get(id);
+        return { ...withTags(doc), ...(transcript !== undefined ? { transcript } : {}) };
       },
+      // v0.36.0: the transcript is live at once and the item's version stays.
+      ...(options.contentTranscript === false
+        ? {}
+        : {
+            async setTranscript(
+              id: string,
+              input: { transcript: string; expectedTranscriptVersion: string | null },
+            ) {
+              const held = store.get(id);
+              if (!held) throw new NotFoundError();
+              const now = transcripts.get(id);
+              const version = now === undefined ? null : await transcriptVersion(now);
+              if (version !== input.expectedTranscriptVersion)
+                throw new VersionConflictError(version);
+              transcripts.set(id, input.transcript);
+              return { version: held.doc.version };
+            },
+          }),
       async saveDraft(id, input) {
         const previous = expect(id, input.expectedVersion);
         const status = previous?.doc.status === "published" ? "published" : "draft";

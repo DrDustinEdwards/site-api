@@ -43,8 +43,10 @@ import {
   RevisionList,
   RevisionSource,
   ScheduledUpdate,
+  TranscriptWriteResult,
   WriteResult,
   type ContentTagsInput,
+  type TranscriptInput,
   type ContentTrashInput,
   type ListQuery,
   type MediaAltInput,
@@ -193,6 +195,12 @@ export function createSiteClient(config: SiteClientConfig) {
     /** Optional per site (v0.6.0): sets a post's whole tag set. A site without it answers SiteApiError with status 501. */
     setTags: (id: string, input: ContentTagsInput) =>
       get(WriteResult, "PUT", `/content/${enc(id)}/tags`, input),
+    /**
+     * Optional per site (v0.36.0, `contentTranscript`): replaces an item's transcript, live at once, from the
+     * `transcriptVersion` it was written from (null when the item has none). A site without it answers 501.
+     */
+    setTranscript: (id: string, input: TranscriptInput) =>
+      get(TranscriptWriteResult, "PUT", `/content/${enc(id)}/transcript`, input),
     /** Optional per site (v0.17.0, `contentRename`): moves an item to `newId`; its old path redirects to the new one. */
     rename: (id: string, input: RenameInput) =>
       get(RenameResult, "POST", `/content/${enc(id)}/rename`, input),

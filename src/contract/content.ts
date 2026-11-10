@@ -76,6 +76,44 @@ export const ContentDoc = ContentSummary.extend({
    * Part of no version and no source: a save never carries it. Absent: the item has none or the site does not offer it.
    */
   transcript: z.string().max(500_000).optional(),
+  /**
+   * v0.36.0, beside `transcript` on a site with capabilities.contentTranscript: the transcript's own version, which a
+   * transcript write names as `expectedTranscriptVersion`. The package sets it (transcriptVersion); the item's `version`
+   * does not move when the transcript does, so a draft of the post stays good across a transcript fix.
+   */
+  transcriptVersion: Version.optional(),
+});
+
+/** An episode's transcript as WebVTT: the WEBVTT header, then at least one cue. */
+export const TranscriptText = z
+  .string()
+  .min(1)
+  .max(500_000)
+  .refine((t) => /^\uFEFF?WEBVTT(?:[ \t][^\n]*)?\r?\n/.test(t), {
+    message: "A transcript is WebVTT: it starts with the line WEBVTT.",
+  })
+  .refine((t) => /\d{2}:\d{2}\.\d{3} --> \d{2}:\d{2}(?::\d{2})?\.\d{3}/.test(t), {
+    message: "A transcript has at least one cue.",
+  });
+
+/**
+ * Replacing an item's transcript (v0.36.0, capabilities.contentTranscript): `PUT /content/:id/transcript`. The whole
+ * WebVTT, and the transcriptVersion it was written from, null when the item has none yet. It is live at once: a
+ * transcript has no draft on the site, so Carrel keeps the draft and sends this only when it publishes one.
+ */
+export const TranscriptInput = z.object({
+  transcript: TranscriptText,
+  expectedTranscriptVersion: Version.nullable(),
+  changeId: ChangeId,
+  actor: Actor.optional(),
+});
+
+export const TranscriptWriteResult = z.object({
+  id: ContentId,
+  /** The item's version, unchanged by a transcript write. */
+  version: Version,
+  transcriptVersion: Version,
+  changeId: ChangeId,
 });
 
 /** The list filters a site may offer (v0.17.0), named in capabilities.contentFilters; `published` is the pair of dates. */
@@ -343,6 +381,8 @@ export type ContentDoc = z.infer<typeof ContentDoc>;
 export type ListQuery = z.infer<typeof ListQuery>;
 export type ContentList = z.infer<typeof ContentList>;
 export type ContentTagsInput = z.infer<typeof ContentTagsInput>;
+export type TranscriptInput = z.infer<typeof TranscriptInput>;
+export type TranscriptWriteResult = z.infer<typeof TranscriptWriteResult>;
 export type ContentSort = (typeof CONTENT_SORTS)[number];
 export type ContentFilter = (typeof CONTENT_FILTERS)[number];
 
