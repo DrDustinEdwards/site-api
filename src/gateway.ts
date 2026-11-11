@@ -30,8 +30,8 @@ export interface StandardSiteApiOptions extends Pick<SiteApiConfig, "adapter" | 
   db: D1Like;
   /** The production origin and the site's IndexNow key (Prelum's submitIndexNow sends nothing from another origin). */
   indexNow?: { origin: string; key: string };
-  /** The hooks to run, from the standard ones; default IndexNow, the purge and webmentions. */
-  hooks?: (standard: StandardHooks) => PublishHook[];
+  /** The hooks to run, from the standard ones (an absent one is left out); default IndexNow, the purge and webmentions. */
+  hooks?: (standard: StandardHooks) => (PublishHook | undefined)[];
 }
 
 /** createSiteApi with the network's store and hooks. */
@@ -44,11 +44,9 @@ export function standardSiteApi(options: StandardSiteApiOptions): SiteApi {
     purge: schedulePurgeHook(),
     webmention: webmentionHook({ store }),
   };
-  const hooks = options.hooks
-    ? options.hooks(standard)
-    : [standard.indexNow, standard.purge, standard.webmention].filter(
-        (hook): hook is PublishHook => hook !== undefined,
-      );
+  const hooks = (
+    options.hooks?.(standard) ?? [standard.indexNow, standard.purge, standard.webmention]
+  ).filter((hook): hook is PublishHook => hook !== undefined);
   return createSiteApi({
     adapter: options.adapter,
     key: options.key,
