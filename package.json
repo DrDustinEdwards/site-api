@@ -67,7 +67,7 @@
   "devDependencies": {
     "@drdustinedwards/site-helpers": "github:DrDustinEdwards/prelum#v0.41.3",
     "@dustinedwards/devkit": "github:DrDustinEdwards/devkit#v0.27.0",
-    "@dustinedwards/site-runtime": "github:DrDustinEdwards/site-runtime#v0.108.0",
+    "@dustinedwards/site-runtime": "github:DrDustinEdwards/site-runtime#v0.109.0",
     "@types/node": "26.6.6",
     "@vitest/coverage-v8": "4.1.12",
     "oxfmt": "0.77.0",
