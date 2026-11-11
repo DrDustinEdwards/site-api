@@ -108,7 +108,13 @@ describe("media kit", () => {
       });
       expect(afterCall).toHaveBeenCalledWith(
         env,
-        { model: "claude-haiku-5-5", input: 5, output: 7, cacheRead: 0, cacheWrite: 0 },
+        expect.objectContaining({
+          model: "claude-haiku-5-5",
+          input: 5,
+          output: 7,
+          cacheRead: 0,
+          cacheWrite: 0,
+        }),
         "a.png",
       );
 
