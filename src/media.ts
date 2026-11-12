@@ -4,6 +4,7 @@
 // (measuring an image, its storage) come after these, never instead of them.
 
 import { readCappedBytes } from "@dustinedwards/site-runtime/body";
+import { mediaType } from "@dustinedwards/site-runtime/http";
 
 import {
   MAX_ALT_CHARS,
@@ -14,11 +15,6 @@ import {
   type MediaUploadLimits,
 } from "./contract.js";
 import { guardedFetch, OutboundRefusal } from "./outbound.js";
-
-/** The media type without parameters, lower case: "image/png; x=1" is "image/png". */
-export function essence(contentType: string | null): string {
-  return (contentType ?? "").split(";")[0]!.trim().toLowerCase();
-}
 
 type UploadRefusal = { code: "invalid" | "too-large"; message: string };
 
@@ -199,7 +195,7 @@ export function imageRights(
 
 /** What a file is, from its type, for the list's `kind` filter: image, video and audio by their type, everything else a document. */
 export function kindOf(contentType: string): MediaKind {
-  const top = essence(contentType).split("/")[0];
+  const top = mediaType(contentType).split("/")[0];
   return top === "image" || top === "video" || top === "audio" ? top : "document";
 }
 

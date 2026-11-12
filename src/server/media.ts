@@ -1,6 +1,7 @@
 // The media routes (v0.2.0, writes v0.4.0, focal point, caption and replace v0.10.0, the media library's ideas
 // v0.13.0), mounted only when the site's adapter has media.
 
+import { mediaType } from "@dustinedwards/site-runtime/http";
 import { focusOf } from "@dustinedwards/site-runtime/image";
 import type { MediaSuggestion } from "../media-kit.js";
 
@@ -50,15 +51,7 @@ import {
   type MediaResizeOutcome,
   type MediaUse,
 } from "../contract.js";
-import {
-  altRefusal,
-  checkUpload,
-  essence,
-  fetchImport,
-  kindOf,
-  readUpload,
-  turnsSize,
-} from "../media.js";
+import { altRefusal, checkUpload, fetchImport, kindOf, readUpload, turnsSize } from "../media.js";
 import { addressRefusal, OutboundRefusal } from "../outbound.js";
 import { duplicateKey, stripMetadata } from "../media-upload.js";
 import type { SiteApiStore } from "../store.js";
@@ -117,7 +110,7 @@ export function mediaRoutes(
       pattern: /^\/media$/,
       run: async (_m, url, request) => {
         const query = readQuery(url, MediaUploadQuery);
-        const contentType = essence(request.headers.get("content-type"));
+        const contentType = mediaType(request.headers.get("content-type"));
         // The type first, so a file the site does not accept is never read at all; then the alt, before a byte is read.
         const wrongType = checkUpload(contentType, null, media.limits);
         if (wrongType) throw new BadRequest(wrongType.code, wrongType.message);
@@ -143,7 +136,7 @@ export function mediaRoutes(
           return fail("not-implemented", "This site does not import files from the web.");
         const file = address
           ? await imported(address)
-          : { contentType: essence(request.headers.get("content-type")), bytes: null };
+          : { contentType: mediaType(request.headers.get("content-type")), bytes: null };
         const wrongType = checkUpload(file.contentType, null, media.limits);
         if (wrongType) throw new BadRequest(wrongType.code, wrongType.message);
         if (kindOf(file.contentType) !== "image")
@@ -297,13 +290,13 @@ export function mediaRoutes(
         const id = mediaId(m);
         if (!media.replace) return fail("not-implemented", "This site does not replace files.");
         const query = readQuery(url, MediaReplaceQuery);
-        const contentType = essence(request.headers.get("content-type"));
+        const contentType = mediaType(request.headers.get("content-type"));
         // As an upload: a type the site does not accept is refused unread.
         const wrongType = checkUpload(contentType, null, media.limits);
         if (wrongType) throw new BadRequest(wrongType.code, wrongType.message);
         const current = await held(id, query.expectedVersion, "replaced");
         // The address names the type (photo.png), so a file of another type would be served under a name that lies.
-        if (essence(current.contentType) !== contentType) {
+        if (mediaType(current.contentType) !== contentType) {
           throw new BadRequest(
             "invalid",
             `This file is ${current.contentType}, and the replacement is ${contentType}. A replacement keeps the address, so it must be the same type; upload it as a new file instead.`,
@@ -637,7 +630,7 @@ export function mediaRoutes(
       if (error instanceof OutboundRefusal) throw new RefusedError(error.message);
       throw error;
     }
-    const contentType = essence(response.headers.get("content-type"));
+    const contentType = mediaType(response.headers.get("content-type"));
     const wrongType = checkUpload(contentType, null, media.limits);
     if (wrongType) {
       await response.body?.cancel().catch(() => {});

@@ -6,6 +6,8 @@
 // answers checked too, and every redirect checked again. Nothing here parses HTML with a DOM
 // (a Worker has HTMLRewriter, Node has neither); a small tag scanner over the text finds what it needs.
 
+import { unescapeHtml } from "@dustinedwards/site-runtime/html";
+
 import type { PublishHook } from "./hooks.js";
 import { guardedFetch, outboundRefusal } from "./outbound.js";
 import type { SiteApiStore } from "./store.js";
@@ -40,10 +42,7 @@ function attr(attrs: string, name: string): string | null {
     attrs,
   );
   if (!m) return null;
-  return (m[1] ?? m[2] ?? m[3]!).replace(
-    /&(amp|quot|#39|lt|gt);/g,
-    (_, e: string) => ({ amp: "&", quot: '"', "#39": "'", lt: "<", gt: ">" })[e]!,
-  );
+  return unescapeHtml(m[1] ?? m[2] ?? m[3]!);
 }
 
 const words = (value: string | null) => (value ?? "").toLowerCase().split(/\s+/).filter(Boolean);

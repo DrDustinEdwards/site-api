@@ -3,7 +3,7 @@
 // A site and Carrel agree when their schema hashes match. The hash covers these schemas and the
 // route table, so any change to either is a new contract, and Carrel's health check sees it.
 
-import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
+import { canonicalJson, sha256Hex } from "@dustinedwards/site-runtime/encoding";
 import { z } from "zod";
 import { POST_FIELDS, SEARCH_FIELDS } from "./frontmatter.js";
 
@@ -110,7 +110,7 @@ import {
 } from "./contract/mentions.js";
 import { NotFoundQuery, NotFoundReport } from "./contract/insight.js";
 
-export const PACKAGE_VERSION = "0.37.0";
+export const PACKAGE_VERSION = "0.37.1";
 export const PREFIX = "/api/carrel/v1";
 
 export const Capabilities = z.object({
@@ -687,18 +687,6 @@ const HASHED = {
   TranscriptWriteResult,
 };
 
-/** JSON with sorted keys, so the hash depends on the contract and not on property order. */
-function canonical(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
-  if (value && typeof value === "object") {
-    const entries = Object.entries(value as Record<string, unknown>)
-      .filter(([, v]) => v !== undefined)
-      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
-    return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${canonical(v)}`).join(",")}}`;
-  }
-  return JSON.stringify(value);
-}
-
 let cachedHash: Promise<string> | undefined;
 
 /** The SHA-256 of the contract: every schema as JSON Schema, plus the route table. */
@@ -710,7 +698,7 @@ export function schemaHash(): Promise<string> {
         z.toJSONSchema(schema, { io: "input" }),
       ]),
     );
-    return sha256Hex(canonical({ prefix: PREFIX, routes: ROUTES, schemas }));
+    return sha256Hex(canonicalJson({ prefix: PREFIX, routes: ROUTES, schemas }));
   })();
   return cachedHash;
 }

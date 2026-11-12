@@ -5,7 +5,7 @@
 // conversion, the shrink and the placeholder go through the Images binding.
 
 import { escapeXml } from "@drdustinedwards/site-helpers/xml";
-import { sha256Hex, toBase64, toHex } from "@dustinedwards/site-runtime/encoding";
+import { crc32, sha256Hex, toBase64, toHex } from "@dustinedwards/site-runtime/encoding";
 import { IMAGE_QUALITY, editImage, type ImagesLike } from "@dustinedwards/site-runtime/image";
 
 import { RefusedError, type MediaUpload } from "./adapter.js";
@@ -829,12 +829,6 @@ function cleanJpeg(b: Uint8Array): Uint8Array {
   return concat(parts);
 }
 
-const CRC_TABLE = Array.from({ length: 256 }, (_, n) => {
-  let c = n;
-  for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
-  return c >>> 0;
-});
-
 /** One PNG chunk: its length, type, data and the CRC-32 of the type and data. */
 function pngChunk(type: string, data: Uint8Array): Uint8Array {
   const chunk = new Uint8Array(12 + data.length);
@@ -842,10 +836,7 @@ function pngChunk(type: string, data: Uint8Array): Uint8Array {
   view.setUint32(0, data.length);
   chunk.set(bytesOf(type), 4);
   chunk.set(data, 8);
-  let crc = 0xffffffff;
-  for (const byte of chunk.subarray(4, 8 + data.length))
-    crc = CRC_TABLE[(crc ^ byte) & 0xff]! ^ (crc >>> 8);
-  view.setUint32(8 + data.length, (crc ^ 0xffffffff) >>> 0);
+  view.setUint32(8 + data.length, crc32(chunk.subarray(4, 8 + data.length)));
   return chunk;
 }
 

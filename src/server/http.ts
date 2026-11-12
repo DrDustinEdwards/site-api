@@ -5,6 +5,7 @@ import type { z } from "zod";
 import { MediaInUseError, NotFoundError, RefusedError, VersionConflictError } from "../adapter.js";
 import type { ErrorBody, ErrorCode, MediaUse } from "../contract.js";
 import { readCapped } from "@dustinedwards/site-runtime/body";
+import { jsonResponse } from "@dustinedwards/site-runtime/http";
 
 /** Four million bytes: two million characters of source can take that much as UTF-8 JSON. */
 export const MAX_BODY_BYTES = 4_000_000;
@@ -48,15 +49,13 @@ const TITLE: Record<ErrorCode, string> = {
 const ERROR_TYPE_BASE = "https://github.com/DrDustinEdwards/site-api/blob/main/README.md#error-";
 
 export const BASE_HEADERS = {
-  "cache-control": "no-store",
+  "cache-control": "private, no-store",
   "x-content-type-options": "nosniff",
 };
 
+/** site-runtime's JSON answer (`private, no-store`) with `nosniff`, in this package's status-first order. */
 export function json(status: number, body: unknown): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...BASE_HEADERS, "content-type": "application/json; charset=utf-8" },
-  });
+  return jsonResponse(body, status, { "x-content-type-options": "nosniff" });
 }
 
 /**
@@ -74,9 +73,9 @@ export function fail(code: ErrorCode, message: string, extra: Partial<ErrorBody>
     detail: message,
     ...extra,
   };
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...BASE_HEADERS, "content-type": "application/problem+json; charset=utf-8" },
+  return jsonResponse(body, status, {
+    "x-content-type-options": "nosniff",
+    "content-type": "application/problem+json; charset=utf-8",
   });
 }
 
