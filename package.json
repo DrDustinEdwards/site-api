@@ -73,7 +73,7 @@
     "@dustinedwards/devkit": "github:DrDustinEdwards/devkit#v0.42.0",
     "@dustinedwards/site-runtime": "github:DrDustinEdwards/site-runtime#v0.146.0",
     "@types/node": "26.6.6",
-    "@vitest/coverage-v8": "4.1.12",
+    "@vitest/coverage-v8": "5.1.0",
     "drizzle-orm": "0.45.4",
     "oxfmt": "0.77.0",
     "oxlint": "1.92.0",
