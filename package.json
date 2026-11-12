@@ -1,6 +1,6 @@
 {
   "name": "@dustinedwards/site-api",
-  "version": "0.37.0",
+  "version": "0.37.1",
   "private": true,
   "description": "The standard site API every Dustin Edwards site includes so Carrel can list, edit and publish its content.",
   "license": "MIT",
@@ -66,8 +66,8 @@
   },
   "devDependencies": {
     "@drdustinedwards/site-helpers": "github:DrDustinEdwards/prelum#v0.46.0",
-    "@dustinedwards/devkit": "github:DrDustinEdwards/devkit#v0.37.1",
-    "@dustinedwards/site-runtime": "github:DrDustinEdwards/site-runtime#v0.126.1",
+    "@dustinedwards/devkit": "github:DrDustinEdwards/devkit#v0.39.0",
+    "@dustinedwards/site-runtime": "github:DrDustinEdwards/site-runtime#v0.143.0",
     "@types/node": "26.6.6",
     "@vitest/coverage-v8": "4.1.12",
     "oxfmt": "0.77.0",
@@ -78,7 +78,7 @@
   },
   "peerDependencies": {
     "@drdustinedwards/site-helpers": ">=0.35.1",
-    "@dustinedwards/site-runtime": ">=0.102.0"
+    "@dustinedwards/site-runtime": ">=0.143.0"
   },
   "engines": {
     "node": ">=26.11.1"

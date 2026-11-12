@@ -1,6 +1,7 @@
 // The media routes (v0.2.0, writes v0.4.0, focal point, caption and replace v0.10.0, the media library's ideas
 // v0.13.0), mounted only when the site's adapter has media.
 
+import { mediaType, jsonResponse } from "@dustinedwards/site-runtime/http";
 import { focusOf } from "@dustinedwards/site-runtime/image";
 import type { MediaSuggestion } from "../media-kit.js";
 
@@ -50,26 +51,18 @@ import {
   type MediaResizeOutcome,
   type MediaUse,
 } from "../contract.js";
-import {
-  altRefusal,
-  checkUpload,
-  essence,
-  fetchImport,
-  kindOf,
-  readUpload,
-  turnsSize,
-} from "../media.js";
+import { altRefusal, checkUpload, fetchImport, kindOf, readUpload, turnsSize } from "../media.js";
 import { addressRefusal, OutboundRefusal } from "../outbound.js";
 import { duplicateKey, stripMetadata } from "../media-upload.js";
 import type { SiteApiStore } from "../store.js";
 import {
+  BASE_HEADERS,
   BadRequest,
   ContractBreach,
   ID,
   checked,
   describeFailure,
   fail,
-  json,
   pathParam,
   readBody,
   readQuery,
@@ -108,7 +101,7 @@ export function mediaRoutes(
           throw new ContractBreach(
             "media list: a site that answers changes gives changeCursor on every list",
           );
-        return json(200, list);
+        return jsonResponse(list, 200, BASE_HEADERS);
       },
     },
     {
@@ -117,7 +110,7 @@ export function mediaRoutes(
       pattern: /^\/media$/,
       run: async (_m, url, request) => {
         const query = readQuery(url, MediaUploadQuery);
-        const contentType = essence(request.headers.get("content-type"));
+        const contentType = mediaType(request.headers.get("content-type"));
         // The type first, so a file the site does not accept is never read at all; then the alt, before a byte is read.
         const wrongType = checkUpload(contentType, null, media.limits);
         if (wrongType) throw new BadRequest(wrongType.code, wrongType.message);
@@ -143,16 +136,17 @@ export function mediaRoutes(
           return fail("not-implemented", "This site does not import files from the web.");
         const file = address
           ? await imported(address)
-          : { contentType: essence(request.headers.get("content-type")), bytes: null };
+          : { contentType: mediaType(request.headers.get("content-type")), bytes: null };
         const wrongType = checkUpload(file.contentType, null, media.limits);
         if (wrongType) throw new BadRequest(wrongType.code, wrongType.message);
         if (kindOf(file.contentType) !== "image")
           throw new BadRequest("invalid", "Only a picture has alt text to suggest.");
         const bytes = file.bytes ?? (await uploaded(request, file.contentType));
         const found = await media.suggestFile({ bytes, contentType: file.contentType });
-        return json(
-          200,
+        return jsonResponse(
           checked(MediaFileSuggestions, suggestionOf(found), "media file suggestions"),
+          200,
+          BASE_HEADERS,
         );
       },
     },
@@ -186,7 +180,7 @@ export function mediaRoutes(
       run: async (m) => {
         const item = await media.get(mediaId(m));
         if (!item) throw new NotFoundError("No such media.");
-        return json(200, checked(MediaDetail, item, "media"));
+        return jsonResponse(checked(MediaDetail, item, "media"), 200, BASE_HEADERS);
       },
     },
     {
@@ -197,9 +191,10 @@ export function mediaRoutes(
         const id = mediaId(m);
         const { changeId } = readQuery(url, MediaDeleteQuery);
         await media.delete(id, { changeId });
-        return json(
-          200,
+        return jsonResponse(
           checked(MediaDeleteResult, { id, deleted: true, changeId }, "media delete"),
+          200,
+          BASE_HEADERS,
         );
       },
     },
@@ -220,13 +215,14 @@ export function mediaRoutes(
           decorative ? null : ((await media.get(id))?.filename ?? null),
         );
         const result = await media.setAlt(id, { ...input, alt: input.alt.trim(), decorative });
-        return json(
-          200,
+        return jsonResponse(
           checked(
             MediaWriteResult,
             { id, version: result.version, changeId: input.changeId },
             "media alt",
           ),
+          200,
+          BASE_HEADERS,
         );
       },
     },
@@ -238,13 +234,14 @@ export function mediaRoutes(
         if (!media.setTags) return fail("not-implemented", "This site does not keep media tags.");
         const input = await readBody(request, MediaTagsInput);
         const result = await media.setTags(id, { ...input, tags: [...new Set(input.tags)].sort() });
-        return json(
-          200,
+        return jsonResponse(
           checked(
             MediaWriteResult,
             { id, version: result.version, changeId: input.changeId },
             "media tags",
           ),
+          200,
+          BASE_HEADERS,
         );
       },
     },
@@ -260,13 +257,14 @@ export function mediaRoutes(
         // In the one spelling site-runtime's ./image writes into a crop's URL, so the stored point and the URL agree.
         const focus = input.focus === null ? null : focusOf(input.focus);
         const result = await media.setFocus(id, { ...input, focus });
-        return json(
-          200,
+        return jsonResponse(
           checked(
             MediaWriteResult,
             { id, version: result.version, changeId: input.changeId },
             "media focus",
           ),
+          200,
+          BASE_HEADERS,
         );
       },
     },
@@ -279,13 +277,14 @@ export function mediaRoutes(
           return fail("not-implemented", "This site does not keep captions on files.");
         const input = await readBody(request, MediaCaptionInput);
         const result = await media.setCaption(id, input);
-        return json(
-          200,
+        return jsonResponse(
           checked(
             MediaWriteResult,
             { id, version: result.version, changeId: input.changeId },
             "media caption",
           ),
+          200,
+          BASE_HEADERS,
         );
       },
     },
@@ -297,13 +296,13 @@ export function mediaRoutes(
         const id = mediaId(m);
         if (!media.replace) return fail("not-implemented", "This site does not replace files.");
         const query = readQuery(url, MediaReplaceQuery);
-        const contentType = essence(request.headers.get("content-type"));
+        const contentType = mediaType(request.headers.get("content-type"));
         // As an upload: a type the site does not accept is refused unread.
         const wrongType = checkUpload(contentType, null, media.limits);
         if (wrongType) throw new BadRequest(wrongType.code, wrongType.message);
         const current = await held(id, query.expectedVersion, "replaced");
         // The address names the type (photo.png), so a file of another type would be served under a name that lies.
-        if (essence(current.contentType) !== contentType) {
+        if (mediaType(current.contentType) !== contentType) {
           throw new BadRequest(
             "invalid",
             `This file is ${current.contentType}, and the replacement is ${contentType}. A replacement keeps the address, so it must be the same type; upload it as a new file instead.`,
@@ -326,13 +325,14 @@ export function mediaRoutes(
           throw new ContractBreach(
             `replace moved ${id} to ${item.id} at ${item.url}; a replace keeps the id and the address`,
           );
-        return json(
-          200,
+        return jsonResponse(
           checked(
             MediaReplaceResult,
             { ...item, changeId: query.changeId, sizesNeedPurge },
             "media replace",
           ),
+          200,
+          BASE_HEADERS,
         );
       },
     },
@@ -351,13 +351,14 @@ export function mediaRoutes(
           license: input.license.trim(),
           ...(input.copyright !== undefined ? { copyright: input.copyright.trim() } : {}),
         });
-        return json(
-          200,
+        return jsonResponse(
           checked(
             MediaWriteResult,
             { id, version: result.version, changeId: input.changeId },
             "media credit",
           ),
+          200,
+          BASE_HEADERS,
         );
       },
     },
@@ -382,13 +383,14 @@ export function mediaRoutes(
             `transform of ${id} answered ${item.id} at ${item.url}; ${asNewFile ? "a new file has a new id" : "in place keeps the id and the address"}`,
           );
         }
-        return json(
-          200,
+        return jsonResponse(
           checked(
             MediaTransformResult,
             { ...item, changeId: input.changeId, sizesNeedPurge, asNewFile },
             "media transform",
           ),
+          200,
+          BASE_HEADERS,
         );
       },
     },
@@ -401,7 +403,11 @@ export function mediaRoutes(
           return fail("not-implemented", "This site does not keep a file's earlier versions.");
         const revisions = await media.history(id);
         if (!revisions) throw new NotFoundError("No such media.");
-        return json(200, checked(MediaHistory, { id, revisions }, "media history"));
+        return jsonResponse(
+          checked(MediaHistory, { id, revisions }, "media history"),
+          200,
+          BASE_HEADERS,
+        );
       },
     },
     {
@@ -429,13 +435,14 @@ export function mediaRoutes(
           throw new ContractBreach(
             `revert moved ${id} to ${item.id} at ${item.url}; a revert keeps the id and the address`,
           );
-        return json(
-          200,
+        return jsonResponse(
           checked(
             MediaTransformResult,
             { ...item, changeId: input.changeId, sizesNeedPurge, asNewFile: false },
             "media revert",
           ),
+          200,
+          BASE_HEADERS,
         );
       },
     },
@@ -448,9 +455,10 @@ export function mediaRoutes(
           return fail("not-implemented", "This site does not suggest tags or alt text.");
         const found = await media.suggest(id);
         if (!found) throw new NotFoundError("No such media.");
-        return json(
-          200,
+        return jsonResponse(
           checked(MediaSuggestions, { id, ...suggestionOf(found) }, "media suggestions"),
+          200,
+          BASE_HEADERS,
         );
       },
     },
@@ -492,7 +500,11 @@ export function mediaRoutes(
             results.push({ ...failedOutcome(error, log), id, changeId });
           }
         }
-        return json(200, checked(MediaResizePassResult, { results }, "media resize pass"));
+        return jsonResponse(
+          checked(MediaResizePassResult, { results }, "media resize pass"),
+          200,
+          BASE_HEADERS,
+        );
       },
     },
     {
@@ -504,13 +516,14 @@ export function mediaRoutes(
           return fail("not-implemented", "This site has no media trash.");
         const input = await readBody(request, MediaTrashInput);
         const result = await media.trash(id, input);
-        return json(
-          200,
+        return jsonResponse(
           checked(
             MediaWriteResult,
             { id, version: result.version, changeId: input.changeId },
             "media trash",
           ),
+          200,
+          BASE_HEADERS,
         );
       },
     },
@@ -523,13 +536,14 @@ export function mediaRoutes(
           return fail("not-implemented", "This site has no media trash.");
         const input = await readBody(request, MediaTrashInput);
         const result = await media.restore(id, input);
-        return json(
-          200,
+        return jsonResponse(
           checked(
             MediaWriteResult,
             { id, version: result.version, changeId: input.changeId },
             "media restore",
           ),
+          200,
+          BASE_HEADERS,
         );
       },
     },
@@ -576,13 +590,14 @@ export function mediaRoutes(
             });
           }
         }
-        return json(
-          200,
+        return jsonResponse(
           checked(
             MediaTrashEmptyResult,
             { changeId: input.changeId, deleted, refused, more },
             "media trash empty",
           ),
+          200,
+          BASE_HEADERS,
         );
       },
     },
@@ -605,7 +620,11 @@ export function mediaRoutes(
         for (const item of input.items) {
           results.push(await bulkOne(media, input.op, input.tags ?? [], item, log));
         }
-        return json(200, checked(MediaBulkResult, { op: input.op, results }, "media bulk"));
+        return jsonResponse(
+          checked(MediaBulkResult, { op: input.op, results }, "media bulk"),
+          200,
+          BASE_HEADERS,
+        );
       },
     },
   ];
@@ -637,7 +656,7 @@ export function mediaRoutes(
       if (error instanceof OutboundRefusal) throw new RefusedError(error.message);
       throw error;
     }
-    const contentType = essence(response.headers.get("content-type"));
+    const contentType = mediaType(response.headers.get("content-type"));
     const wrongType = checkUpload(contentType, null, media.limits);
     if (wrongType) {
       await response.body?.cancel().catch(() => {});
@@ -681,13 +700,14 @@ export function mediaRoutes(
     },
     sourceUrl?: string,
   ): Promise<Response> {
-    const sha256 = await duplicateKey(bytes, contentType);
+    const hash = await duplicateKey(bytes, contentType);
     if (media.findByHash) {
-      const twin = (await media.findByHash(sha256)) ?? (await sentBefore(sha256));
+      const twin = (await media.findByHash(hash)) ?? (await sentBefore(hash));
       if (twin)
-        return json(
-          200,
+        return jsonResponse(
           checked(MediaUploadResult, { ...twin, duplicateOf: twin.id }, "media duplicate"),
+          200,
+          BASE_HEADERS,
         );
     }
     const uploaded = await media.upload({
@@ -697,7 +717,7 @@ export function mediaRoutes(
       alt: fields.alt,
       ...(fields.decorative ? { decorative: true } : {}),
       changeId: fields.changeId,
-      sha256,
+      sha256: hash,
       resize: media.resize !== undefined && fields.resize !== "no",
       ...(sourceUrl ? { sourceUrl } : {}),
     });
@@ -709,12 +729,12 @@ export function mediaRoutes(
     // this key, as the package's other bookkeeping does, and says so in the log.
     if (media.findByHash && siteStore) {
       await siteStore
-        .putUploadedMedia(sha256, answer.id, new Date().toISOString())
+        .putUploadedMedia(hash, answer.id, new Date().toISOString())
         .catch((error: unknown) =>
           log({ siteApi: "media-uploads-store-failed", error: String(error) }),
         );
     }
-    return json(201, answer);
+    return jsonResponse(answer, 201, BASE_HEADERS);
   }
 
   /** The file an earlier upload with this key became, where the site still holds it (trashed or not); else null. */
@@ -750,8 +770,7 @@ export function mediaRoutes(
       throw new ContractBreach(
         `media changes: ${found.items.length + found.removed.length} answered for a limit of ${limit}`,
       );
-    return json(
-      200,
+    return jsonResponse(
       checked(
         MediaList,
         {
@@ -763,6 +782,8 @@ export function mediaRoutes(
         },
         "media changes",
       ),
+      200,
+      BASE_HEADERS,
     );
   }
 }

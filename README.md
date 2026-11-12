@@ -218,6 +218,14 @@ Additive: every v0.4.0 route and body is unchanged, and the schema hash and pack
 - **Versions.** A mention's `version` is opaque, like a content version, and must move whenever its status, its verification or its decision does, and not when another mention changes. A write with a version the site no longer holds is `409 version-conflict` with `currentVersion`; a missing mention is `404`. dustinedwards.info's table has no `updated_at` and no version column, so its adapter derives one: a hash of `status`, `received_at`, `verified_at` and `decided_at` (a re-send resets all three timestamps and the status, an approve or reject sets the status and `decided_at`). It checks the version and then writes with the same values in the `WHERE`, so a change between the check and the write matches no row and is reported as a conflict.
 - **Conformance** adds, for every site: the list in shape (or `501` where the site has no group), writes without the key or with a wrong one refused, a decide and a delete of an id no site holds refused (`404`, or `501` without the group), and, where the site has the group, a decide with a stale version refused on the first real mention, a sweep with no change id refused (`400`, before anything is removed), and an unknown status refused. It never decides, deletes or sweeps anything real.
 
+## Changes in v0.37.1
+
+No route, body or schema changes; the schema hash is unchanged. Peer floor: site-runtime `>=0.143.0`.
+
+- JSON answers (and problem details) are written by site-runtime's `jsonResponse` (the local `json` helper is gone), so their `Cache-Control` is `private, no-store` where it was `no-store`; `X-Content-Type-Options: nosniff` stays. `BASE_HEADERS` (used by the replayed answer and the preview) says the same.
+- The contract hash's canonical JSON is site-runtime's `canonicalJson`, the PNG chunk CRC-32 is its `crc32`, and `essence` (media type without parameters) is replaced by its `mediaType` (`essence` is no longer exported from `./media`).
+- The webmention sender reads attribute values with site-runtime's `unescapeHtml`, so numeric references (`&#x27;`, `&#8217;`) and `&nbsp;` decode too, not only the five named ones.
+
 ## Changes in v0.37.0
 
 - **`standardSiteApi`** is `createSiteApi` with the network's store and hooks: `d1SiteApiStore(db)`, then IndexNow (when the site passes `indexNow: { origin, key }`; Prelum's `submitIndexNow`), the purge after a schedule (site-runtime's `schedulePurgeHook`) and webmentions, in that order. `hooks: (standard) => [...]` picks or adapts them, for a one-page site that sends its webmentions as the page.

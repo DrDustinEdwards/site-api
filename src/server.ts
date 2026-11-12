@@ -3,6 +3,7 @@
 // Order is the guard: prefix, then rate limit, then key, then route. A request outside the prefix
 // is never served, whatever key it carries; a request without the key learns nothing about routes.
 
+import { jsonResponse } from "@dustinedwards/site-runtime/http";
 import { safeEqual } from "@dustinedwards/site-runtime/compare";
 
 import { hasContentTrash, type DueSchedule, type SiteAdapter } from "./adapter.js";
@@ -19,9 +20,9 @@ import {
 import { contentRoutes } from "./server/content.js";
 import { HookRunList, HookRunsQuery } from "./contract.js";
 import {
+  BASE_HEADERS,
   describeFailure,
   fail,
-  json,
   checked,
   MAX_BODY_BYTES,
   readQuery,
@@ -205,9 +206,10 @@ export function createSiteApi(config: SiteApiConfig): SiteApi {
           pattern: /^\/hooks\/recent$/,
           run: async (_m, url) => {
             const { changeId } = readQuery(url, HookRunsQuery);
-            return json(
-              200,
+            return jsonResponse(
               checked(HookRunList, { items: await store.hookRuns!(changeId) }, "hook runs"),
+              200,
+              BASE_HEADERS,
             );
           },
         },

@@ -2,6 +2,7 @@
 // key; anyone holding its address sees the item's current source rendered, with no key, until it expires or is revoked.
 // The site keeps only the SHA-256 of each token, so its store cannot open a link.
 
+import { jsonResponse } from "@dustinedwards/site-runtime/http";
 import { base64url } from "@dustinedwards/site-runtime/encoding";
 import { NotFoundError, type SiteAdapter } from "../adapter.js";
 import {
@@ -16,10 +17,10 @@ import {
 import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 import type { SiteApiStore } from "../store.js";
 import {
+  BASE_HEADERS,
   BadRequest,
   ContractBreach,
   checked,
-  json,
   readBody,
   readQuery,
   type Route,
@@ -56,7 +57,11 @@ export function previewLinkRoutes(adapter: SiteAdapter, store: SiteApiStore): Ro
           changeId: input.changeId,
         });
         const url = new URL(`${PREVIEW_LINK_PATH}${token}`, adapter.site.origin).href;
-        return json(201, checked(PreviewLink, { token, url, expiresAt }, "preview link"));
+        return jsonResponse(
+          checked(PreviewLink, { token, url, expiresAt }, "preview link"),
+          201,
+          BASE_HEADERS,
+        );
       },
     },
     {
@@ -71,7 +76,11 @@ export function previewLinkRoutes(adapter: SiteAdapter, store: SiteApiStore): Ro
           createdAt: l.createdAt,
           expiresAt: l.expiresAt,
         }));
-        return json(200, checked(PreviewLinkList, { items }, "preview links"));
+        return jsonResponse(
+          checked(PreviewLinkList, { items }, "preview links"),
+          200,
+          BASE_HEADERS,
+        );
       },
     },
     {
@@ -84,13 +93,14 @@ export function previewLinkRoutes(adapter: SiteAdapter, store: SiteApiStore): Ro
         const { changeId } = readQuery(url, PreviewLinkRevokeQuery);
         if (!(await store.revokePreviewLink(linkId, new Date().toISOString())))
           throw new NotFoundError("No such preview link.");
-        return json(
-          200,
+        return jsonResponse(
           checked(
             PreviewLinkRevokeResult,
             { id: linkId, revoked: true, changeId },
             "preview link revoke",
           ),
+          200,
+          BASE_HEADERS,
         );
       },
     },
