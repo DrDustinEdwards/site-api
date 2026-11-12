@@ -19,6 +19,7 @@ describe("siteApiStep", () => {
         {
           url: new URL(request.url),
           stylesheets: async () => [],
+          render: async () => new Response(null, { status: 500 }),
           // site-runtime's purgeAfterWrite decides from the method and the status.
           purgeAfterWrite: (_r, _response, why) => purged.push(why),
         },
