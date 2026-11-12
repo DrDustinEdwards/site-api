@@ -53,11 +53,6 @@ export const BASE_HEADERS = {
   "x-content-type-options": "nosniff",
 };
 
-/** site-runtime's JSON answer (`private, no-store`) with `nosniff`, in this package's status-first order. */
-export function json(status: number, body: unknown): Response {
-  return jsonResponse(body, status, { "x-content-type-options": "nosniff" });
-}
-
 /**
  * An error answer as RFC 9457 problem details (v0.17.0). `error` and `message` stay as every earlier reader expects;
  * `type`, `title`, `status` and `detail` are the standard's names for the same answer.

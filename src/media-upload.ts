@@ -1294,17 +1294,17 @@ export async function prepareUpload(
   const { placeholder, color } = size
     ? await placeholderAndColor(images, bytes)
     : { placeholder: null, color: null };
-  const sha256 = await sha256Hex(bytes);
+  const hash = await sha256Hex(bytes);
   const uploadSha256 =
     input.sha256 ??
-    (!converted && !resizedFrom ? sha256 : await duplicateKey(input.bytes, input.contentType));
+    (!converted && !resizedFrom ? hash : await duplicateKey(input.bytes, input.contentType));
   return {
     bytes,
     contentType,
     filename,
     width: size?.width ?? null,
     height: size?.height ?? null,
-    sha256,
+    sha256: hash,
     uploadSha256,
     embedded,
     converted,

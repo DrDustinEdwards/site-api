@@ -222,7 +222,7 @@ Additive: every v0.4.0 route and body is unchanged, and the schema hash and pack
 
 No route, body or schema changes; the schema hash is unchanged. Peer floor: site-runtime `>=0.143.0`.
 
-- JSON answers (and problem details) are written by site-runtime's `jsonResponse`, so their `Cache-Control` is `private, no-store` where it was `no-store`; `X-Content-Type-Options: nosniff` stays. `BASE_HEADERS` (used by the replayed answer and the preview) says the same.
+- JSON answers (and problem details) are written by site-runtime's `jsonResponse` (the local `json` helper is gone), so their `Cache-Control` is `private, no-store` where it was `no-store`; `X-Content-Type-Options: nosniff` stays. `BASE_HEADERS` (used by the replayed answer and the preview) says the same.
 - The contract hash's canonical JSON is site-runtime's `canonicalJson`, the PNG chunk CRC-32 is its `crc32`, and `essence` (media type without parameters) is replaced by its `mediaType` (`essence` is no longer exported from `./media`).
 - The webmention sender reads attribute values with site-runtime's `unescapeHtml`, so numeric references (`&#x27;`, `&#8217;`) and `&nbsp;` decode too, not only the five named ones.
 

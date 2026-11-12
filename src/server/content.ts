@@ -1,5 +1,6 @@
 // The meta route, the content routes and the preview: what every site serves.
 
+import { jsonResponse } from "@dustinedwards/site-runtime/http";
 import { createTwoFilesPatch } from "diff";
 import {
   capabilitiesOf,
@@ -52,7 +53,6 @@ import {
   ID,
   checked,
   fail,
-  json,
   pathParam,
   readBody,
   readQuery,
@@ -91,15 +91,19 @@ export function contentRoutes(
     m: RegExpMatchArray,
     request: Request,
     run: (contentId: string, request: Request) => Promise<unknown>,
-  ) => json(200, checked(WriteResult, await run(id(m), request), "write result"));
+  ) =>
+    jsonResponse(
+      checked(WriteResult, await run(id(m), request), "write result"),
+      200,
+      BASE_HEADERS,
+    );
 
   return [
     {
       method: "GET",
       pattern: /^\/meta$/,
       run: async () =>
-        json(
-          200,
+        jsonResponse(
           checked(
             Meta,
             {
@@ -111,6 +115,8 @@ export function contentRoutes(
             },
             "meta",
           ),
+          200,
+          BASE_HEADERS,
         ),
     },
     {
@@ -128,7 +134,7 @@ export function contentRoutes(
             `This site does not filter its content list by ${missing}.`,
           );
         const list = checked(ContentList, await adapter.content.list(query), "content list");
-        return json(200, asked.length ? { ...list, filtered: asked } : list);
+        return jsonResponse(asked.length ? { ...list, filtered: asked } : list, 200, BASE_HEADERS);
       },
     },
     {
@@ -142,7 +148,7 @@ export function contentRoutes(
           adapter.content.setTranscript && doc.transcript !== undefined
             ? { ...doc, transcriptVersion: await transcriptVersion(doc.transcript) }
             : doc;
-        return json(200, checked(ContentDoc, named, "content"));
+        return jsonResponse(checked(ContentDoc, named, "content"), 200, BASE_HEADERS);
       },
     },
     {
@@ -218,7 +224,11 @@ export function contentRoutes(
           return fail("not-implemented", "This site does not schedule updates to live posts.");
         const update = await adapter.schedules.get(contentId);
         if (!update) throw new NotFoundError("Nothing is scheduled for this item.");
-        return json(200, checked(ScheduledUpdate, update, "scheduled update"));
+        return jsonResponse(
+          checked(ScheduledUpdate, update, "scheduled update"),
+          200,
+          BASE_HEADERS,
+        );
       },
     },
     {
@@ -229,8 +239,7 @@ export function contentRoutes(
         const contentId = id(m);
         if (!adapter.schedules)
           return fail("not-implemented", "This site does not schedule updates to live posts.");
-        return json(
-          200,
+        return jsonResponse(
           checked(
             WriteResult,
             await adapter.schedules.cancel(
@@ -239,6 +248,8 @@ export function contentRoutes(
             ),
             "schedule cancel",
           ),
+          200,
+          BASE_HEADERS,
         );
       },
     },
@@ -256,7 +267,7 @@ export function contentRoutes(
       run: async (m) => {
         const items = await adapter.content.revisions(id(m));
         if (!items) throw new NotFoundError();
-        return json(200, checked(RevisionList, { items }, "revisions"));
+        return jsonResponse(checked(RevisionList, { items }, "revisions"), 200, BASE_HEADERS);
       },
     },
     {
@@ -267,9 +278,10 @@ export function contentRoutes(
         const version = pathParam(m[2], Version, "version");
         const source = await adapter.content.revisionSource(contentId, version);
         if (source === null) throw new NotFoundError("No such version.");
-        return json(
-          200,
+        return jsonResponse(
           checked(RevisionSource, { id: contentId, version, source }, "revision source"),
+          200,
+          BASE_HEADERS,
         );
       },
     },
@@ -284,13 +296,14 @@ export function contentRoutes(
           return fail("not-implemented", "This site does not delete content through the API.");
         const query = readQuery(url, ContentDeleteQuery);
         await adapter.content.delete(contentId, withActor(query));
-        return json(
-          200,
+        return jsonResponse(
           checked(
             ContentDeleteResult,
             { id: contentId, deleted: true, changeId: query.changeId },
             "content delete",
           ),
+          200,
+          BASE_HEADERS,
         );
       },
     },
@@ -307,13 +320,14 @@ export function contentRoutes(
         const tags = input.tags.filter(
           (t) => !seen.has(t.toLowerCase()) && seen.add(t.toLowerCase()),
         );
-        return json(
-          200,
+        return jsonResponse(
           checked(
             WriteResult,
             await adapter.content.setTags(contentId, { ...input, tags }),
             "content tags",
           ),
+          200,
+          BASE_HEADERS,
         );
       },
     },
@@ -327,8 +341,7 @@ export function contentRoutes(
         const input = await readBody(request, TranscriptInput);
         const transcript = input.transcript.replace(/\r\n/g, "\n");
         const written = await adapter.content.setTranscript(contentId, { ...input, transcript });
-        return json(
-          200,
+        return jsonResponse(
           checked(
             TranscriptWriteResult,
             {
@@ -339,6 +352,8 @@ export function contentRoutes(
             },
             "content transcript",
           ),
+          200,
+          BASE_HEADERS,
         );
       },
     },
@@ -352,9 +367,10 @@ export function contentRoutes(
         const input = await readBody(request, RenameInput);
         if (input.newId === contentId)
           throw new BadRequest("invalid", "newId is the item's own id.");
-        return json(
-          200,
+        return jsonResponse(
           checked(RenameResult, await adapter.content.rename(contentId, input), "content rename"),
+          200,
+          BASE_HEADERS,
         );
       },
     },
@@ -366,9 +382,10 @@ export function contentRoutes(
         if (!adapter.content.backlinks)
           return fail("not-implemented", "This site does not list the posts that link to one.");
         if (!(await adapter.content.get(contentId))) throw new NotFoundError();
-        return json(
-          200,
+        return jsonResponse(
           checked(BacklinkList, { items: await adapter.content.backlinks(contentId) }, "backlinks"),
+          200,
+          BASE_HEADERS,
         );
       },
     },
@@ -380,9 +397,10 @@ export function contentRoutes(
         if (!hasContentTrash(adapter))
           return fail("not-implemented", "This site has no content trash.");
         const input = await readBody(request, ContentTrashInput);
-        return json(
-          200,
+        return jsonResponse(
           checked(WriteResult, await adapter.content[op]!(contentId, input), `content ${op}`),
+          200,
+          BASE_HEADERS,
         );
       },
     })),
@@ -407,7 +425,11 @@ export function contentRoutes(
           before,
           after,
         );
-        return json(200, checked(Diff, { id: contentId, from: query.from, to, patch }, "diff"));
+        return jsonResponse(
+          checked(Diff, { id: contentId, from: query.from, to, patch }, "diff"),
+          200,
+          BASE_HEADERS,
+        );
       },
     },
     {
