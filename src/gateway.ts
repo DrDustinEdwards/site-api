@@ -82,11 +82,11 @@ export interface StepKit {
  * page request never loads the adapter.
  */
 export function siteApiStep<E>(
-  make: (env: E, kit: StepKit) => SiteApi | Promise<SiteApi>,
+  make: (env: E, kit: StepKit, request: Request) => SiteApi | Promise<SiteApi>,
 ): (request: Request, env: E, ctx: WaitUntil, kit: StepKit) => Promise<Response | undefined> {
   return async (request, env, ctx, kit) => {
     if (!isSiteApiRequest(kit.url)) return undefined;
-    const api = await make(env, kit);
+    const api = await make(env, kit, request);
     if (api.matchesPreviewLink(request)) return api.servePreviewLink(request);
     if (!api.matches(request)) return undefined;
     const response = await api.handle(request, ctx);

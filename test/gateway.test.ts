@@ -7,8 +7,10 @@ describe("siteApiStep", () => {
   it("answers only the API and preview paths, and hands every API answer to the purge", async () => {
     let built = 0;
     const purged: string[] = [];
-    const step = siteApiStep(() => {
+    const seen: string[] = [];
+    const step = siteApiStep((_env, _kit, request) => {
       built++;
+      seen.push(new URL(request.url).pathname);
       return createSiteApi({ adapter: memoryAdapter(), key: KEY, limiter: allow });
     });
     const run = (request: Request) =>
@@ -32,6 +34,7 @@ describe("siteApiStep", () => {
     expect(meta?.status).toBe(200);
     // An unknown preview token is the package's own 404, never the site's page.
     expect((await run(new Request(`${ORIGIN}/preview/nothing`)))?.status).toBe(404);
+    expect(seen).toEqual(["/api/carrel/v1/meta", "/preview/nothing"]);
     expect(purged).toEqual(["carrel GET /api/carrel/v1/meta"]);
   });
 });
