@@ -1,10 +1,10 @@
 {
   "baseline": {
-    "measured_at": "4353dc0",
+    "measured_at": "5ae359d",
     "knip": {
-      "Unused files": 1,
-      "Unused exports": 5,
-      "Unused exported types": 8
+      "files": 1,
+      "exports": 7,
+      "types": 19
     },
     "jscpd": {
       "clones": 29,
