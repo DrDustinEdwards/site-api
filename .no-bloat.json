@@ -17,13 +17,13 @@
       "lines": 0
     },
     "tests": {
-      "files": 32,
-      "cases": 291
+      "files": 33,
+      "cases": 292
     },
     "comments": {
-      "lines": 2405,
-      "code": 21997,
-      "percentage": 9.86
+      "lines": 2426,
+      "code": 22128,
+      "percentage": 9.88
     }
   }
 }

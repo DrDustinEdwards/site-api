@@ -1,6 +1,6 @@
 {
   "name": "@dustinedwards/site-api",
-  "version": "0.38.0",
+  "version": "0.39.0",
   "private": true,
   "description": "The standard site API every Dustin Edwards site includes so Carrel can list, edit and publish its content.",
   "license": "MIT",
@@ -32,6 +32,10 @@
     "./schedules": {
       "types": "./dist/schedules.d.ts",
       "default": "./dist/schedules.js"
+    },
+    "./drizzle": {
+      "types": "./dist/drizzle.d.ts",
+      "default": "./dist/drizzle.js"
     },
     "./store": {
       "types": "./dist/store.d.ts",
@@ -67,9 +71,10 @@
   "devDependencies": {
     "@drdustinedwards/site-helpers": "github:DrDustinEdwards/prelum#v0.52.1",
     "@dustinedwards/devkit": "github:DrDustinEdwards/devkit#v0.43.0",
-    "@dustinedwards/site-runtime": "github:DrDustinEdwards/site-runtime#v0.143.0",
+    "@dustinedwards/site-runtime": "github:DrDustinEdwards/site-runtime#v0.146.0",
     "@types/node": "26.6.6",
     "@vitest/coverage-v8": "4.1.12",
+    "drizzle-orm": "0.45.4",
     "oxfmt": "0.77.0",
     "oxlint": "1.92.0",
     "oxlint-tsgolint": "7.0.2006",
