@@ -8,6 +8,7 @@
 import { FOCUS_METADATA, focusOf } from "@dustinedwards/site-runtime/image";
 
 import { NotFoundError, RefusedError } from "./adapter.js";
+import { essence } from "./media.js";
 
 /** The parts of an R2 object these read. */
 export interface R2ObjectLike {
@@ -72,7 +73,7 @@ export async function replaceObject(
 ): Promise<R2ObjectLike> {
   const object = await bucket.head(key);
   if (!object) throw new NotFoundError("No such media.");
-  const held = (object.httpMetadata?.contentType ?? "").split(";")[0]!.trim().toLowerCase();
+  const held = essence(object.httpMetadata?.contentType ?? null);
   if (held && held !== input.contentType)
     throw new RefusedError(
       `This file is ${held}, and the replacement is ${input.contentType}. Upload it as a new file instead.`,

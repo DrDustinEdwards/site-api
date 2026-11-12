@@ -3,7 +3,7 @@
 import { focusOf } from "@dustinedwards/site-runtime/image";
 
 import { SiteApiError } from "../client.js";
-import { altRefusal, orientationOf } from "../media.js";
+import { altRefusal, essence, orientationOf } from "../media.js";
 import {
   MAX_RESIZE_PASS,
   MEDIA_SORTS,
@@ -694,7 +694,7 @@ async function uploadOne(
   const file = fieldOf(input, "file").find((v): v is Blob => typeof v !== "string");
   if (!file) return refused("Choose a file to upload.");
   const name = (file as Blob & { name?: string }).name || "upload";
-  const type = file.type.split(";")[0]!.trim().toLowerCase();
+  const type = essence(file.type);
   if (!limits.types.includes(type)) {
     return refused(
       `${name} is ${type || "an unknown type"}; this site accepts ${limits.types.map((t) => t.split("/")[1]).join(", ")}.`,
@@ -767,7 +767,7 @@ async function suggestFor(source: ContentSource, input: IntentInput): Promise<In
       file
         ? {
             bytes: new Uint8Array(await file.arrayBuffer()),
-            contentType: file.type.split(";")[0]!.trim().toLowerCase(),
+            contentType: essence(file.type),
           }
         : { url },
     );
@@ -1151,7 +1151,7 @@ async function replaceFile(
   const upload = fieldOf(input, "file").find((v): v is Blob => typeof v !== "string");
   if (!upload) return refused("Choose the new file.");
   const name = (upload as Blob & { name?: string }).name || "upload";
-  const type = upload.type.split(";")[0]!.trim().toLowerCase();
+  const type = essence(upload.type);
   if (!limits.types.includes(type))
     return refused(
       `${name} is ${type || "an unknown type"}; this site accepts ${limits.types.map((t) => t.split("/")[1]).join(", ")}.`,
