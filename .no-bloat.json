@@ -1,15 +1,16 @@
 {
   "baseline": {
-    "measured_at": "4353dc0",
+    "measured_at": "e03f7c9",
     "knip": {
-      "Unused files": 1,
-      "Unused exports": 5,
-      "Unused exported types": 8
+      "files": 1,
+      "exports": 7,
+      "types": 19
     },
     "jscpd": {
       "clones": 29,
       "lines": 423,
-      "percentage": 2.12
+      "percentage": 2.12,
+      "unread": 5
     },
     "shared copies": {
       "clones": 0,
@@ -20,9 +21,9 @@
       "cases": 291
     },
     "comments": {
-      "lines": 2402,
-      "code": 21940,
-      "percentage": 9.87
+      "lines": 2405,
+      "code": 21997,
+      "percentage": 9.86
     }
   }
 }
