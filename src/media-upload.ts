@@ -10,11 +10,9 @@ import { IMAGE_QUALITY, editImage, type ImagesLike } from "@dustinedwards/site-r
 
 import { RefusedError, type MediaUpload } from "./adapter.js";
 import { MediaPlaceholder, type MediaResize, type MediaUploadLimits } from "./contract.js";
-import { checkUpload } from "./media.js";
+import { ascii, checkUpload } from "./media.js";
 import { toArrayBuffer } from "./media-kit.js";
 
-const ascii = (b: Uint8Array, from: number, length: number) =>
-  String.fromCharCode(...b.subarray(from, from + length));
 const u32be = (b: Uint8Array, at: number) =>
   ((b[at]! << 24) | (b[at + 1]! << 16) | (b[at + 2]! << 8) | b[at + 3]!) >>> 0;
 const u32le = (b: Uint8Array, at: number) =>

@@ -1,7 +1,7 @@
 // The mentions group (v0.5.0).
 
 import { z } from "zod";
-import { Actor, ActorName, ChangeId, ContentId, Timestamp, Version } from "./base.js";
+import { Actor, ActorName, ChangeId, ContentId, Limit, Timestamp, Version } from "./base.js";
 
 /** A site's id for one received mention, as text: a row id such as 41. Never a path. */
 export const MentionId = ContentId;
@@ -39,7 +39,7 @@ export const MentionListQuery = z.object({
   /** v0.6.0: only the mentions of this content id, such as a post slug. */
   targetId: z.string().min(1).max(300).optional(),
   cursor: z.string().max(500).optional(),
-  limit: z.coerce.number().int().min(1).max(200).default(50),
+  limit: Limit,
 });
 
 /** How many mentions the site holds in each status. */

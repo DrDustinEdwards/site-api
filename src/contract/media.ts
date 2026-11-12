@@ -3,7 +3,7 @@
 
 import { focusOf } from "@dustinedwards/site-runtime/image";
 import { z } from "zod";
-import { Actor, ActorName, ChangeId, SortDir, Timestamp, Version } from "./base.js";
+import { Actor, ActorName, ChangeId, Limit, SortDir, Timestamp, Version } from "./base.js";
 
 /** The largest upload any site may declare: well under a Worker's request body limit. */
 export const MAX_MEDIA_BYTES = 25 * 1024 * 1024;
@@ -239,7 +239,7 @@ export const MediaListQuery = z.object({
    */
   changedSince: z.string().min(1).max(500).optional(),
   cursor: z.string().max(500).optional(),
-  limit: z.coerce.number().int().min(1).max(200).default(50),
+  limit: Limit,
 });
 
 export const MediaList = z.object({
