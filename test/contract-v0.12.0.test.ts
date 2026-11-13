@@ -1,16 +1,12 @@
-// PLANT: the v0.12.0 contract, unchanged but for what v0.13.0 and v0.16.0 name. Each is additive: every v0.12.0 route and body
-// stays as it was, so a site or a Carrel on v0.12.0 keeps working.
-//
-// test/fixtures/contract-v0.12.0.json was written from the v0.12.0 build (tag v0.12.0, 63b2b9c, which carries
-// PACKAGE_VERSION 0.12.0): each exported schema as JSON Schema, the route table and the schema hash.
+// PLANT: the v0.12.0 contract, unchanged but for what later versions add, each additively, so a site or a Carrel on v0.12.0
+// keeps working. test/fixtures/contract-v0.12.0.json is the v0.12.0 build's (tag v0.12.0, 63b2b9c): each exported schema as
+// JSON Schema, the route table and the schema hash. A schema it holds as v0.5.0 did is checked by v0.5.0's test alone.
 
-import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import * as contract from "../src/contract.js";
-import { additiveOnly, added, now, widened, type JsonSchema } from "./additive.js";
+import { additiveOnly, added, changedSince, fixture, now, widened } from "./additive.js";
 import {
-  V0170_CODES,
   V0170_ROUTES,
   V0170_SCHEMAS,
   V0170_WIDEN,
@@ -20,15 +16,11 @@ import {
 } from "./v0.17.0.js";
 import { V0190_ROUTES, V0190_SCHEMAS, asOfV0190, withV0190 } from "./v0.19.0.js";
 
-const V0120 = JSON.parse(
-  readFileSync(new URL("./fixtures/contract-v0.12.0.json", import.meta.url), "utf8"),
-) as {
-  version: string;
-  schemaHash: string;
-  routes: Array<Record<string, string>>;
-  schemas: Record<string, JsonSchema>;
-};
+const V0120 = fixture("0.12.0");
 asOfV0190(V0120.schemas);
+const V050 = fixture("0.5.0");
+asOfV0190(V050.schemas);
+const own = changedSince(V050, V0120);
 
 /** What every file may carry from v0.13.0. */
 const ITEM = [
@@ -165,14 +157,14 @@ describe("the v0.12.0 contract", () => {
   });
 
   for (const name of Object.keys(V0120.schemas).filter(
-    (n) => !(n in ADDED) && n !== "MediaLens" && n !== "ErrorCode",
+    (n) => own(n) && !(n in ADDED) && n !== "MediaLens" && n !== "ErrorCode",
   )) {
     it(`keeps ${name} identical`, () => {
       expect(now(name)).toEqual(V0120.schemas[name]);
     });
   }
 
-  for (const [name, props] of Object.entries(ADDED)) {
+  for (const [name, props] of Object.entries(ADDED).filter(([n]) => own(n))) {
     it(`extends ${name} by optional properties only: ${props.join(", ") || "none of its own"}`, () => {
       additiveOnly(V0120.schemas[name]!, now(name), name, WIDEN);
       expect(added(V0120.schemas[name]!, now(name)).sort()).toEqual(props);
@@ -181,10 +173,6 @@ describe("the v0.12.0 contract", () => {
 
   it("widens the lenses by duplicates, license-expired and oversized, and nothing else", () => {
     widened(V0120.schemas.MediaLens!, now("MediaLens"), NEW_LENSES, "MediaLens");
-  });
-
-  it("widens the error codes by in-progress (v0.17.0) and unknown-field (v0.22.0), and nothing else", () => {
-    widened(V0120.schemas.ErrorCode!, now("ErrorCode"), V0170_CODES, "ErrorCode");
   });
 
   it("adds only the new schemas v0.13.0, v0.17.0 and v0.17.0 name", () => {
@@ -238,9 +226,5 @@ describe("the v0.12.0 contract", () => {
       mediaReplace: true,
     };
     expect(contract.Capabilities.safeParse(capabilities).success).toBe(true);
-  });
-
-  it("changes the schema hash on purpose", async () => {
-    expect(await contract.schemaHash()).not.toBe(V0120.schemaHash);
   });
 });

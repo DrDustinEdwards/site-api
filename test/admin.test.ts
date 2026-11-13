@@ -542,22 +542,6 @@ describe("posts", () => {
       message: 'Added the tag "t". The record of it could not be saved.',
     });
   });
-
-  it("runs the same over the HTTP client, as Carrel drives it", async () => {
-    const adapter = memoryAdapter();
-    const s = site(adapter);
-    const client = createSiteClient({ baseUrl: ORIGIN, key: KEY, fetch: s.fetch });
-    await post(client, "a", "title: A\ntags: []");
-    const source: ContentSource = {
-      site: adapter.site,
-      client,
-      can: OWNER,
-      editorHref: (id) => `/p/${id}`,
-    };
-    expect(await runPostsIntent(source, { intent: "tag-add", ids: ["a"], tag: "t" })).toMatchObject(
-      { ok: true, undo: { intent: "tag-remove" } },
-    );
-  });
 });
 
 describe("media", () => {

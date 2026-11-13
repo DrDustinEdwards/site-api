@@ -1,15 +1,15 @@
 {
   "baseline": {
-    "measured_at": "7622cf4",
+    "measured_at": "d6b77fc",
     "knip": {
       "files": 1,
       "exports": 4,
       "types": 18
     },
     "jscpd": {
-      "clones": 29,
-      "lines": 423,
-      "percentage": 2.12,
+      "clones": 28,
+      "lines": 407,
+      "percentage": 2.02,
       "unread": 0
     },
     "shared copies": {
@@ -19,11 +19,11 @@
     "legacy": {},
     "tests": {
       "files": 33,
-      "cases": 292
+      "cases": 281
     },
     "comments": {
-      "lines": 2426,
-      "code": 22128,
+      "lines": 2418,
+      "code": 22045,
       "percentage": 9.88
     }
   }

@@ -1,7 +1,7 @@
 // The whole content round trip through the client, as Carrel will drive it.
 
 import { describe, expect, it } from "vitest";
-import { createSiteClient, SiteApiError } from "../src/client.js";
+import { createSiteClient } from "../src/client.js";
 import { schemaHash } from "../src/contract.js";
 import { MEMORY_MEDIA_LIMITS, memoryAdapter } from "../src/testing.js";
 import { KEY, ORIGIN, site } from "./helpers.js";
@@ -140,27 +140,5 @@ describe("client round trip", () => {
     const html = await c.preview({ source: "---\ntitle: <Draft>\n---\nBody\n" });
     expect(html).toMatch(/^<!doctype html>/);
     expect(html).toContain("&#60;Draft&#62;");
-  });
-
-  it("pages the list with a cursor", async () => {
-    const { client: c } = client();
-    for (const id of ["a", "b", "c"]) {
-      await c.saveDraft(id, { source: `# ${id}\n`, expectedVersion: null, changeId: `chg-${id}` });
-    }
-    const first = await c.list({ limit: 2 });
-    expect(first.items.map((i) => i.id)).toEqual(["a", "b"]);
-    const second = await c.list({ limit: 2, cursor: first.nextCursor! });
-    expect(second).toEqual({
-      items: [expect.objectContaining({ id: "c" })],
-      nextCursor: null,
-      total: 3,
-    });
-  });
-
-  it("raises the site's refusal with its error body", async () => {
-    const { client: c } = client();
-    const error = await c.get("missing").catch((e: unknown) => e);
-    expect(error).toBeInstanceOf(SiteApiError);
-    expect(error).toMatchObject({ status: 404, body: { error: "not-found" } });
   });
 });

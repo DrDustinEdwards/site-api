@@ -1,28 +1,18 @@
-// PLANT: the v0.1.0 contract, unchanged. v0.2.0 is additive only: every v0.1.0
-// route and body stays as it was, so a site or a Carrel on v0.1.0 keeps working against v0.2.0.
-//
-// test/fixtures/contract-v0.1.0.json was written from the v0.1.0 build (tag v0.1.0, 3cc13c0) before
-// any v0.2.0 change: each schema as JSON Schema, the route table and the schema hash. Its hash is the
-// one Carrel's design records, 496b0dd3.
+// PLANT: the v0.1.0 contract, unchanged. Later versions are additive only: every v0.1.0 route and body stays as it was, so
+// a site or a Carrel on v0.1.0 keeps working. test/fixtures/contract-v0.1.0.json was written from the v0.1.0 build (tag
+// v0.1.0, 3cc13c0, before any v0.2.0 change): each schema as JSON Schema, the route table and the hash Carrel records.
 
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import * as contract from "../src/contract.js";
-import { additiveOnly, now, widened, type JsonSchema } from "./additive.js";
+import { additiveOnly, fixture, now, widened } from "./additive.js";
 import { V0170_ADDED, V0170_CODES, V0170_WIDEN, V0220_ADDED } from "./v0.17.0.js";
 import { V0190_ROUTES } from "./v0.19.0.js";
 const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as {
   version: string;
 };
 
-const V010 = JSON.parse(
-  readFileSync(new URL("./fixtures/contract-v0.1.0.json", import.meta.url), "utf8"),
-) as {
-  version: string;
-  schemaHash: string;
-  routes: Array<Record<string, string>>;
-  schemas: Record<string, JsonSchema>;
-};
+const V010 = fixture("0.1.0");
 
 /** The schemas later versions extend, by optional properties only: v0.2.0 the first three, v0.6.0 the content list, v0.10.0 the write result, v0.17.0 those test/v0.17.0.ts names. Every other one must be identical. */
 const EXTENDED = new Set([

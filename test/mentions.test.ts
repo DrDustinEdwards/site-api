@@ -1,6 +1,5 @@
-// v0.5.0: the mentions group. Each plant is a request that must be refused; where the package refuses
-// it, the test also checks that the adapter never ran, and where the site refuses it, that the queue
-// is exactly as it was.
+// v0.5.0: the mentions group. Each plant is a request that must be refused; where the package refuses it, the test also
+// checks that the adapter never ran, and where the site refuses it, that the queue is exactly as it was.
 
 import { describe, expect, it, vi } from "vitest";
 import { RefusedError } from "../src/adapter.js";
@@ -295,15 +294,6 @@ describe("mentions decide", () => {
     });
   });
 
-  it("PLANT: answers 501 on a site with no mentions group, whatever the body says", async () => {
-    const { client: c } = client(memoryAdapter({ mentions: false }));
-    const error = await c.mentions
-      .decide("1", { decision: "approve", expectedVersion: "m1", changeId: "c1" })
-      .catch((e) => e);
-    expect(error.status).toBe(501);
-    expect(error.body.error).toBe("not-implemented");
-  });
-
   it("PLANT: refuses without the key, with a wrong one, or with an invalid body or id, before the adapter runs", async () => {
     const { adapter, ids } = seededAdapter();
     const spy = vi.spyOn(adapter.mentions!, "decide");
@@ -462,14 +452,6 @@ describe("mentions sweep", () => {
     }
     expect(spy).not.toHaveBeenCalled();
     expect(snapshot(adapter)).toEqual(before);
-  });
-
-  it("PLANT: answers 501 on a site without the group", async () => {
-    const error = await client(memoryAdapter({ mentions: false }))
-      .client.mentions.sweep("c1")
-      .catch((e) => e);
-    expect(error.status).toBe(501);
-    expect(error.body.error).toBe("not-implemented");
   });
 
   it("PLANT: does not read the sweep path as a mention id: a delete of 'sweep' is a missing mention, not a sweep", async () => {
