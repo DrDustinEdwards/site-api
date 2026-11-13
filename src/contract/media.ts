@@ -1,6 +1,7 @@
 // The media group (v0.2.0, writes v0.4.0, lenses v0.6.0, focal point, caption and replace v0.10.0, the media library's
 // fourteen ideas v0.13.0).
 
+import { SLUG_PATTERN } from "@drdustinedwards/site-helpers/slug";
 import { focusOf } from "@dustinedwards/site-runtime/image";
 import { z } from "zod";
 import { Actor, ActorName, ChangeId, Limit, SortDir, Timestamp, Version } from "./base.js";
@@ -61,11 +62,7 @@ export const MediaUse = z.object({
 });
 
 /** A tag: lower case words joined by single hyphens, so the same tag is always spelled one way. */
-export const MediaTag = z
-  .string()
-  .min(1)
-  .max(32)
-  .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/);
+export const MediaTag = z.string().min(1).max(32).regex(SLUG_PATTERN);
 
 /** A file's whole tag set (v0.4.0). The most any file carries is 12. */
 export const MediaTags = z.array(MediaTag).max(12);
