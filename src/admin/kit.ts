@@ -1,5 +1,6 @@
 // What the host supplies, what an intent returns, and the plumbing the posts, media and mentions halves share.
 
+import { plural } from "@drdustinedwards/site-helpers/text";
 import { SiteApiError, type SiteClient } from "../client.js";
 import {
   Version,
@@ -172,10 +173,6 @@ export function askFirst(
 
 export function refused(message: string): IntentResult {
   return { ok: false, message };
-}
-
-export function plural(n: number, one: string, many = `${one}s`): string {
-  return `${n} ${n === 1 ? one : many}`;
 }
 
 export function changeId(): string {
