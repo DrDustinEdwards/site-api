@@ -759,14 +759,14 @@ export function mediaLibrary(options: MediaLibraryOptions): MediaAdapter {
         copyKey,
       });
     }
-    const sha256 = await sha256Hex(next.bytes);
+    const hash = await sha256Hex(next.bytes);
     const after: MediaRecord = {
       ...record,
       ...kept(fields),
       bytes: next.bytes.byteLength,
       width: next.width,
       height: next.height,
-      sha256,
+      sha256: hash,
     };
     const written = await bucket.put(record.key, next.bytes, {
       httpMetadata: { ...current.httpMetadata, contentType: record.contentType },
@@ -780,7 +780,7 @@ export function mediaLibrary(options: MediaLibraryOptions): MediaAdapter {
       bytes: next.bytes.byteLength,
       width: next.width,
       height: next.height,
-      sha256,
+      sha256: hash,
     });
     await store.addRevision(record.key, {
       at: now().toISOString(),
@@ -788,7 +788,7 @@ export function mediaLibrary(options: MediaLibraryOptions): MediaAdapter {
       width: next.width,
       height: next.height,
       reason: next.reason,
-      sha256,
+      sha256: hash,
       copyKey: null,
     });
     await options.afterBytes?.(record.key);
@@ -1116,13 +1116,13 @@ export function mediaLibrary(options: MediaLibraryOptions): MediaAdapter {
       const focus = transformFocus(record.focus, input.op);
       const { placeholder, color } = await looks(bytes, width);
       if (input.asNewFile) {
-        const sha256 = await sha256Hex(bytes);
+        const hash = await sha256Hex(bytes);
         const created = await storeFile({
           bytes,
           contentType: record.contentType,
           filename: record.filename ?? id.split("/").pop()!,
-          uploadSha256: sha256,
-          sha256,
+          uploadSha256: hash,
+          sha256: hash,
           width,
           height,
           fields: {

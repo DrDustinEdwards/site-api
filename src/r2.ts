@@ -5,6 +5,7 @@
 // R2 has no metadata-only update, so a focal point is written by putting the object again with its own bytes. Each put
 // is conditional on the etag that was read, so a write that raced another is refused rather than lost.
 
+import { mediaType } from "@dustinedwards/site-runtime/http";
 import { FOCUS_METADATA, focusOf } from "@dustinedwards/site-runtime/image";
 
 import { NotFoundError, RefusedError } from "./adapter.js";
@@ -72,7 +73,7 @@ export async function replaceObject(
 ): Promise<R2ObjectLike> {
   const object = await bucket.head(key);
   if (!object) throw new NotFoundError("No such media.");
-  const held = (object.httpMetadata?.contentType ?? "").split(";")[0]!.trim().toLowerCase();
+  const held = mediaType(object.httpMetadata?.contentType ?? null);
   if (held && held !== input.contentType)
     throw new RefusedError(
       `This file is ${held}, and the replacement is ${input.contentType}. Upload it as a new file instead.`,

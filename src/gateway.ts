@@ -56,10 +56,23 @@ export function standardSiteApi(options: StandardSiteApiOptions): SiteApi {
   });
 }
 
-/** What site-runtime ./worker hands a step (its GatewayKit), as far as this step reads it. */
+/** The context a render's `set` writes into: React Router's RouterContextProvider, as far as a site sets a key. */
+export interface RenderContext {
+  set(key: unknown, value: unknown): unknown;
+}
+
+/** What site-runtime ./worker hands a step (its GatewayKit), as far as this step and a site's adapter read it. */
 export interface StepKit {
   url: URL;
   stylesheets(): Promise<string[]>;
+  /**
+   * A page rendered in-process through the site's own routes, with `set` adding the site's context keys for this one
+   * render: a Carrel preview drawn by the page it would publish. Never stored, unlike the Renderer's answer.
+   */
+  render(
+    request: Request,
+    extra?: { nonce?: string; set?: (context: RenderContext) => void },
+  ): Promise<Response>;
   purgeAfterWrite(request: Request, response: Response, why: string): void;
 }
 
@@ -69,11 +82,11 @@ export interface StepKit {
  * page request never loads the adapter.
  */
 export function siteApiStep<E>(
-  make: (env: E, kit: StepKit) => SiteApi | Promise<SiteApi>,
+  make: (env: E, kit: StepKit, request: Request) => SiteApi | Promise<SiteApi>,
 ): (request: Request, env: E, ctx: WaitUntil, kit: StepKit) => Promise<Response | undefined> {
   return async (request, env, ctx, kit) => {
     if (!isSiteApiRequest(kit.url)) return undefined;
-    const api = await make(env, kit);
+    const api = await make(env, kit, request);
     if (api.matchesPreviewLink(request)) return api.servePreviewLink(request);
     if (!api.matches(request)) return undefined;
     const response = await api.handle(request, ctx);

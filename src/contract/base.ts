@@ -37,3 +37,6 @@ export const SiteInfo = z.object({
 export type SiteInfo = z.infer<typeof SiteInfo>;
 export type SortDir = z.infer<typeof SortDir>;
 export type Actor = z.infer<typeof Actor>;
+
+/** The page size every list query takes: 1 to 200, default 50. */
+export const Limit = z.coerce.number().int().min(1).max(200).default(50);

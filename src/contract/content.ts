@@ -9,6 +9,7 @@ import {
   Source,
   SortDir,
   Timestamp,
+  Limit,
   Version,
 } from "./base.js";
 
@@ -135,7 +136,7 @@ export const ListQuery = z.object({
   /** v0.17.0, where `contentTrash`: true lists only the trash. Absent or false: trashed items are never listed. */
   trashed: z.stringbool().optional(),
   cursor: z.string().max(500).optional(),
-  limit: z.coerce.number().int().min(1).max(200).default(50),
+  limit: Limit,
 });
 
 export const ContentList = z.object({

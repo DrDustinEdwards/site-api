@@ -1,5 +1,6 @@
 // The mentions routes (v0.5.0), mounted only when the site's adapter has mentions.
 
+import { jsonResponse } from "@dustinedwards/site-runtime/http";
 import type { MentionsAdapter } from "../adapter.js";
 import {
   MentionDecideInput,
@@ -12,7 +13,16 @@ import {
   MentionSweepResult,
   MentionWriteResult,
 } from "../contract.js";
-import { ID, checked, fail, json, pathParam, readBody, readQuery, type Route } from "./http.js";
+import {
+  BASE_HEADERS,
+  ID,
+  checked,
+  fail,
+  pathParam,
+  readBody,
+  readQuery,
+  type Route,
+} from "./http.js";
 
 export function mentionsRoutes(mentions: MentionsAdapter): Route[] {
   const mentionId = (m: RegExpMatchArray) => pathParam(m[1], MentionId, "mention id");
@@ -23,13 +33,14 @@ export function mentionsRoutes(mentions: MentionsAdapter): Route[] {
       query: true,
       pattern: /^\/mentions$/,
       run: async (_m, url) =>
-        json(
-          200,
+        jsonResponse(
           checked(
             MentionList,
             await mentions.list(readQuery(url, MentionListQuery)),
             "mentions list",
           ),
+          200,
+          BASE_HEADERS,
         ),
     },
     {
@@ -38,9 +49,10 @@ export function mentionsRoutes(mentions: MentionsAdapter): Route[] {
       run: async (_m, _u, request) => {
         const input = await readBody(request, MentionSweepInput);
         const removed = await mentions.sweep(input);
-        return json(
-          200,
+        return jsonResponse(
           checked(MentionSweepResult, { changeId: input.changeId, removed }, "mentions sweep"),
+          200,
+          BASE_HEADERS,
         );
       },
     },
@@ -59,13 +71,14 @@ export function mentionsRoutes(mentions: MentionsAdapter): Route[] {
         } else {
           result = await mentions.decide(id, { ...rest, decision });
         }
-        return json(
-          200,
+        return jsonResponse(
           checked(
             MentionWriteResult,
             { id, ...result, changeId: input.changeId },
             "mention decision",
           ),
+          200,
+          BASE_HEADERS,
         );
       },
     },
@@ -77,13 +90,14 @@ export function mentionsRoutes(mentions: MentionsAdapter): Route[] {
         const id = mentionId(m);
         const query = readQuery(url, MentionDeleteQuery);
         const result = await mentions.delete(id, query);
-        return json(
-          200,
+        return jsonResponse(
           checked(
             MentionDeleteResult,
             { id, deleted: true, changeId: query.changeId, purged: result.purged },
             "mention delete",
           ),
+          200,
+          BASE_HEADERS,
         );
       },
     },

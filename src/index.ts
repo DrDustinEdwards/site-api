@@ -34,5 +34,6 @@ export {
   standardSiteApi,
   type StandardHooks,
   type StandardSiteApiOptions,
+  type RenderContext,
   type StepKit,
 } from "./gateway.js";

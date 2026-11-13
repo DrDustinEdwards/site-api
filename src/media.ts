@@ -3,6 +3,9 @@
 // the bytes must look like the declared type where the type has a signature. The site's own checks
 // (measuring an image, its storage) come after these, never instead of them.
 
+import { readCappedBytes } from "@dustinedwards/site-runtime/body";
+import { mediaType } from "@dustinedwards/site-runtime/http";
+
 import {
   MAX_ALT_CHARS,
   type MediaItem,
@@ -12,11 +15,6 @@ import {
   type MediaUploadLimits,
 } from "./contract.js";
 import { guardedFetch, OutboundRefusal } from "./outbound.js";
-
-/** The media type without parameters, lower case: "image/png; x=1" is "image/png". */
-export function essence(contentType: string | null): string {
-  return (contentType ?? "").split(";")[0]!.trim().toLowerCase();
-}
 
 type UploadRefusal = { code: "invalid" | "too-large"; message: string };
 
@@ -37,31 +35,14 @@ export async function readUpload(
   if (!request.body)
     return { ok: false, refusal: { code: "invalid", message: "The upload is empty." } };
 
-  const reader = request.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let total = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    total += value.byteLength;
-    if (total > limits.maxBytes) {
-      await reader.cancel().catch(() => {});
-      return { ok: false, refusal: tooLarge };
-    }
-    chunks.push(value);
-  }
-  if (total === 0)
+  const bytes = await readCappedBytes(request, limits.maxBytes);
+  if (bytes === null) return { ok: false, refusal: tooLarge };
+  if (bytes.byteLength === 0)
     return { ok: false, refusal: { code: "invalid", message: "The upload is empty." } };
-  const bytes = new Uint8Array(total);
-  let at = 0;
-  for (const chunk of chunks) {
-    bytes.set(chunk, at);
-    at += chunk.byteLength;
-  }
   return { ok: true, bytes };
 }
 
-const ascii = (bytes: Uint8Array, from: number, length: number) =>
+export const ascii = (bytes: Uint8Array, from: number, length: number) =>
   String.fromCharCode(...bytes.subarray(from, from + length));
 
 /**
@@ -214,7 +195,7 @@ export function imageRights(
 
 /** What a file is, from its type, for the list's `kind` filter: image, video and audio by their type, everything else a document. */
 export function kindOf(contentType: string): MediaKind {
-  const top = essence(contentType).split("/")[0];
+  const top = mediaType(contentType).split("/")[0];
   return top === "image" || top === "video" || top === "audio" ? top : "document";
 }
 

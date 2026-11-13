@@ -2,10 +2,12 @@
 
 import { z } from "zod";
 
+import { Limit } from "./base.js";
+
 export const NotFoundQuery = z.object({
   /** UTC days back, today included; 90 is what site-runtime's `pruneNotFound` keeps by default. */
   days: z.coerce.number().int().min(1).max(90).default(30),
-  limit: z.coerce.number().int().min(1).max(200).default(50),
+  limit: Limit,
   /** "true" adds the paths exploit scanners guess (wp-admin, .php, /.env); left out otherwise. */
   includeProbes: z.enum(["true", "false"]).default("false"),
 });
