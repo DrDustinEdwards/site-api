@@ -1,6 +1,7 @@
 // The media half of the content kit: MediaLibrary's view data and its intents.
 
 import { mediaType } from "@dustinedwards/site-runtime/http";
+import { plural } from "@drdustinedwards/site-helpers/text";
 import { focusOf } from "@dustinedwards/site-runtime/image";
 
 import { SiteApiError } from "../client.js";
@@ -38,7 +39,6 @@ import {
   text,
   refused,
   askFirst,
-  plural,
   changeId,
   recordDone,
   targetsOf,
@@ -361,7 +361,7 @@ const MEDIA_INTENTS = [
 export type MediaIntent = (typeof MEDIA_INTENTS)[number];
 
 /** A typed list of tags (commas between them) as a tag set: each in the site's spelling, unique, at most 12. */
-export function parseMediaTags(
+function parseMediaTags(
   raw: string | string[],
 ): { ok: true; tags: string[] } | { ok: false; message: string } {
   const tags: string[] = [];

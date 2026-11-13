@@ -3,8 +3,8 @@
     "measured_at": "7622cf4",
     "knip": {
       "files": 1,
-      "exports": 7,
-      "types": 19
+      "exports": 4,
+      "types": 18
     },
     "jscpd": {
       "clones": 29,

@@ -31,7 +31,7 @@ import {
 } from "./kit.js";
 
 export type MentionFilter = MentionStatus | "all";
-export const MENTION_FILTERS: readonly MentionFilter[] = [
+const MENTION_FILTERS: readonly MentionFilter[] = [
   "pending",
   "failed",
   "approved",
@@ -50,7 +50,7 @@ export interface MentionsQuery {
   cursor?: string;
 }
 
-export type MentionRow = MentionItem & { postHref: string };
+type MentionRow = MentionItem & { postHref: string };
 
 export interface MentionsData {
   site: { id: string; name: string };

@@ -21,6 +21,7 @@ import {
   setRawKey,
   splitSource,
 } from "@drdustinedwards/site-helpers/frontmatter";
+import { plural } from "@drdustinedwards/site-helpers/text";
 import { setTags, tagsOf } from "../frontmatter.js";
 import {
   type Permissions,
@@ -34,7 +35,6 @@ import {
   text,
   refused,
   askFirst,
-  plural,
   texts,
   changeId,
   recordDone,
@@ -304,7 +304,7 @@ export async function loadPosts(source: ContentSource, query: PostQuery = {}): P
 const hasTrash = (capabilities: Capabilities | null) => capabilities?.contentTrash === true;
 
 /** A time as the kit's messages say it: "2030-01-01 15:00 UTC", the same wherever the host runs. */
-export function scheduleLabel(publishAt: string): string {
+function scheduleLabel(publishAt: string): string {
   return `${new Date(publishAt).toISOString().slice(0, 16).replace("T", " ")} UTC`;
 }
 
