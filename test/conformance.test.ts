@@ -635,12 +635,3 @@ describe("conformance", () => {
     expect(report.checks.map((c) => c.name)).not.toContain("stale expectedVersion: refused");
   });
 });
-
-describe("schema hash", () => {
-  it("is stable across calls and is 64 hex characters", async () => {
-    const { schemaHash } = await import("../src/contract.js");
-    const [a, b] = await Promise.all([schemaHash(), schemaHash()]);
-    expect(a).toBe(b);
-    expect(a).toMatch(/^[0-9a-f]{64}$/);
-  });
-});

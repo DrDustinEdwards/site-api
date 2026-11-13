@@ -2,6 +2,8 @@
 // only. Every earlier property stays, required exactly as before, and each object nested in it
 // follows the same rule (Meta.capabilities is Capabilities).
 
+import { readFileSync } from "node:fs";
+import { isDeepStrictEqual } from "node:util";
 import { expect } from "vitest";
 import { z } from "zod";
 import * as contract from "../src/contract.js";
@@ -11,6 +13,23 @@ export type JsonSchema = {
   required?: string[];
   [k: string]: unknown;
 };
+
+export type Contract = {
+  version: string;
+  schemaHash: string;
+  routes: Array<Record<string, string>>;
+  schemas: Record<string, JsonSchema>;
+};
+
+export const fixture = (version: string) =>
+  JSON.parse(
+    readFileSync(new URL(`./fixtures/contract-v${version}.json`, import.meta.url), "utf8"),
+  ) as Contract;
+
+export const changedSince =
+  (earlier: Contract, later: Contract) =>
+  (name: string): boolean =>
+    !isDeepStrictEqual(earlier.schemas[name], later.schemas[name]);
 
 export const now = (name: string) =>
   z.toJSONSchema((contract as unknown as Record<string, z.ZodType>)[name]!, {

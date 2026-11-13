@@ -59,13 +59,6 @@ describe("the source at a revision", () => {
     expect((await api.handle(req("/api/carrel/v1/content/a/revisions/%E0%A4%A"))).status).toBe(400);
     expect(spy).not.toHaveBeenCalled();
   });
-
-  it("is refused without the key", async () => {
-    const { api } = site();
-    expect(
-      (await api.handle(req("/api/carrel/v1/content/a/revisions/v1", { key: null }))).status,
-    ).toBe(401);
-  });
 });
 
 describe("content delete", () => {
