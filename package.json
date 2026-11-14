@@ -71,9 +71,9 @@
   },
   "devDependencies": {
     "@changesets/cli": "3.0.3",
-    "@drdustinedwards/site-helpers": "github:DrDustinEdwards/prelum#v0.52.1",
-    "@dustinedwards/devkit": "github:DrDustinEdwards/devkit#v0.48.0",
-    "@dustinedwards/site-runtime": "github:DrDustinEdwards/site-runtime#v0.146.0",
+    "@drdustinedwards/site-helpers": "github:DrDustinEdwards/prelum#v0.60.0",
+    "@dustinedwards/devkit": "github:DrDustinEdwards/devkit#v0.50.1",
+    "@dustinedwards/site-runtime": "github:DrDustinEdwards/site-runtime#v0.159.0",
     "@types/node": "26.6.6",
     "@vitest/coverage-v8": "4.1.12",
     "drizzle-orm": "0.45.4",
