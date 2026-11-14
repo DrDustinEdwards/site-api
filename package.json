@@ -81,7 +81,7 @@
     "oxlint": "1.92.0",
     "oxlint-tsgolint": "7.0.2006",
     "typescript": "5.9.3",
-    "vitest": "4.1.12"
+    "vitest": "5.1.0"
   },
   "peerDependencies": {
     "@drdustinedwards/site-helpers": ">=0.49.0",
