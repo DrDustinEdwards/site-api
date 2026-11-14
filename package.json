@@ -80,7 +80,7 @@
     "oxfmt": "0.77.0",
     "oxlint": "1.92.0",
     "oxlint-tsgolint": "7.0.2006",
-    "typescript": "5.9.3",
+    "typescript": "7.0.2",
     "vitest": "4.1.12"
   },
   "peerDependencies": {
