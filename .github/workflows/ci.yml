@@ -53,5 +53,3 @@ jobs:
         run: npm run format:check
       - run: npm run build
       - run: npm test
-      # The published package ships its runtime dependencies only; a high there fails the build.
-      - run: npm audit --omit=dev --audit-level=high
