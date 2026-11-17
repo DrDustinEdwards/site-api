@@ -69,11 +69,11 @@ if (api.matchesPreviewLink(request)) return api.servePreviewLink(request);
 if (await store.isGone(url.pathname)) return tombstoneResponse(request);
 ```
 
-The guard runs in this order: prefix, rate limit, key, route.
+The guard runs in this order: prefix, key check, rate limit, key refusal, route.
 
 - **Prefix.** A request outside `/api/carrel/v1` is never served, whatever key it carries.
-- **Rate limit.** The limit is per caller address. A limiter that throws fails closed.
 - **Key.** A bearer key, compared in constant time by SHA-256 digest. A site key shorter than 32 characters refuses every request.
+- **Rate limit.** A request with the key is counted under the key holder (`site-key`); one without it under its address (`ip:<address>`), and is refused only after the limit. A Worker's subrequest from another Cloudflare zone arrives with the same `CF-Connecting-IP` for every Worker, `2a06:98c0:3600::103` ([Cloudflare HTTP headers](https://developers.cloudflare.com/fundamentals/reference/http-headers/#cf-connecting-ip-in-worker-subrequests)), so an address key would let any Worker spend Carrel's limit; the [Rate Limiting binding](https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/#best-practices) advises an API key over an IP. A limiter that throws fails closed.
 - **Route.** An unknown route is refused. A caller without the key cannot tell which routes exist.
 
 The key reaches only this prefix. It cannot deploy, configure, manage users or touch code.
@@ -168,7 +168,7 @@ Every error answer is `application/problem+json` (RFC 9457, v0.17.0): `{ error, 
 | Code                                                      | Status | Title              | When                                                                                                                  |
 | --------------------------------------------------------- | ------ | ------------------ | --------------------------------------------------------------------------------------------------------------------- |
 | <a id="error-unauthorized"></a>`unauthorized`             | 401    | Unauthorized       | No key, or not the site's key. Every route, known or not, answers this to a caller without the key.                   |
-| <a id="error-rate-limited"></a>`rate-limited`             | 429    | Too many requests  | The caller's address spent the site's limit.                                                                          |
+| <a id="error-rate-limited"></a>`rate-limited`             | 429    | Too many requests  | The key holder, or a caller without the key from this address, spent the site's limit.                                |
 | <a id="error-not-configured"></a>`not-configured`         | 503    | Not configured     | The site's key is unset or shorter than 32 characters.                                                                |
 | <a id="error-unavailable"></a>`unavailable`               | 503    | Unavailable        | The rate limiter failed, so the request was refused.                                                                  |
 | <a id="error-not-found"></a>`not-found`                   | 404    | Not found          | No such route, id or version.                                                                                         |
