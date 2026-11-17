@@ -223,7 +223,7 @@ describe("PLANT: an unknown route", () => {
 });
 
 describe("rate limit", () => {
-  it("refuses before the key is checked when the limiter says no", async () => {
+  it("refuses before any route runs when the limiter says no", async () => {
     const { adapter, calls } = spied();
     const { api } = site(adapter, { limiter: { limit: async () => ({ success: false }) } });
     const response = await api.handle(req("/api/carrel/v1/content"));
@@ -242,7 +242,9 @@ describe("rate limit", () => {
     expect((await api.handle(req("/api/carrel/v1/meta"))).status).toBe(503);
   });
 
-  it("limits by the caller's address", async () => {
+  // Every Worker's cross-zone subrequest arrives from one Cloudflare address, so an address key let any Worker on
+  // Cloudflare spend the key holder's limit (Sentry CARREL-4, 2026-11-17).
+  it("counts the key holder apart from its address, and a caller without the key by its address", async () => {
     const keys: string[] = [];
     const { api } = site(memoryAdapter(), {
       limiter: {
@@ -252,10 +254,11 @@ describe("rate limit", () => {
         },
       },
     });
-    await api.handle(
-      req("/api/carrel/v1/meta", { headers: { "cf-connecting-ip": "203.0.113.9" } }),
-    );
-    expect(keys).toEqual(["203.0.113.9"]);
+    const from = { "cf-connecting-ip": "2a06:98c0:3600::103" };
+    await api.handle(req("/api/carrel/v1/meta", { headers: from }));
+    await api.handle(req("/api/carrel/v1/meta", { headers: from, key: "w".repeat(40) }));
+    await api.handle(req("/api/carrel/v1/meta", { headers: from, key: null }));
+    expect(keys).toEqual(["site-key", "ip:2a06:98c0:3600::103", "ip:2a06:98c0:3600::103"]);
   });
 });
 

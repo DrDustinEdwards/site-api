@@ -491,9 +491,22 @@ export function createSiteApi(config: SiteApiConfig): SiteApi {
     // The URL parser has already resolved dot segments, so /api/carrel/v1/../admin arrives as /admin.
     if (!insidePrefix(url.pathname)) return fail("not-found", "Not found.");
 
+    // The key is checked before the limit so the limit can follow the caller, not its address. A Worker's subrequest
+    // from another zone carries CF-Connecting-IP 2a06:98c0:3600::103, the same for every Worker on Cloudflare
+    // (developers.cloudflare.com/fundamentals/reference/http-headers/#cf-connecting-ip-in-worker-subrequests), and
+    // the Rate Limiting docs advise an API key over an IP (workers/runtime-apis/bindings/rate-limit/#best-practices).
+    // So the key holder has its own counter and only a request without the key is counted by its address.
+    const expected = config.key?.trim() ?? "";
+    const presented = bearer(request);
+    const holdsKey =
+      expected.length >= MIN_KEY_LENGTH &&
+      presented !== null &&
+      (await safeEqual(presented, expected));
     try {
-      const ip = request.headers.get("cf-connecting-ip") ?? "unknown";
-      if (!(await limiter.limit({ key: ip })).success) {
+      const key = holdsKey
+        ? "site-key"
+        : `ip:${request.headers.get("cf-connecting-ip") ?? "unknown"}`;
+      if (!(await limiter.limit({ key })).success) {
         log({ siteApi: "refused", reason: "rate-limited" });
         return fail("rate-limited", "Too many requests.");
       }
@@ -502,13 +515,11 @@ export function createSiteApi(config: SiteApiConfig): SiteApi {
       return fail("unavailable", "The site API is unavailable.");
     }
 
-    const expected = config.key?.trim() ?? "";
     if (expected.length < MIN_KEY_LENGTH) {
       log({ siteApi: "refused", reason: "not-configured" });
       return fail("not-configured", "The site API is not configured.");
     }
-    const presented = bearer(request);
-    if (!presented || !(await safeEqual(presented, expected))) {
+    if (!holdsKey) {
       log({ siteApi: "refused", reason: presented ? "wrong-key" : "no-key" });
       return fail("unauthorized", "Unauthorized.");
     }
@@ -598,7 +609,8 @@ export function createSiteApi(config: SiteApiConfig): SiteApi {
   async function servePreview(request: Request): Promise<Response> {
     try {
       const ip = request.headers.get("cf-connecting-ip") ?? "unknown";
-      if (!(await limiter.limit({ key: ip })).success) return page(429, "Too many requests.");
+      if (!(await limiter.limit({ key: `ip:${ip}` })).success)
+        return page(429, "Too many requests.");
       const answer = await servePreviewLink(adapter, store, new URL(request.url).pathname);
       return request.method === "HEAD"
         ? new Response(null, { status: answer.status, headers: answer.headers })
