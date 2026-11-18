@@ -1,6 +1,7 @@
 // v0.17.0: shareable preview links, made under the key and opened by anyone with the address, on a site with a store.
 
 import { describe, expect, it } from "vitest";
+import { runPostsIntent, type ContentSource } from "../src/admin.js";
 import { createSiteClient } from "../src/client.js";
 import { createSiteApi } from "../src/index.js";
 import { d1SiteApiStore, SITE_API_STORE_SQL } from "../src/store.js";
@@ -75,5 +76,33 @@ describe("preview links (v0.17.0)", () => {
       status: 501,
     });
     expect((await fetch(`${ORIGIN}/preview/${"x".repeat(43)}`)).status).toBe(404);
+  });
+
+  it("is a publish in the posts list: an Editor is refused, and the Owner's link is recorded", async () => {
+    const { c } = mounted();
+    const draft = await c.saveDraft("a", {
+      source: "# Draft\n",
+      expectedVersion: null,
+      changeId: "c1",
+    });
+    const records: Array<{ kind: string; ids: string[] }> = [];
+    const source = (publish: boolean): ContentSource => ({
+      site: { id: "memory", name: "Memory site", origin: ORIGIN },
+      client: c,
+      can: { edit: true, publish, deleteContent: false, deleteMedia: false, decideMentions: false },
+      editorHref: (id) => `/edit/${id}`,
+      record: async ({ kind, ids }) => {
+        records.push({ kind, ids });
+      },
+      log: () => {},
+    });
+    const ask = { intent: "preview-link", ids: "a", versions: draft.version };
+
+    expect(await runPostsIntent(source(false), ask)).toMatchObject({ ok: false });
+    expect((await c.previewLinks.list("a")).items).toEqual([]);
+
+    const made = await runPostsIntent(source(true), ask);
+    expect(made).toMatchObject({ ok: true, previewLink: { url: expect.any(String) } });
+    expect(records).toEqual([{ kind: "post-preview-link", ids: ["a"] }]);
   });
 });

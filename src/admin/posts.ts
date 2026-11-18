@@ -410,7 +410,9 @@ export async function runPostsIntent(
       : intent === "unpublish" ||
           intent === "republish" ||
           intent === "reschedule" ||
-          intent === "cancel-schedule"
+          intent === "cancel-schedule" ||
+          // A preview link shows the post to anyone who has it, so it sends the post out: a publish.
+          intent === "preview-link"
         ? "publish"
         : "edit";
   if (!source.can[need]) return refused(NOT_YOURS[need]);
@@ -816,16 +818,19 @@ export async function runPostsIntent(
           const max = capabilities?.previewLinkHours?.max;
           const expiresInHours =
             max && Number.isInteger(hours) && hours >= 1 && hours <= max ? hours : undefined;
+          const change = changeId();
           const link = await client.previewLinks.create({
             id,
-            changeId: changeId(),
+            changeId: change,
             ...(expiresInHours ? { expiresInHours } : {}),
           });
           previewLink = { url: link.url, expiresAt: link.expiresAt };
+          const note = await recordDone(source, "post-preview-link", id, change);
           return {
             id,
             ok: true,
-            message: `Made a preview link that works until ${scheduleLabel(link.expiresAt)}.`,
+            message:
+              `Made a preview link that works until ${scheduleLabel(link.expiresAt)}.` + note,
           };
         }
       }
