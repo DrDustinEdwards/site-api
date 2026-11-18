@@ -707,6 +707,24 @@ describe("media", () => {
     expect(adapter.mediaStore.get(a.id)!.item.tags).toEqual(["old"]);
   });
 
+  it("lets an Editor change a file's words only while no page uses it; the Owner always", async () => {
+    const { adapter, client, source } = setup();
+    const a = await upload(client, "a.png");
+    const editor = { ...source, can: EDITOR };
+    const caption = (s: ContentSource, text: string) =>
+      runMediaIntent(s, {
+        intent: "caption",
+        ids: [a.id],
+        versions: [adapter.mediaStore.get(a.id)!.item.version!],
+        caption: text,
+      });
+    expect((await caption(editor, "Before it is used.")).ok).toBe(true);
+    await post(client, "uses", `title: U\n---\n![x](/media/${a.id})`);
+    expect(await caption(editor, "Changed on a live page.")).toMatchObject({ ok: false });
+    expect(adapter.mediaStore.get(a.id)!.item.caption).toBe("Before it is used.");
+    expect((await caption(source, "The Owner's words.")).ok).toBe(true);
+  });
+
   it("deletes for good only from the trash, and a file in use is refused with its uses named", async () => {
     const { adapter, client, source } = setup();
     const a = await upload(client, "a.png");

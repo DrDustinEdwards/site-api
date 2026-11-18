@@ -486,6 +486,16 @@ export async function runMediaIntent(
   ) {
     if (sendable.length !== 1 || targets.length !== 1) return result(early, "Choose one file.");
     const file = { id: sendable[0]!.id, version: sendable[0]!.version! };
+    // The words on a file a page uses show on that page, so changing them there is a publish (Carrel's publishing review,
+    // finding 7): someone who may not publish changes them only on a file nothing uses yet.
+    if (
+      (intent === "alt" || intent === "caption" || intent === "credit") &&
+      !source.can.publish &&
+      (await source.client.media.get(file.id)).usedBy.length > 0
+    )
+      return refused(
+        "A page uses this file, so changing its words changes that page, which is not yours to do here.",
+      );
     if (intent === "alt") return setAlt(source, file, text(input, "alt"), decorativeOf(input));
     if (intent === "tags") return setFileTags(source, file, texts(input, "tags"));
     if (intent === "focus") return setFocus(source, file, focusField(input));
