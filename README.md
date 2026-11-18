@@ -276,6 +276,7 @@ steps: [
 ## Changes in v0.34.0
 
 - A media suggestion (`GET /media/:id/suggestions`, `POST /media/suggestions`) may carry `usage`, the tokens the call spent as Anthropic reported them (`input`, `output`, `cacheRead`, `cacheWrite`). `mediaSuggester` returns it, and an adapter that returns `mediaSuggester`'s object whole passes it on. A caller that pays for the call, such as Carrel's monthly cap, counts what was spent. Absent: the adapter did not report it.
+- `mediaSuggester`'s `outcomeKv: (env) => env.APP_KV` keeps each call's outcome for site-runtime's `aiOutcomeCheck("alt-text", kv)` on /health (a failure stays until a call works). Left out, nothing is kept.
 
 ## Changes in v0.33.0
 
