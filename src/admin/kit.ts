@@ -16,7 +16,7 @@ import {
 export interface Permissions {
   /** Tag, duplicate, upload, edit alt text and tags, trash and restore. */
   edit: boolean;
-  /** Change what the public sees: unpublish, republish, reschedule, cancel a schedule, and any write to a post that is not a draft. */
+  /** Change what the public sees: unpublish, republish, reschedule, cancel a schedule, make a preview link, and any write to a post that is not a draft. */
   publish: boolean;
   deleteContent: boolean;
   deleteMedia: boolean;
