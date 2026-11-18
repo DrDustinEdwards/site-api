@@ -3,6 +3,7 @@
 // binding, the AI suggester behind `suggest`, and the plain page a preview renders into.
 
 import { MODEL_IDS, structured } from "@dustinedwards/site-runtime/anthropic";
+import { recordAiOutcome } from "@dustinedwards/site-runtime/health";
 import { toBase64 } from "@dustinedwards/site-runtime/encoding";
 import { escapeHtml } from "@dustinedwards/site-runtime/html";
 import { editImage, type ImagesLike } from "@dustinedwards/site-runtime/image";
@@ -111,6 +112,11 @@ export interface MediaSuggesterOptions<E extends SuggestEnv> {
   beforeCall?: (env: E, id: string | undefined) => Promise<void> | void;
   /** Runs after the model answers, with what it spent, to meter it. A failure here is the site's to catch; it fails the call. */
   afterCall?: (env: E, usage: SuggestUsage, id: string | undefined) => Promise<void> | void;
+  /**
+   * The site's KV namespace (`(env) => env.APP_KV`) where each call's outcome is kept for site-runtime's
+   * `aiOutcomeCheck("alt-text", kv)` on /health: a suggester that fails every call shows as a warning. Left out, nothing is kept.
+   */
+  outcomeKv?: (env: E) => Parameters<typeof recordAiOutcome>[0];
 }
 
 /** What the model suggests for one picture: its tags and alt text as it wrote them (the package cleans both), and the model. */
@@ -199,6 +205,7 @@ export function mediaSuggester<E extends SuggestEnv>(options: MediaSuggesterOpti
     // A failed call still spent what it spent where Anthropic reported it, so it is metered before it throws.
     if (options.afterCall)
       await options.afterCall(env, { model: SUGGEST_MODEL, ...result.usage }, id);
+    await recordAiOutcome(options.outcomeKv?.(env), "alt-text", result);
     if (!result.ok) throw new Error(result.error);
     const { tags, alt } = readSuggestion(result.value);
     // Alt text with a high or critical prose finding (a refusal, a cutoff note, a blank, citation markup) is not offered.

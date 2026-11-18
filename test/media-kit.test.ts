@@ -128,6 +128,25 @@ describe("media kit", () => {
         usage: { input: 5, output: 7, cacheRead: 0, cacheWrite: 0 },
       });
 
+      // The outcome is kept for /health's ai-alt-text check: a failure stays until a call works.
+      const kept = new Map<string, string>();
+      const kv = {
+        get: async (key: string) => kept.get(key) ?? null,
+        put: async (key: string, value: string) => void kept.set(key, value),
+        delete: async (key: string) => void kept.delete(key),
+      };
+      const keptSuggest = mediaSuggester({
+        app: "sample",
+        describe: "on a sample site",
+        outcomeKv: () => kv,
+      });
+      fetchMock.mockImplementation(async () => reply(null, 400));
+      await expect(keptSuggest(env, picture())).rejects.toThrow();
+      expect(kept.size).toBe(1);
+      fetchMock.mockImplementation(async () => reply({ alt: "A dog.", tags: ["dog"] }));
+      await keptSuggest(env, picture());
+      expect(kept.size).toBe(0);
+
       fetchMock.mockImplementation(async () => reply(null, 400));
       await expect(suggest(env, picture())).rejects.toThrow();
     } finally {
