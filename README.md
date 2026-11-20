@@ -335,7 +335,7 @@ No route, body or schema changes. It depends on Prelum v0.35.1 (was v0.34.0), so
 Moves the code every site copied into the package. Nothing is added to the wire contract.
 
 - **Log.** `siteApiLog` is the default `log`: site-runtime's scrubbed logger, a missing or wrong key as `authz_fail`, a rate-limited request as `excess_rate_limit_exceeded`. A site passes no `log`.
-- **Cron.** `api.runSchedulesOrThrow()` is `runSchedules` that throws when a schedule failed, so the cron job reports failure.
+- **Cron.** `api.runSchedulesOrThrow()` is `runSchedules` that throws when a schedule failed, so the cron job reports failure; when every failed schedule was the database being down, the error carries that message as its cause, so site-runtime records it as a warning.
 - **Routing.** `isSiteApiRequest(url)` is true for the prefix and preview links, the only requests that need the API built.
 - **Media.** `PICTURE_TYPES`, `pictureLimits(maxBytes?)` and `PICTURE_RESIZE` are the limits every site starts from. `mediaLibrary` imports with the Worker's `fetch` unless `importFetch: null`.
 - **Removed.** `./frontmatter` no longer re-exports `splitSource`, `joinSource`, `readKey`, `readList`, `setBlock` and `setRawKey`: import them from `@drdustinedwards/site-helpers/frontmatter`, their only owner. The root no longer exports `sha256Hex`: import it from `@dustinedwards/site-runtime/encoding`.
