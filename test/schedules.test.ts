@@ -1,6 +1,7 @@
 // v0.10.0: a live post carries a scheduled update; the live version stays served until the cron applies it, and the
 // publish hooks hear every page a request or a schedule changes.
 
+import { isDatabaseDown } from "@dustinedwards/site-runtime/log";
 import { describe, expect, it } from "vitest";
 import { createSiteClient, SiteApiError } from "../src/client.js";
 import { createSiteApi, indexNowHook, type PublishEvent } from "../src/index.js";
@@ -371,5 +372,23 @@ describe("v0.27.0 runSchedulesOrThrow", () => {
       log: () => {},
     });
     await expect(api.runSchedulesOrThrow()).rejects.toThrow("1 site API schedule(s) failed");
+  });
+
+  it("carries the database's message as the cause when every failure was the database being down", async () => {
+    const adapter = memoryAdapter();
+    const api = createSiteApi({
+      adapter: {
+        ...adapter,
+        schedules: {
+          ...adapter.schedules!,
+          due: () => Promise.reject(new Error("D1_ERROR: internal error; reference = abc")),
+        },
+      },
+      key: KEY,
+      limiter: allow,
+      log: () => {},
+    });
+    const error = await api.runSchedulesOrThrow().catch((e: Error) => e);
+    expect(isDatabaseDown(error)).toBe(true);
   });
 });

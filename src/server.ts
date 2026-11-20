@@ -5,6 +5,7 @@
 
 import { jsonResponse } from "@dustinedwards/site-runtime/http";
 import { safeEqual } from "@dustinedwards/site-runtime/compare";
+import { isDatabaseDown } from "@dustinedwards/site-runtime/log";
 
 import { hasContentTrash, type DueSchedule, type SiteAdapter } from "./adapter.js";
 import { PREFIX } from "./contract.js";
@@ -415,7 +416,11 @@ export function createSiteApi(config: SiteApiConfig): SiteApi {
     return emptied;
   }
 
+  // What each run's failed schedules threw, so runSchedulesOrThrow can tell a database that was down from a real fault.
+  const failures = new WeakMap<ScheduleRun, unknown[]>();
+
   async function runSchedules(options: { now?: Date; limit?: number } = {}): Promise<ScheduleRun> {
+    const errors: unknown[] = [];
     const run: ScheduleRun = {
       applied: [],
       skipped: 0,
@@ -444,7 +449,9 @@ export function createSiteApi(config: SiteApiConfig): SiteApi {
       due = await schedules.due({ now, limit });
     } catch (error) {
       log({ siteApi: "schedule-failed", error: String(error) });
-      return { ...run, failed: 1 };
+      const failed = { ...run, failed: 1 };
+      failures.set(failed, [error]);
+      return failed;
     }
     // One at a time and each on its own: one failing never stops the rest, and is listed again next pass.
     for (const item of due) {
@@ -474,6 +481,7 @@ export function createSiteApi(config: SiteApiConfig): SiteApi {
         }
       } catch (error) {
         run.failed++;
+        errors.push(error);
         log({
           siteApi: "schedule-failed",
           id: item.id,
@@ -483,6 +491,7 @@ export function createSiteApi(config: SiteApiConfig): SiteApi {
       }
     }
     run.more = due.length >= limit;
+    failures.set(run, errors);
     return run;
   }
 
@@ -630,7 +639,16 @@ export function createSiteApi(config: SiteApiConfig): SiteApi {
     runSchedules,
     async runSchedulesOrThrow(options) {
       const run = await runSchedules(options);
-      if (run.failed > 0) throw new Error(`${run.failed} site API schedule(s) failed`);
+      if (run.failed > 0) {
+        const errors = failures.get(run) ?? [];
+        // When every failure was the database being down, the cause carries its message, so site-runtime's runJobs
+        // records the job failed for /health as a warning, not an error report; each schedule is tried again next pass.
+        const down = errors.length === run.failed && errors.every(isDatabaseDown);
+        throw new Error(
+          `${run.failed} site API schedule(s) failed`,
+          down ? { cause: errors[0] } : undefined,
+        );
+      }
       return run;
     },
     // v0.22.0: HEAD as well, so a link checker's HEAD meets the same noindex answer as a browser's GET.
