@@ -71,7 +71,7 @@
   },
   "devDependencies": {
     "@changesets/cli": "3.0.3",
-    "@drdustinedwards/site-helpers": "github:DrDustinEdwards/prelum#v0.63.4",
+    "@drdustinedwards/site-helpers": "github:DrDustinEdwards/prelum#v0.63.6",
     "@dustinedwards/devkit": "github:DrDustinEdwards/devkit#v0.55.4",
     "@dustinedwards/site-runtime": "github:DrDustinEdwards/site-runtime#v0.171.0",
     "@types/node": "26.6.6",
