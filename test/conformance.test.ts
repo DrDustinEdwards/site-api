@@ -583,8 +583,8 @@ describe("conformance", () => {
     return { adapter, fetch };
   }
 
-  it("with probePosts, takes a post of its own through its life, lists every probe, and leaves nothing behind", async () => {
-    const { adapter, fetch } = liveSite();
+  it("with probePosts, takes a post of its own through its life, lists every probe, and leaves nothing behind, on a site that deletes only from the trash", async () => {
+    const { adapter, fetch } = liveSite({ deleteFromTrashOnly: true });
     const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch, probePosts: true });
     expect(failing(report)).toEqual([]);
     const post = report.probes.filter((p) => p.name.startsWith("probe post:"));
@@ -626,13 +626,6 @@ describe("conformance", () => {
         .filter((p) => p.name.startsWith("probe post:"))
         .every((p) => p.skipped && /cannot delete/.test(p.detail!)),
     ).toBe(true);
-  });
-
-  it("leaves nothing behind on a site that deletes only from the trash", async () => {
-    const { adapter, fetch } = liveSite({ deleteFromTrashOnly: true });
-    const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch, probePosts: true });
-    expect(failing(report)).toEqual([]);
-    expect(adapter.store.size).toBe(0);
   });
 
   it("skips the write probe when told to", async () => {
