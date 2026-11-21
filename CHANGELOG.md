@@ -1,5 +1,12 @@
 # @dustinedwards/site-api
 
+## 0.46.3
+
+### Patch Changes
+
+- The gateway step no longer purges the stored pages after a preview link write or a draft saved on an item that is not live. Every Carrel autosave and every conformance probe wiped all of a site's cached pages.
+- The conformance probe post can start from the site's own new-post source (`newSource`), so a site that requires a slug, a date or JSON fields beyond a title is probed with a post it accepts.
+
 ## 0.46.2
 
 ### Patch Changes
