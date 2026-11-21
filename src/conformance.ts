@@ -56,6 +56,12 @@ export interface ConformanceConfig {
    * content skips it, since the probe could not clean up after itself.
    */
   probePosts?: boolean;
+  /**
+   * The source a new post starts from on this site, for its id (what Carrel's New post sends). The probe keeps its front
+   * matter, sets its own title and adds its fields, so a site that requires more than a title to create a post is probed
+   * with a post it accepts. Absent: a title alone.
+   */
+  newSource?: (id: string) => string;
   /** How long the hooks probe waits for every hook to record its run, in milliseconds. 5000 by default. */
   hookWaitMs?: number;
 }
@@ -1186,7 +1192,11 @@ export async function runConformance(config: ConformanceConfig): Promise<Conform
     };
     const postFields = caps.postFields ?? [];
     const searchFields = caps.searchFields ?? [];
-    let front = `title: "Conformance probe ${run}"`;
+    // The site's own starting source, as Carrel's New post sends it (a site may require a slug, a date or JSON fields
+    // beyond the title); only the title is the probe's.
+    const title = `title: "Conformance probe ${run}"`;
+    const base = config.newSource ? splitSource(config.newSource(id)).front : null;
+    let front = base ? base.replace(/^title:.*$/m, title) : title;
     front = setPostFields(front, Object.fromEntries(postFields.map((f) => [f, postValues[f]])));
     front = setSearchFields(
       front,

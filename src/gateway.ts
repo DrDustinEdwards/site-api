@@ -90,7 +90,29 @@ export function siteApiStep<E>(
     if (api.matchesPreviewLink(request)) return api.servePreviewLink(request);
     if (!api.matches(request)) return undefined;
     const response = await api.handle(request, ctx);
-    kit.purgeAfterWrite(request, response, `carrel ${request.method} ${kit.url.pathname}`);
+    if (!(await changesNothingPublic(request, response, kit.url)))
+      kit.purgeAfterWrite(request, response, `carrel ${request.method} ${kit.url.pathname}`);
     return response;
   };
+}
+
+/**
+ * A write that cannot change a stored page: a preview link, and a draft saved on an item that is not live (the answer
+ * says `draft`, never `published`; an always-live item such as a page answers `published` and still purges). Purging on
+ * these wiped every stored page at every autosave and every conformance probe.
+ */
+async function changesNothingPublic(
+  request: Request,
+  response: Response,
+  url: URL,
+): Promise<boolean> {
+  if (/\/preview-links(\/|$)/.test(url.pathname)) return true;
+  if (request.method !== "PUT" || !/\/content\/[^/]+\/draft$/.test(url.pathname)) return false;
+  if (response.status >= 400) return false;
+  try {
+    const answer = (await response.clone().json()) as { status?: unknown };
+    return answer.status === "draft";
+  } catch {
+    return false;
+  }
 }

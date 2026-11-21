@@ -609,6 +609,40 @@ describe("conformance", () => {
     expect(adapter.store.size).toBe(0);
   });
 
+  it("starts the probe post from the site's own new-post source, for a site that requires more than a title", async () => {
+    const { adapter, fetch: inner } = liveSite();
+    const needsSlug = ((input: RequestInfo | URL, init?: RequestInit) => {
+      const request = new Request(input, init);
+      return request.method === "PUT" &&
+        /\/content\/carrel-conformance-[0-9a-f]{8}\/draft/.test(request.url)
+        ? request
+            .clone()
+            .json()
+            .then((body: { source: string }) =>
+              /^slug:/m.test(body.source)
+                ? inner(request)
+                : Response.json({ error: "refused" }, { status: 422 }),
+            )
+        : inner(input, init);
+    }) as typeof globalThis.fetch;
+    const without = await runConformance({
+      baseUrl: ORIGIN,
+      key: KEY,
+      fetch: needsSlug,
+      probePosts: true,
+    });
+    expect(failing(without)).toEqual(["probe post: created as a draft"]);
+    const report = await runConformance({
+      baseUrl: ORIGIN,
+      key: KEY,
+      fetch: needsSlug,
+      probePosts: true,
+      newSource: (id) => `---\ntitle: ""\nslug: ${id}\n---\n`,
+    });
+    expect(failing(report)).toEqual([]);
+    expect(adapter.store.size).toBe(0);
+  });
+
   it("PLANT: fails a site whose not-found page never answers 410, and still deletes its probe post; skips a page site", async () => {
     const { adapter, fetch } = liveSite({ tombstones: false });
     const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch, probePosts: true });
