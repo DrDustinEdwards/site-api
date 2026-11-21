@@ -73,7 +73,7 @@
     "@changesets/cli": "3.0.3",
     "@drdustinedwards/site-helpers": "github:DrDustinEdwards/prelum#v0.63.7",
     "@dustinedwards/devkit": "github:DrDustinEdwards/devkit#v0.55.5",
-    "@dustinedwards/site-runtime": "github:DrDustinEdwards/site-runtime#v0.172.1",
+    "@dustinedwards/site-runtime": "github:DrDustinEdwards/site-runtime#v0.173.0",
     "@types/node": "26.6.6",
     "@vitest/coverage-v8": "5.1.0",
     "drizzle-orm": "0.45.4",
