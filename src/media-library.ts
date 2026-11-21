@@ -45,8 +45,6 @@ import { kindOf, orientationOf, transformFocus, turnsSize } from "./media.js";
 import { mediaRev, mediaVersion, toArrayBuffer } from "./media-kit.js";
 import { placeholderAndColor, prepareUpload, type UploadImages } from "./media-upload.js";
 
-// ---------- What a site gives the library
-
 /** One file's index row, in the contract's terms. A site's store maps its own columns to and from it. */
 export interface MediaRecord {
   /** The storage key, which is the file's id (MediaId). */
@@ -319,8 +317,6 @@ export interface MediaLibraryOptions {
   now?(): Date;
 }
 
-// ---------- Keys
-
 const EXTENSIONS: Record<string, string> = {
   "image/jpeg": "jpg",
   "image/png": "png",
@@ -352,8 +348,6 @@ export function datedKey(prefix: string): (file: MediaKeyInput, attempt: number)
     return `${prefix}${file.at.slice(0, 4)}/${file.at.slice(5, 7)}/${name}-${file.sha256.slice(0, 8)}${attempt === 1 ? "" : `-${attempt}`}.${extensionFor(file.contentType, file.filename)}`;
   };
 }
-
-// ---------- The library
 
 const LIBRARY_LENSES = [
   "no-alt",
