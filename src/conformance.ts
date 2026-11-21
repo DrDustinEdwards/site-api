@@ -62,7 +62,7 @@ export interface ConformanceConfig {
    * with a post it accepts. Absent: a title alone.
    */
   newSource?: (id: string) => string;
-  /** How long the hooks probe waits for every hook to record its run, in milliseconds. 5000 by default. */
+  /** How long the probe waits for a hook to record its run, or a purged page to change its answer, in milliseconds. 5000 by default. */
   hookWaitMs?: number;
 }
 
@@ -1142,11 +1142,19 @@ export async function runConformance(config: ConformanceConfig): Promise<Conform
         throw new Error(`${what}: ${response.status} ${(await errorCode(response)) ?? ""}`.trim());
       return schema.parse(await response.json());
     }
-    // The site's own public route, through baseUrl, never following a redirect.
-    const publicPage = async (path: string) => {
-      const answer = await doFetch(`${origin}${path}`, { redirect: "manual" });
-      await answer.body?.cancel().catch(() => {});
-      return answer;
+    // The site's own public route, through baseUrl, never following a redirect. Given the status it should answer, it asks
+    // again for up to hookWaitMs: a stored page is purged after the write answers, so the old answer can outlive it briefly.
+    const publicPage = async (path: string, status?: number) => {
+      const until = Date.now() + (config.hookWaitMs ?? 5000);
+      for (;;) {
+        const answer = await doFetch(`${origin}${path}`, { redirect: "manual" });
+        if (status === undefined || answer.status === status || Date.now() >= until) {
+          await answer.body?.cancel().catch(() => {});
+          return answer;
+        }
+        await answer.body?.cancel().catch(() => {});
+        await new Promise((done) => setTimeout(done, 500));
+      }
     };
     // A site may delete only from its trash (germomics does), so a probe post goes to the trash before every delete.
     const trashFirst = async (doc: {
@@ -1312,7 +1320,7 @@ export async function runConformance(config: ConformanceConfig): Promise<Conform
         if (doc.status !== "published" || !doc.path)
           throw new Error(`after publish: ${doc.status}, path ${doc.path ?? "none"}`);
         path = doc.path;
-        expectStatus(await publicPage(path), 200, `public page ${path}`);
+        expectStatus(await publicPage(path, 200), 200, `public page ${path}`);
         return `${path} answers 200`;
       });
 
@@ -1417,7 +1425,7 @@ export async function runConformance(config: ConformanceConfig): Promise<Conform
           [id, version] = [newId, written.version];
           const old = path;
           path = (await read()).path ?? "";
-          const answer = await publicPage(old);
+          const answer = await publicPage(old, 301);
           expectStatus(answer, 301, `old path ${old}`);
           const to = new URL(answer.headers.get("location") ?? "", origin).pathname;
           if (to !== path) throw new Error(`301 to ${to}, expected ${path}`);
@@ -1488,7 +1496,7 @@ export async function runConformance(config: ConformanceConfig): Promise<Conform
             200,
             "delete",
           );
-          expectStatus(await publicPage(gone), 410, `deleted page ${gone}`);
+          expectStatus(await publicPage(gone, 410), 410, `deleted page ${gone}`);
           return `${gone} answers 410`;
         },
       );

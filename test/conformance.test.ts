@@ -584,7 +584,16 @@ describe("conformance", () => {
   }
 
   it("with probePosts, takes a post of its own through its life, lists every probe, and leaves nothing behind, on a site that deletes only from the trash", async () => {
-    const { adapter, fetch } = liveSite({ deleteFromTrashOnly: true });
+    const { adapter, fetch: inner } = liveSite({ deleteFromTrashOnly: true });
+    // A stored page is purged after the write answers: the first answer for a moved or deleted page is the stale one.
+    const stale = new Set<string>();
+    const fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const answer = await inner(input, init);
+      const url = new Request(input).url;
+      if (![301, 410].includes(answer.status) || stale.has(url)) return answer;
+      stale.add(url);
+      return new Response("<p>post</p>");
+    }) as typeof globalThis.fetch;
     const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch, probePosts: true });
     expect(failing(report)).toEqual([]);
     const post = report.probes.filter((p) => p.name.startsWith("probe post:"));
@@ -645,7 +654,13 @@ describe("conformance", () => {
 
   it("PLANT: fails a site whose not-found page never answers 410, and still deletes its probe post; skips a page site", async () => {
     const { adapter, fetch } = liveSite({ tombstones: false });
-    const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch, probePosts: true });
+    const report = await runConformance({
+      baseUrl: ORIGIN,
+      key: KEY,
+      fetch,
+      probePosts: true,
+      hookWaitMs: 600,
+    });
     expect(failing(report)).toEqual(["probe post: a delete answers 410 on the old path"]);
     expect(adapter.store.size).toBe(0);
     const page = await runConformance({
