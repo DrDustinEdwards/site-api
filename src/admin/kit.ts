@@ -10,8 +10,6 @@ import {
   type MediaUse,
 } from "../contract.js";
 
-// ---------- what the host supplies
-
 /** What this person may do on this site. The kit refuses an intent the person may not run, whatever the form says. */
 export interface Permissions {
   /** Tag, duplicate, upload, edit alt text and tags, trash and restore. */
@@ -83,8 +81,6 @@ export function actingClient(client: SiteClient, actor: { name: string } | undef
   };
 }
 
-// ---------- what an intent returns
-
 /** The fields a form posts. A list (ids, versions) is an array; one value is a string. An upload's file is a Blob. */
 export type Fields = Record<string, string | string[]>;
 export type IntentInput = FormData | Record<string, string | string[] | Blob>;
@@ -141,8 +137,6 @@ export interface ConfirmRequest {
 /** The most items one intent acts on, as the site's own bulk route allows. */
 const MAX_INTENT_ITEMS = 100;
 export const PER_PAGE = 50;
-
-// ---------- shared plumbing
 
 export function fieldOf(input: IntentInput, name: string): Array<string | Blob> {
   if (input instanceof FormData) return input.getAll(name) as Array<string | Blob>;

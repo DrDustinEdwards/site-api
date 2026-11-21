@@ -11,8 +11,6 @@ import { checkProse } from "@dustinedwards/site-runtime/prose";
 
 import { NotFoundError, RefusedError, VersionConflictError } from "./adapter.js";
 
-// ---------- Versions
-
 /** A version this package's sites answer: `r` and the row's rev, a whole number without a leading zero. */
 export const MEDIA_VERSION_PATTERN = /^r(0|[1-9]\d{0,15})$/;
 
@@ -61,8 +59,6 @@ export function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
   new Uint8Array(buffer).set(bytes);
   return buffer;
 }
-
-// ---------- AI suggestions
 
 /** The vision model: Claude's fast role (site-runtime's MODEL_IDS.fast, Haiku 5.5), called straight at Anthropic. */
 export const SUGGEST_MODEL = MODEL_IDS.fast;
@@ -223,8 +219,6 @@ export function mediaSuggester<E extends SuggestEnv>(options: MediaSuggesterOpti
     };
   };
 }
-
-// ---------- Preview
 
 export interface PreviewDocumentInput {
   /** The page's title, written escaped. */

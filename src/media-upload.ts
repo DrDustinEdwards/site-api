@@ -18,8 +18,6 @@ const u32be = (b: Uint8Array, at: number) =>
 const u32le = (b: Uint8Array, at: number) =>
   (b[at]! | (b[at + 1]! << 8) | (b[at + 2]! << 16) | (b[at + 3]! << 24)) >>> 0;
 
-// ---------- Embedded metadata
-
 /**
  * What a picture says about itself (mediaEmbedded), read from its XMP, its IPTC and its EXIF, in that order of trust.
  * `credit` is the credit line, else the creator; `license` the usage terms, else the copyright notice (what it held before
@@ -623,8 +621,6 @@ function fromIptc(resources: Uint8Array): Facts {
   };
 }
 
-// ---------- Private metadata
-
 /** IFD0 tags a cleaned file keeps: description, orientation, resolution, chroma siting, artist and copyright. */
 const KEEP_IFD0 = new Set([
   TAGS.description,
@@ -939,8 +935,6 @@ function cleanHeif(b: Uint8Array): Uint8Array {
   return out;
 }
 
-// ---------- Placeholder and main color
-
 /**
  * The placeholder fits inside this square, so a tall or a wide picture's stays as small as a square one's. Moved from
  * dustinedwards.info's placeholderFor (v0.15.0), the one site that made one, at 20 pixels wide and unblurred.
@@ -1053,8 +1047,6 @@ export async function placeholderAndColor(
   }
 }
 
-// ---------- File names
-
 /** The words of a camera's, a phone's or a screenshot tool's own file name, which say nothing a search can use. */
 const CAMERA_WORDS = new Set([
   "img",
@@ -1136,8 +1128,6 @@ export function fileNameFor(filename: string, contentType: string, words: string
         : stem
   ).slice(0, 200);
 }
-
-// ---------- The upload step
 
 /** The Images binding as prepareUpload uses it: site-runtime's ImagesLike, and `info`, which measures a picture for free. */
 export interface UploadImages extends ImagesLike {
