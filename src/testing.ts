@@ -55,6 +55,8 @@ export interface MemoryAdapterOptions {
   media?: MediaUploadLimits | false;
   /** false for a site whose adapter has no content delete (its route then answers 501). On by default. */
   contentDelete?: boolean;
+  /** true for a site that deletes only from the trash, refusing a delete of a post that is not in it (germomics). Off by default. */
+  deleteFromTrashOnly?: boolean;
   /** false for a site that keeps no post tags through the API (a v0.5.0 site): the tags route then answers 501. On by default. */
   contentTags?: boolean;
   /** false for a site whose transcripts are read only (before v0.36.0): the transcript route then answers 501. On by default. */
@@ -1362,7 +1364,9 @@ export function memoryAdapter(options: MemoryAdapterOptions = {}): SiteAdapter &
         : {
             async delete(id: string, input: { expectedVersion: string; changeId: string }) {
               if (!store.has(id)) throw new NotFoundError();
-              expect(id, input.expectedVersion);
+              const held = expect(id, input.expectedVersion);
+              if (options.deleteFromTrashOnly && !held?.doc.trashedAt)
+                throw new RefusedError("Move this post to the trash first.");
               store.delete(id);
               deletedContent.push(id);
             },

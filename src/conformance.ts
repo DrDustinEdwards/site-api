@@ -1142,6 +1142,24 @@ export async function runConformance(config: ConformanceConfig): Promise<Conform
       await answer.body?.cancel().catch(() => {});
       return answer;
     };
+    // A site may delete only from its trash (germomics does), so a probe post goes to the trash before every delete.
+    const trashFirst = async (doc: {
+      version: string;
+      status: string;
+      trashedAt?: string | null;
+    }) =>
+      caps.contentTrash && !doc.trashedAt
+        ? (
+            await ok(
+              await json("POST", `/content/${id}/trash`, {
+                expectedVersion: doc.version,
+                changeId: probe(),
+              }),
+              WriteResult,
+              "trash before delete",
+            )
+          ).version
+        : doc.version;
     const step = async (name: string, passedOver: string | null, run: () => Promise<string>) =>
       passedOver ? (skip(name, passedOver), false) : check(name, run);
 
@@ -1451,6 +1469,7 @@ export async function runConformance(config: ConformanceConfig): Promise<Conform
                   )
                 ).version;
           const gone = (await read()).path ?? path;
+          version = await trashFirst({ version, status: "published" });
           expectStatus(
             await json(
               "DELETE",
@@ -1468,10 +1487,11 @@ export async function runConformance(config: ConformanceConfig): Promise<Conform
         const left = await json("GET", `/content/${encodeURIComponent(id)}`);
         if (left.status === 404) return `${id} is gone`;
         const doc = await ok(left, ContentDoc, "read before cleaning up");
+        const current = await trashFirst(doc);
         expectStatus(
           await json(
             "DELETE",
-            `/content/${id}?expectedVersion=${encodeURIComponent(doc.version)}&changeId=${probe()}`,
+            `/content/${id}?expectedVersion=${encodeURIComponent(current)}&changeId=${probe()}`,
           ),
           200,
           "cleanup delete",

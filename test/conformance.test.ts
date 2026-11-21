@@ -546,10 +546,13 @@ describe("conformance", () => {
   });
 
   // v0.22.0 (M1): the probe post, on a site whose public routes answer as a real site's do.
-  function liveSite(options: { tombstones?: boolean; contentDelete?: boolean } = {}) {
+  function liveSite(
+    options: { tombstones?: boolean; contentDelete?: boolean; deleteFromTrashOnly?: boolean } = {},
+  ) {
     const adapter = memoryAdapter({
       site: { id: "memory", name: "Memory site", origin: ORIGIN },
       ...(options.contentDelete === false ? { contentDelete: false } : {}),
+      ...(options.deleteFromTrashOnly ? { deleteFromTrashOnly: true } : {}),
     });
     const store = d1SiteApiStore(d1(SITE_API_STORE_SQL));
     const api = createSiteApi({
@@ -623,6 +626,13 @@ describe("conformance", () => {
         .filter((p) => p.name.startsWith("probe post:"))
         .every((p) => p.skipped && /cannot delete/.test(p.detail!)),
     ).toBe(true);
+  });
+
+  it("leaves nothing behind on a site that deletes only from the trash", async () => {
+    const { adapter, fetch } = liveSite({ deleteFromTrashOnly: true });
+    const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch, probePosts: true });
+    expect(failing(report)).toEqual([]);
+    expect(adapter.store.size).toBe(0);
   });
 
   it("skips the write probe when told to", async () => {
