@@ -62,6 +62,8 @@ export interface ConformanceConfig {
    * with a post it accepts. Absent: a title alone.
    */
   newSource?: (id: string) => string;
+  /** True for a site that checks the share image as a whole address (foxing.app); a site-absolute path otherwise (dustinedwards.info refuses a full URL). */
+  imageAsUrl?: boolean;
   /** How long the probe waits for a hook to record its run, or a purged page to change its answer, in milliseconds. 5000 by default. */
   hookWaitMs?: number;
 }
@@ -1194,8 +1196,7 @@ export async function runConformance(config: ConformanceConfig): Promise<Conform
     const searchValues: Partial<SearchValues> = {
       searchTitle: "Conformance search title",
       description: "Conformance description.",
-      // A whole address: a site may check the share image as a URL (foxing.app refuses a bare path).
-      image: `${new URL(origin).origin}/conformance-probe.png`,
+      image: `${config.imageAsUrl ? new URL(origin).origin : ""}/conformance-probe.png`,
       imageAlt: "Conformance probe picture.",
       canonical: `${new URL(origin).origin}/conformance-probe`,
       // Kept out of search wherever the site renders noindex.
