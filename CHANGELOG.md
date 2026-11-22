@@ -1,5 +1,12 @@
 # @dustinedwards/site-api
 
+## 0.47.0
+
+### Minor Changes
+
+- The admin entry no longer re-exports `localClient` (it stays in `./client`), `askFirst` or the types nothing imports (`Fields`, `IntentInput`, `Outcome`, `ConfirmRequest`, `PostRow`, `PostIntent`, `PostSort`, `MediaRow`, `MediaIntent`, `MediaSuggestionView`, `MentionFilter`, `MentionIntent`); `./client` no longer exports `LocalClientOptions`, `./conformance` `ConformanceCheck` and `ConformanceProbe`, `./schedules` `D1ScheduledUpdates`.
+- `orderAndPage` sorts and cuts a content list a site holds in memory, and `d1ScheduledUpdates().waiting()` lists every waiting update, so a site's adapter stops carrying its own copy of each.
+
 ## 0.46.16
 
 ### Patch Changes
