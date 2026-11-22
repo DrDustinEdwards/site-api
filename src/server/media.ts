@@ -273,8 +273,7 @@ export function mediaRoutes(
       pattern: new RegExp(`^/media/${ID}/caption$`),
       run: async (m, _u, request) => {
         const id = mediaId(m);
-        if (!media.setCaption)
-          return notImplemented("This site does not keep captions on files.");
+        if (!media.setCaption) return notImplemented("This site does not keep captions on files.");
         const input = await readBody(request, MediaCaptionInput);
         const result = await media.setCaption(id, input);
         return jsonResponse(
@@ -367,8 +366,7 @@ export function mediaRoutes(
       pattern: new RegExp(`^/media/${ID}/transform$`),
       run: async (m, _u, request) => {
         const id = mediaId(m);
-        if (!media.transform)
-          return notImplemented("This site does not turn or mirror pictures.");
+        if (!media.transform) return notImplemented("This site does not turn or mirror pictures.");
         const input = await readBody(request, MediaTransformInput);
         const current = await held(id, input.expectedVersion, "turned");
         if (kindOf(current.contentType) !== "image")
@@ -451,8 +449,7 @@ export function mediaRoutes(
       pattern: new RegExp(`^/media/${ID}/suggestions$`),
       run: async (m) => {
         const id = mediaId(m);
-        if (!media.suggest)
-          return notImplemented("This site does not suggest tags or alt text.");
+        if (!media.suggest) return notImplemented("This site does not suggest tags or alt text.");
         const found = await media.suggest(id);
         if (!found) throw new NotFoundError("No such media.");
         return jsonResponse(
@@ -512,8 +509,7 @@ export function mediaRoutes(
       pattern: new RegExp(`^/media/${ID}/trash$`),
       run: async (m, _u, request) => {
         const id = mediaId(m);
-        if (!media.trash || !media.restore)
-          return notImplemented("This site has no media trash.");
+        if (!media.trash || !media.restore) return notImplemented("This site has no media trash.");
         const input = await readBody(request, MediaTrashInput);
         const result = await media.trash(id, input);
         return jsonResponse(
@@ -532,8 +528,7 @@ export function mediaRoutes(
       pattern: new RegExp(`^/media/${ID}/restore$`),
       run: async (m, _u, request) => {
         const id = mediaId(m);
-        if (!media.trash || !media.restore)
-          return notImplemented("This site has no media trash.");
+        if (!media.trash || !media.restore) return notImplemented("This site has no media trash.");
         const input = await readBody(request, MediaTrashInput);
         const result = await media.restore(id, input);
         return jsonResponse(
@@ -551,8 +546,7 @@ export function mediaRoutes(
       method: "POST",
       pattern: /^\/media\/trash\/empty$/,
       run: async (_m, _u, request) => {
-        if (!media.trash || !media.restore)
-          return notImplemented("This site has no media trash.");
+        if (!media.trash || !media.restore) return notImplemented("This site has no media trash.");
         const input = await readBody(request, MediaTrashEmptyInput);
         // Gather first, then delete: a cursor into a list that is shrinking would skip files.
         const ids: string[] = [];
@@ -757,8 +751,7 @@ export function mediaRoutes(
 
   /** The files changed since a cursor: a poll takes no other filter, so it never misses a file another filter would hide. */
   async function changesSince(since: string, limit: number, url: URL): Promise<Response> {
-    if (!media.changes)
-      return notImplemented("This site does not say what changed since.");
+    if (!media.changes) return notImplemented("This site does not say what changed since.");
     const other = [...url.searchParams.keys()].filter((k) => k !== "changedSince" && k !== "limit");
     if (other.length > 0)
       throw new BadRequest(

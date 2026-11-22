@@ -395,8 +395,7 @@ export function contentRoutes(
       pattern: new RegExp(`^/content/${ID}/${op}$`),
       run: async (m: RegExpMatchArray, _u: URL, request: Request) => {
         const contentId = id(m);
-        if (!hasContentTrash(adapter))
-          return notImplemented("This site has no content trash.");
+        if (!hasContentTrash(adapter)) return notImplemented("This site has no content trash.");
         const input = await readBody(request, ContentTrashInput);
         return jsonResponse(
           checked(WriteResult, await adapter.content[op]!(contentId, input), `content ${op}`),
