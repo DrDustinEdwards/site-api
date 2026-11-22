@@ -630,7 +630,9 @@ describe("conformance", () => {
               .clone()
               .json()
               .then((body: { source: string }) =>
-                /^slug:/m.test(body.source) && /^image: "https?:/m.test(body.source) === url
+                /^slug:/m.test(body.source) &&
+                /^image: "https?:/m.test(body.source) === url &&
+                (!url || /^authors: \["Foxing"\]/m.test(body.source))
                   ? inner(request)
                   : Response.json(
                       { error: "refused", message: "invalid frontmatter: slug" },
@@ -648,7 +650,15 @@ describe("conformance", () => {
     );
     expect(failing(await runConformance({ ...base, fetch: picky(false), newSource }))).toEqual([]);
     expect(
-      failing(await runConformance({ ...base, fetch: picky(true), newSource, imageAsUrl: true })),
+      failing(
+        await runConformance({
+          ...base,
+          fetch: picky(true),
+          newSource,
+          imageAsUrl: true,
+          author: "Foxing",
+        }),
+      ),
     ).toEqual([]);
     expect(adapter.store.size).toBe(0);
   });
