@@ -682,7 +682,7 @@ describe("conformance", () => {
     const fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
       const request = new Request(input, init);
       const answer = await inner(request);
-      return request.method === "POST" && /\/rename$/.test(request.url)
+      return request.method === "POST" && request.url.endsWith("/rename")
         ? new Response("boom", { status: 500 })
         : answer;
     }) as typeof globalThis.fetch;
