@@ -62,7 +62,7 @@ import {
   ID,
   checked,
   describeFailure,
-  fail,
+  notImplemented,
   pathParam,
   readBody,
   readQuery,
@@ -90,11 +90,11 @@ export function mediaRoutes(
         if (query.changedSince !== undefined)
           return changesSince(query.changedSince, query.limit, url);
         if (query.lens && !(media.lenses ?? []).includes(query.lens))
-          return fail("not-implemented", `This site does not offer the ${query.lens} lens.`);
+          return notImplemented(`This site does not offer the ${query.lens} lens.`);
         if (query.sort === "used" && !media.usage)
-          return fail("not-implemented", "This site does not count where its files are used.");
+          return notImplemented("This site does not count where its files are used.");
         if ((query.orientation || query.kind) && !media.filters)
-          return fail("not-implemented", "This site does not filter files by orientation or kind.");
+          return notImplemented("This site does not filter files by orientation or kind.");
         const list = checked(MediaList, await media.list(query), "media list");
         // The first page is where a screen learns the point to poll from.
         if (media.changes && list.changeCursor === undefined)
@@ -130,10 +130,10 @@ export function mediaRoutes(
       query: true,
       run: async (_m, url, request) => {
         if (!media.suggestFile)
-          return fail("not-implemented", "This site does not suggest alt text before an upload.");
+          return notImplemented("This site does not suggest alt text before an upload.");
         const { url: address } = readQuery(url, MediaFileSuggestQuery);
         if (address && !media.importFetch)
-          return fail("not-implemented", "This site does not import files from the web.");
+          return notImplemented("This site does not import files from the web.");
         const file = address
           ? await imported(address)
           : { contentType: mediaType(request.headers.get("content-type")), bytes: null };
@@ -156,7 +156,7 @@ export function mediaRoutes(
       pattern: /^\/media\/import$/,
       run: async (_m, _u, request) => {
         if (!media.importFetch)
-          return fail("not-implemented", "This site does not import files from the web.");
+          return notImplemented("This site does not import files from the web.");
         const input = await readBody(request, MediaImportInput);
         const decorative = input.decorative === true;
         checkAlt(input.alt, decorative, input.filename ?? nameOf(input.url), false);
@@ -205,7 +205,7 @@ export function mediaRoutes(
       run: async (m, _u, request) => {
         const id = mediaId(m);
         if (!media.setAlt)
-          return fail("not-implemented", "This site does not edit alt text through the API.");
+          return notImplemented("This site does not edit alt text through the API.");
         const input = await readBody(request, MediaAltInput);
         const decorative = input.decorative === true;
         // An alt that may be the file's own name is checked against it; a decorative choice needs no read.
@@ -231,7 +231,7 @@ export function mediaRoutes(
       pattern: new RegExp(`^/media/${ID}/tags$`),
       run: async (m, _u, request) => {
         const id = mediaId(m);
-        if (!media.setTags) return fail("not-implemented", "This site does not keep media tags.");
+        if (!media.setTags) return notImplemented("This site does not keep media tags.");
         const input = await readBody(request, MediaTagsInput);
         const result = await media.setTags(id, { ...input, tags: [...new Set(input.tags)].sort() });
         return jsonResponse(
@@ -252,7 +252,7 @@ export function mediaRoutes(
       run: async (m, _u, request) => {
         const id = mediaId(m);
         if (!media.setFocus)
-          return fail("not-implemented", "This site does not keep a focal point on files.");
+          return notImplemented("This site does not keep a focal point on files.");
         const input = await readBody(request, MediaFocusInput);
         // In the one spelling site-runtime's ./image writes into a crop's URL, so the stored point and the URL agree.
         const focus = input.focus === null ? null : focusOf(input.focus);
@@ -273,8 +273,7 @@ export function mediaRoutes(
       pattern: new RegExp(`^/media/${ID}/caption$`),
       run: async (m, _u, request) => {
         const id = mediaId(m);
-        if (!media.setCaption)
-          return fail("not-implemented", "This site does not keep captions on files.");
+        if (!media.setCaption) return notImplemented("This site does not keep captions on files.");
         const input = await readBody(request, MediaCaptionInput);
         const result = await media.setCaption(id, input);
         return jsonResponse(
@@ -294,7 +293,7 @@ export function mediaRoutes(
       pattern: new RegExp(`^/media/${ID}/file$`),
       run: async (m, url, request) => {
         const id = mediaId(m);
-        if (!media.replace) return fail("not-implemented", "This site does not replace files.");
+        if (!media.replace) return notImplemented("This site does not replace files.");
         const query = readQuery(url, MediaReplaceQuery);
         const contentType = mediaType(request.headers.get("content-type"));
         // As an upload: a type the site does not accept is refused unread.
@@ -343,7 +342,7 @@ export function mediaRoutes(
       run: async (m, _u, request) => {
         const id = mediaId(m);
         if (!media.setCredit)
-          return fail("not-implemented", "This site does not keep credit and license on files.");
+          return notImplemented("This site does not keep credit and license on files.");
         const input = await readBody(request, MediaCreditInput);
         const result = await media.setCredit(id, {
           ...input,
@@ -367,8 +366,7 @@ export function mediaRoutes(
       pattern: new RegExp(`^/media/${ID}/transform$`),
       run: async (m, _u, request) => {
         const id = mediaId(m);
-        if (!media.transform)
-          return fail("not-implemented", "This site does not turn or mirror pictures.");
+        if (!media.transform) return notImplemented("This site does not turn or mirror pictures.");
         const input = await readBody(request, MediaTransformInput);
         const current = await held(id, input.expectedVersion, "turned");
         if (kindOf(current.contentType) !== "image")
@@ -400,7 +398,7 @@ export function mediaRoutes(
       run: async (m) => {
         const id = mediaId(m);
         if (!media.history || !media.revert)
-          return fail("not-implemented", "This site does not keep a file's earlier versions.");
+          return notImplemented("This site does not keep a file's earlier versions.");
         const revisions = await media.history(id);
         if (!revisions) throw new NotFoundError("No such media.");
         return jsonResponse(
@@ -416,7 +414,7 @@ export function mediaRoutes(
       run: async (m, _u, request) => {
         const id = mediaId(m);
         if (!media.history || !media.revert)
-          return fail("not-implemented", "This site does not keep a file's earlier versions.");
+          return notImplemented("This site does not keep a file's earlier versions.");
         const input = await readBody(request, MediaRevertInput);
         const current = await held(id, input.expectedVersion, "reverted");
         const target = (await media.history(id))?.find((r) => r.rev === input.to);
@@ -451,8 +449,7 @@ export function mediaRoutes(
       pattern: new RegExp(`^/media/${ID}/suggestions$`),
       run: async (m) => {
         const id = mediaId(m);
-        if (!media.suggest)
-          return fail("not-implemented", "This site does not suggest tags or alt text.");
+        if (!media.suggest) return notImplemented("This site does not suggest tags or alt text.");
         const found = await media.suggest(id);
         if (!found) throw new NotFoundError("No such media.");
         return jsonResponse(
@@ -467,7 +464,7 @@ export function mediaRoutes(
       pattern: /^\/media\/resize-pass$/,
       run: async (_m, _u, request) => {
         if (!media.resize || !media.shrink)
-          return fail("not-implemented", "This site does not shrink stored pictures.");
+          return notImplemented("This site does not shrink stored pictures.");
         const input = await readBody(request, MediaResizePassInput);
         const results: MediaResizeOutcome[] = [];
         // One at a time, like bulk: image work is slow, and one file's refusal is that file's outcome alone.
@@ -512,8 +509,7 @@ export function mediaRoutes(
       pattern: new RegExp(`^/media/${ID}/trash$`),
       run: async (m, _u, request) => {
         const id = mediaId(m);
-        if (!media.trash || !media.restore)
-          return fail("not-implemented", "This site has no media trash.");
+        if (!media.trash || !media.restore) return notImplemented("This site has no media trash.");
         const input = await readBody(request, MediaTrashInput);
         const result = await media.trash(id, input);
         return jsonResponse(
@@ -532,8 +528,7 @@ export function mediaRoutes(
       pattern: new RegExp(`^/media/${ID}/restore$`),
       run: async (m, _u, request) => {
         const id = mediaId(m);
-        if (!media.trash || !media.restore)
-          return fail("not-implemented", "This site has no media trash.");
+        if (!media.trash || !media.restore) return notImplemented("This site has no media trash.");
         const input = await readBody(request, MediaTrashInput);
         const result = await media.restore(id, input);
         return jsonResponse(
@@ -551,8 +546,7 @@ export function mediaRoutes(
       method: "POST",
       pattern: /^\/media\/trash\/empty$/,
       run: async (_m, _u, request) => {
-        if (!media.trash || !media.restore)
-          return fail("not-implemented", "This site has no media trash.");
+        if (!media.trash || !media.restore) return notImplemented("This site has no media trash.");
         const input = await readBody(request, MediaTrashEmptyInput);
         // Gather first, then delete: a cursor into a list that is shrinking would skip files.
         const ids: string[] = [];
@@ -607,7 +601,7 @@ export function mediaRoutes(
       run: async (_m, _u, request) => {
         const input = await readBody(request, MediaBulkInput);
         const lacking = bulkLacking(media, input.op);
-        if (lacking) return fail("not-implemented", lacking);
+        if (lacking) return notImplemented(lacking);
         if (
           (input.op === "add-tags" || input.op === "remove-tags") &&
           (!input.tags || input.tags.length === 0)
@@ -757,8 +751,7 @@ export function mediaRoutes(
 
   /** The files changed since a cursor: a poll takes no other filter, so it never misses a file another filter would hide. */
   async function changesSince(since: string, limit: number, url: URL): Promise<Response> {
-    if (!media.changes)
-      return fail("not-implemented", "This site does not say what changed since.");
+    if (!media.changes) return notImplemented("This site does not say what changed since.");
     const other = [...url.searchParams.keys()].filter((k) => k !== "changedSince" && k !== "limit");
     if (other.length > 0)
       throw new BadRequest(

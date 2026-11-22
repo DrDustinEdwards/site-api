@@ -17,7 +17,7 @@ import {
   BASE_HEADERS,
   ID,
   checked,
-  fail,
+  notImplemented,
   pathParam,
   readBody,
   readQuery,
@@ -66,7 +66,7 @@ export function mentionsRoutes(mentions: MentionsAdapter): Route[] {
         let result;
         if (decision === "reset") {
           if (!mentions.reset)
-            return fail("not-implemented", "This site does not take a mention decision back.");
+            return notImplemented("This site does not take a mention decision back.");
           result = await mentions.reset(id, rest);
         } else {
           result = await mentions.decide(id, { ...rest, decision });

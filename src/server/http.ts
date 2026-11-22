@@ -74,6 +74,8 @@ export function fail(code: ErrorCode, message: string, extra: Partial<ErrorBody>
   });
 }
 
+export const notImplemented = (message: string): Response => fail("not-implemented", message);
+
 export class BadRequest extends Error {
   constructor(
     readonly code: ErrorCode,
