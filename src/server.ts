@@ -143,6 +143,7 @@ export interface SiteApi {
 export const MIN_KEY_LENGTH = 32;
 
 const DAY = 24 * 60 * 60 * 1000;
+const HOUR = 60 * 60 * 1000;
 
 /** True for a request the site API or a preview link answers (or refuses): the only ones that need it built. */
 export function isSiteApiRequest(url: URL): boolean {
@@ -438,6 +439,10 @@ export function createSiteApi(config: SiteApiConfig): SiteApi {
       await store
         .pruneHookRuns?.(before)
         .catch((error) => log({ siteApi: "hook-runs-prune-failed", error: String(error) }));
+      // The probe's own 410 marker has done its job once the probe verified it; it never outlives the hour.
+      await store
+        .pruneProbeGone?.(new Date(now.getTime() - HOUR).toISOString())
+        .catch((error) => log({ siteApi: "probe-gone-prune-failed", error: String(error) }));
     }
     const limit = options.limit ?? SCHEDULE_BATCH_LIMIT;
     run.emptied = await emptyTrash(now, limit);

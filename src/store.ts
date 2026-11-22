@@ -67,6 +67,8 @@ export interface SiteApiStore {
   hookRuns?(changeId: string): Promise<Array<{ hook: string; ok: boolean; at: string }>>;
   /** Drops every hook run kept before `before`. */
   pruneHookRuns?(before: string): Promise<void>;
+  /** Drops the tombstones the conformance probe's deleted posts left (a path ending in `carrel-conformance-…`) kept before `before`. */
+  pruneProbeGone?(before: string): Promise<void>;
 }
 
 /** The D1 store, with every method of v0.22.0. */
@@ -453,6 +455,12 @@ export function d1SiteApiStore(db: D1Like): D1SiteApiStore {
     },
     async pruneHookRuns(before) {
       await db.prepare("DELETE FROM hook_runs WHERE at < ?").bind(before).run();
+    },
+    async pruneProbeGone(before) {
+      await db
+        .prepare("DELETE FROM gone_paths WHERE gone_at < ? AND path LIKE '%/carrel-conformance-%'")
+        .bind(before)
+        .run();
     },
   };
 }
