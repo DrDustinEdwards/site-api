@@ -106,13 +106,19 @@ async function changesNothingPublic(
   response: Response,
   url: URL,
 ): Promise<boolean> {
-  if (/\/preview-links(\/|$)/.test(url.pathname)) return true;
-  if (request.method !== "PUT" || !/\/content\/[^/]+\/draft$/.test(url.pathname)) return false;
-  if (response.status >= 400) return false;
-  try {
-    const answer = (await response.clone().json()) as { status?: unknown };
-    return answer.status === "draft";
-  } catch {
+  if (url.pathname.includes("/preview-links")) return true;
+  if (
+    request.method !== "PUT" ||
+    !/\/content\/[^/]+\/draft$/.test(url.pathname) ||
+    response.status >= 400
+  )
     return false;
-  }
+  return (
+    (
+      (await response
+        .clone()
+        .json()
+        .catch(() => ({}))) as { status?: unknown }
+    ).status === "draft"
+  );
 }
