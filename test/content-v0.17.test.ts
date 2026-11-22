@@ -274,7 +274,7 @@ describe("schedule events (v0.22.0, J1)", () => {
 
 describe("tombstones (v0.22.0, F5)", () => {
   it("answers 410 for a deleted or trashed live page until something is published there again, and keeps it through the trash's end", async () => {
-    const { c, store } = stored();
+    const { c, store, api } = stored();
     const a = await c.saveDraft("a", { source: "# A\n", expectedVersion: null, changeId: "c1" });
     const live = await c.publish("a", { expectedVersion: a.version, changeId: "c2" });
     await c.delete("a", { expectedVersion: live.version, changeId: "c3" });
@@ -292,6 +292,22 @@ describe("tombstones (v0.22.0, F5)", () => {
     const b = await c.saveDraft("b", { source: "# B\n", expectedVersion: null, changeId: "c7" });
     await c.delete("b", { expectedVersion: b.version, changeId: "c8" });
     expect(await store.isGone("/blog/b")).toBe(false);
+
+    // The probe's own marker is swept an hour on (the schedule run); a real tombstone is kept.
+    const p = await c.saveDraft("carrel-conformance-x", {
+      source: "# P\n",
+      expectedVersion: null,
+      changeId: "c9",
+    });
+    const pl = await c.publish("carrel-conformance-x", {
+      expectedVersion: p.version,
+      changeId: "c10",
+    });
+    await c.delete("carrel-conformance-x", { expectedVersion: pl.version, changeId: "c11" });
+    expect(await store.isGone("/blog/carrel-conformance-x")).toBe(true);
+    await api.runSchedules({ now: new Date(Date.now() + 2 * 60 * 60 * 1000) });
+    expect(await store.isGone("/blog/carrel-conformance-x")).toBe(false);
+    expect(await store.isGone("/blog/a")).toBe(true);
 
     // v0.23.0: a site's own 404 becomes 410 with its body kept; a live 200 and a path never live stay as they are.
     const own = await tombstoned(new Response("not here", { status: 404 }), "/blog/a/", store);
