@@ -8,7 +8,7 @@ import { createSiteApi, indexNowHook, type PublishEvent } from "../src/index.js"
 import { d1SiteApiStore, SITE_API_STORE_SQL } from "../src/store.js";
 import { d1 } from "./d1.js";
 import { memoryAdapter } from "../src/testing.js";
-import { KEY, ORIGIN, allow } from "./helpers.js";
+import { KEY, ORIGIN, allow, clientOf } from "./helpers.js";
 
 const LIVE = "---\ntitle: Live\n---\nThe live words.\n";
 const NEXT = "---\ntitle: Live\n---\nThe updated words.\n";
@@ -227,18 +227,8 @@ describe("publish hooks (v0.10.0)", () => {
         }),
       ],
     });
-    const client = createSiteClient({
-      baseUrl: ORIGIN,
-      key: KEY,
-      fetch: (async (i: RequestInfo | URL, init?: RequestInit) =>
-        api.handle(new Request(i, init))) as typeof fetch,
-    });
-    const preview = createSiteClient({
-      baseUrl: "https://preview.workers.dev",
-      key: KEY,
-      fetch: (async (i: RequestInfo | URL, init?: RequestInit) =>
-        api.handle(new Request(i, init))) as typeof fetch,
-    });
+    const client = clientOf(api);
+    const preview = clientOf(api, "https://preview.workers.dev");
 
     const draft = await client.saveDraft("a", {
       source: LIVE,
@@ -315,12 +305,7 @@ describe("publish hooks (v0.17.0)", () => {
         }),
       ],
     });
-    const client = createSiteClient({
-      baseUrl: ORIGIN,
-      key: KEY,
-      fetch: (async (i: RequestInfo | URL, init?: RequestInit) =>
-        api.handle(new Request(i, init))) as typeof fetch,
-    });
+    const client = clientOf(api);
 
     const draft = await client.saveDraft("a", {
       source: LIVE,

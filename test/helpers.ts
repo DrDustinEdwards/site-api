@@ -30,6 +30,12 @@ export function site<A extends SiteAdapter = ReturnType<typeof memoryAdapter>>(
   return { api, fetch, logs, adapter };
 }
 
+export function clientOf(api: ReturnType<typeof createSiteApi>, baseUrl = ORIGIN) {
+  const fetch = (async (input: RequestInfo | URL, init?: RequestInit) =>
+    api.handle(new Request(input, init))) as typeof globalThis.fetch;
+  return createSiteClient({ baseUrl, key: KEY, fetch });
+}
+
 export function siteWithClient(adapter?: ReturnType<typeof memoryAdapter>) {
   const s = site(adapter);
   return { ...s, client: createSiteClient({ baseUrl: ORIGIN, key: KEY, fetch: s.fetch }) };

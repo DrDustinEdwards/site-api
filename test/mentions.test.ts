@@ -59,6 +59,31 @@ function client(adapter: ReturnType<typeof memoryAdapter> = seededAdapter().adap
   return { ...s, client: createSiteClient({ baseUrl: ORIGIN, key: KEY, fetch: s.fetch }) };
 }
 
+async function decideError(
+  c: ReturnType<typeof client>["client"],
+  adapter: ReturnType<typeof memoryAdapter>,
+  id: string,
+  decision: "approve" | "reset",
+) {
+  return c.mentions
+    .decide(id, {
+      decision,
+      expectedVersion: adapter.mentionStore.get(id)!.version,
+      changeId: "c1",
+    })
+    .catch((e) => e);
+}
+
+async function approvePending(
+  c: ReturnType<typeof client>["client"],
+  adapter: ReturnType<typeof memoryAdapter>,
+  id: string,
+) {
+  const stale = adapter.mentionStore.get(id)!.version;
+  await c.mentions.decide(id, { decision: "approve", expectedVersion: stale, changeId: "c1" });
+  return stale;
+}
+
 const snapshot = (adapter: ReturnType<typeof memoryAdapter>) =>
   structuredClone([...adapter.mentionStore.values()]);
 
@@ -182,13 +207,7 @@ describe("mentions decide", () => {
     const { client: c } = client(adapter);
     const before = snapshot(adapter);
     for (const id of [ids.pending, ids.unverified]) {
-      const error = await c.mentions
-        .decide(id, {
-          decision: "reset",
-          expectedVersion: adapter.mentionStore.get(id)!.version,
-          changeId: "c1",
-        })
-        .catch((e) => e);
+      const error = await decideError(c, adapter, id, "reset");
       expect(error.status, id).toBe(422);
       expect(error.body.message).toContain("no decision to take back");
     }
@@ -203,13 +222,7 @@ describe("mentions decide", () => {
       status: "approved",
     });
     const { client: c } = client(adapter);
-    const error = await c.mentions
-      .decide(id, {
-        decision: "reset",
-        expectedVersion: adapter.mentionStore.get(id)!.version,
-        changeId: "c1",
-      })
-      .catch((e) => e);
+    const error = await decideError(c, adapter, id, "reset");
     expect(error.status).toBe(501);
     expect(adapter.mentionStore.get(id)!.status).toBe("approved");
     expect((await c.meta()).capabilities.mentionReset).toBeUndefined();
@@ -227,12 +240,7 @@ describe("mentions decide", () => {
   it("PLANT: refuses a stale version with 409 and the current version, and changes nothing", async () => {
     const { adapter, ids } = seededAdapter();
     const { client: c } = client(adapter);
-    const stale = adapter.mentionStore.get(ids.pending)!.version;
-    await c.mentions.decide(ids.pending, {
-      decision: "approve",
-      expectedVersion: stale,
-      changeId: "c1",
-    });
+    const stale = await approvePending(c, adapter, ids.pending);
     const before = snapshot(adapter);
     const purges = adapter.purged.length;
     const error = await c.mentions
@@ -265,13 +273,7 @@ describe("mentions decide", () => {
     const { client: c } = client(adapter);
     const before = snapshot(adapter);
     for (const id of [ids.unverified, ids.failedNew]) {
-      const error = await c.mentions
-        .decide(id, {
-          decision: "approve",
-          expectedVersion: adapter.mentionStore.get(id)!.version,
-          changeId: "c1",
-        })
-        .catch((e) => e);
+      const error = await decideError(c, adapter, id, "approve");
       expect(error.status, id).toBe(422);
       expect(error.body.error).toBe("refused");
     }
@@ -343,12 +345,7 @@ describe("mentions delete", () => {
   it("PLANT: refuses a stale version with 409, and the mention stays", async () => {
     const { adapter, ids } = seededAdapter();
     const { client: c } = client(adapter);
-    const stale = adapter.mentionStore.get(ids.pending)!.version;
-    await c.mentions.decide(ids.pending, {
-      decision: "approve",
-      expectedVersion: stale,
-      changeId: "c1",
-    });
+    const stale = await approvePending(c, adapter, ids.pending);
     const error = await c.mentions
       .delete(ids.pending, { expectedVersion: stale, changeId: "c2" })
       .catch((e) => e);
