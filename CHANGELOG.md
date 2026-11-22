@@ -1,5 +1,11 @@
 # @dustinedwards/site-api
 
+## 0.46.8
+
+### Patch Changes
+
+- Build without comments, so a site's unminified Worker bundle no longer carries them.
+
 ## 0.46.7
 
 ### Patch Changes
