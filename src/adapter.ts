@@ -10,6 +10,7 @@ import type {
   Capabilities,
   ContentDoc,
   ContentFilter,
+  ContentSort,
   ContentList,
   ListQuery,
   MediaDetail,
@@ -593,6 +594,41 @@ export async function contentVersion(parts: readonly unknown[]): Promise<string>
  */
 export function transcriptVersion(transcript: string): Promise<string> {
   return contentVersion(["transcript", transcript]);
+}
+
+/**
+ * The page of a content list a site holds in memory: `rows` ordered as the contract's `sort` and `dir` ask (dates
+ * newest first, titles A to Z, unless `dir` says otherwise), cut at `cursor` for `limit` rows. `keys` reads each sort's
+ * value from a row. The answer carries what `ContentList` needs beside the items: `total`, `nextCursor` and `sorted`.
+ */
+export function orderAndPage<T>(
+  rows: readonly T[],
+  query: Pick<ListQuery, "sort" | "dir" | "cursor" | "limit">,
+  keys: Record<ContentSort, (row: T) => string | number>,
+): {
+  page: T[];
+  total: number;
+  nextCursor: string | null;
+  sorted: { sort: ContentSort; dir: "asc" | "desc" };
+} {
+  const sort = query.sort ?? "updated";
+  const dir = query.dir ?? (sort === "title" ? "asc" : "desc");
+  const key = keys[sort];
+  const ordered = [...rows].sort((a, b) => {
+    const [x, y] = [key(a), key(b)];
+    return (
+      (typeof x === "string" ? x.localeCompare(y as string) : x - (y as number)) *
+      (dir === "asc" ? 1 : -1)
+    );
+  });
+  const start = Math.max(0, Number.parseInt(query.cursor ?? "0", 10) || 0);
+  const next = start + query.limit;
+  return {
+    page: ordered.slice(start, next),
+    total: ordered.length,
+    nextCursor: next < ordered.length ? String(next) : null,
+    sorted: { sort, dir },
+  };
 }
 
 /** The expectedVersion on a write is not what the site holds. currentVersion null: no such id. */
