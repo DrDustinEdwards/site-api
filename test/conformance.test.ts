@@ -677,6 +677,21 @@ describe("conformance", () => {
     ).toBe(true);
   });
 
+  it("PLANT: a rename that moved the post but answered an error does not leave the probe post behind", async () => {
+    const { adapter, fetch: inner } = liveSite();
+    const fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const request = new Request(input, init);
+      const answer = await inner(request);
+      return request.method === "POST" && request.url.endsWith("/rename")
+        ? new Response("boom", { status: 500 })
+        : answer;
+    }) as typeof globalThis.fetch;
+    const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch, probePosts: true });
+    expect(failing(report)).toContain("probe post: a rename answers 301 from the old path");
+    expect(failing(report)).not.toContain("probe post: cleaned up");
+    expect(adapter.store.size).toBe(0);
+  });
+
   it("skips the write probe when told to", async () => {
     const report = await runConformance({
       baseUrl: ORIGIN,
