@@ -1,12 +1,13 @@
 // v0.10.0: the D1 table a site keeps its scheduled updates in, run on SQLite (what D1 is) through a D1-shaped shim.
 
 import { describe, expect, it } from "vitest";
-import { d1ScheduledUpdates, SCHEDULED_UPDATES_SQL } from "../src/schedules.js";
+import { d1ScheduledUpdates, SCHEDULED_UPDATES_SQL, waitingUpdates } from "../src/schedules.js";
 import { d1 } from "./d1.js";
 
 describe("d1ScheduledUpdates (v0.10.0)", () => {
   it("keeps one update per item in UTC, lists the due ones oldest first, and a matched remove keeps a reschedule", async () => {
-    const store = d1ScheduledUpdates(d1(SCHEDULED_UPDATES_SQL));
+    const db = d1(SCHEDULED_UPDATES_SQL);
+    const store = d1ScheduledUpdates(db);
     await store
       .put("a", {
         source: "A2",
@@ -29,7 +30,7 @@ describe("d1ScheduledUpdates (v0.10.0)", () => {
       { id: "a", kind: "update", publishAt: "2030-01-01T15:00:00.000Z", changeId: "c1" },
     ]);
     expect(await store.due(new Date("2030-01-01T15:00:00Z"), 1)).toHaveLength(1);
-    expect(await store.waiting()).toEqual(
+    expect(await waitingUpdates(db)).toEqual(
       new Map([
         ["a", { publishAt: "2030-01-01T15:00:00.000Z", changeId: "c1" }],
         ["b", { publishAt: "2030-01-01T12:00:00.000Z", changeId: "c2" }],
