@@ -54,6 +54,7 @@ describe("client round trip", () => {
       mediaUploadSuggestions: true,
       mentions: true,
       mentionReset: true,
+      searchFields: ["searchTitle", "description", "image", "imageAlt", "canonical", "noindex"],
       scheduledUpdates: true,
     });
   });

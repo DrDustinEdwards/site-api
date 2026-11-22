@@ -1192,7 +1192,8 @@ export async function runConformance(config: ConformanceConfig): Promise<Conform
     const searchValues: Partial<SearchValues> = {
       searchTitle: "Conformance search title",
       description: "Conformance description.",
-      image: "/conformance-probe.png",
+      // A whole address: a site may check the share image as a URL (foxing.app refuses a bare path).
+      image: `${new URL(origin).origin}/conformance-probe.png`,
       imageAlt: "Conformance probe picture.",
       canonical: `${new URL(origin).origin}/conformance-probe`,
       // Kept out of search wherever the site renders noindex.
