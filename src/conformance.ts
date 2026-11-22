@@ -64,6 +64,8 @@ export interface ConformanceConfig {
   newSource?: (id: string) => string;
   /** True for a site that checks the share image as a whole address (foxing.app); a site-absolute path otherwise (dustinedwards.info refuses a full URL). */
   imageAsUrl?: boolean;
+  /** The author the probe post credits, for a site that credits only the names it knows (foxing.app: "Foxing"). "Conformance Probe" by default. */
+  author?: string;
   /** How long the probe waits for a hook to record its run, or a purged page to change its answer, in milliseconds. 5000 by default. */
   hookWaitMs?: number;
 }
@@ -1194,7 +1196,7 @@ export async function runConformance(config: ConformanceConfig): Promise<Conform
     const word = `probeword${run.replace(/[^a-z0-9]/gi, "")}`;
     const postValues: Partial<PostValues> = {
       excerpt: "Conformance excerpt.",
-      authors: ["Conformance Probe"],
+      authors: [config.author ?? "Conformance Probe"],
       series: "Conformance series",
       seriesPart: 1,
       featureImage: "/conformance-probe.png",
