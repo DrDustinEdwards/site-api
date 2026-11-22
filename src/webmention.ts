@@ -172,7 +172,9 @@ async function getPage(
   );
   if (!response.ok) {
     await response.body?.cancel().catch(() => {});
-    throw new Error(`${url} answered ${response.status}`);
+    throw Object.assign(new Error(`${url} answered ${response.status}`), {
+      status: response.status,
+    });
   }
   const html = /html/i.test(response.headers.get("content-type") ?? "")
     ? await readHtmlPrefix(response)
@@ -270,12 +272,20 @@ export function webmentionHook(options: {
     // cache keys on the query, so a query of this change's own is always a fresh render.
     const fresh = new URL(source);
     fresh.searchParams.set("webmention", change);
-    const links = gone
-      ? []
-      : outboundLinks(
+    // A page that answers 404 or 410 is not live now (trashed, deleted or unpublished since this event): it links to
+    // nothing, so the targets it had are told, and a retry of an earlier event never fails on it.
+    let links: string[] = [];
+    if (!gone) {
+      try {
+        links = outboundLinks(
           (await getPage(doFetch, dnsFetch, fresh.href, userAgent, deadline)).html,
           source,
         );
+      } catch (error) {
+        const status = (error as { status?: number }).status;
+        if (status !== 404 && status !== 410) throw error;
+      }
+    }
     const before = await options.store.webmentionTargets(source);
     const targets = [...new Set([...links, ...before])];
     if (targets.length > MAX_TARGETS)
