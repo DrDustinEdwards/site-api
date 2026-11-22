@@ -97,18 +97,6 @@ export function d1ScheduledUpdates(db: D1Like) {
             .bind(id, utc(match.publishAt), match.changeId)
         : db.prepare("DELETE FROM scheduled_updates WHERE content_id = ?").bind(id);
     },
-    /** Every update waiting, by item id, for a list that shows which items have one. */
-    async waiting(): Promise<Map<string, { publishAt: string; changeId: string }>> {
-      const { results } = await db
-        .prepare("SELECT content_id, publish_at, change_id FROM scheduled_updates")
-        .all<Row>();
-      return new Map(
-        results.map((row) => [
-          row.content_id,
-          { publishAt: row.publish_at, changeId: row.change_id },
-        ]),
-      );
-    },
     /** The updates due at `now`, oldest first, at most `limit`, as `SchedulesAdapter.due` lists them. */
     async due(
       now: Date,
@@ -128,4 +116,16 @@ export function d1ScheduledUpdates(db: D1Like) {
       }));
     },
   };
+}
+
+/** Every update waiting, by item id, for a list that shows which items have one. Apart from d1ScheduledUpdates so a Worker that does not list them bundles none of it. */
+export async function waitingUpdates(
+  db: D1Like,
+): Promise<Map<string, { publishAt: string; changeId: string }>> {
+  const { results } = await db
+    .prepare("SELECT content_id, publish_at, change_id FROM scheduled_updates")
+    .all<Row>();
+  return new Map(
+    results.map((row) => [row.content_id, { publishAt: row.publish_at, changeId: row.change_id }]),
+  );
 }
