@@ -14,7 +14,7 @@ import {
   type MediaTransformOp,
   type MediaUploadLimits,
 } from "./contract.js";
-import { guardedFetch, OutboundRefusal } from "./outbound.js";
+import { discard, guardedFetch, OutboundRefusal } from "./outbound.js";
 
 type UploadRefusal = { code: "invalid" | "too-large"; message: string };
 
@@ -263,7 +263,7 @@ export async function fetchImport(
   }
   const { response, url } = found;
   if (!response.ok) {
-    await response.body?.cancel().catch(() => {});
+    await discard(response);
     throw new OutboundRefusal(`The other site answered ${response.status}.`);
   }
   return { response, address: url };
