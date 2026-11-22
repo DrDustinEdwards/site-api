@@ -70,14 +70,14 @@ export interface ConformanceConfig {
   hookWaitMs?: number;
 }
 
-export interface ConformanceCheck {
+interface ConformanceCheck {
   name: string;
   ok: boolean;
   detail: string;
 }
 
 /** One probe the run made or passed over (v0.22.0, M2): every check is one, and `skipped` ones say why in `detail`. */
-export interface ConformanceProbe {
+interface ConformanceProbe {
   name: string;
   ok: boolean;
   skipped?: boolean;

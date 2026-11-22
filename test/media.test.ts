@@ -3,9 +3,9 @@
 // adapter never ran, so a refusal cannot come from the site's own code by accident.
 
 import { describe, expect, it, vi } from "vitest";
-import { createSiteClient, SiteApiError } from "../src/client.js";
+import { SiteApiError } from "../src/client.js";
 import { memoryAdapter } from "../src/testing.js";
-import { KEY, ORIGIN, req, site } from "./helpers.js";
+import { KEY, ORIGIN, req, site, siteWithClient } from "./helpers.js";
 
 const PNG = Uint8Array.from(
   atob(
@@ -29,10 +29,7 @@ function spied(options: Parameters<typeof memoryAdapter>[0] = {}) {
   return { adapter, calls };
 }
 
-function client(adapter = memoryAdapter()) {
-  const s = site(adapter);
-  return { ...s, client: createSiteClient({ baseUrl: ORIGIN, key: KEY, fetch: s.fetch }) };
-}
+const client = siteWithClient;
 
 function upload(
   bytes: Uint8Array,

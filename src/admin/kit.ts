@@ -82,7 +82,7 @@ export function actingClient(client: SiteClient, actor: { name: string } | undef
 }
 
 /** The fields a form posts. A list (ids, versions) is an array; one value is a string. An upload's file is a Blob. */
-export type Fields = Record<string, string | string[]>;
+type Fields = Record<string, string | string[]>;
 export type IntentInput = FormData | Record<string, string | string[] | Blob>;
 
 export interface Outcome {

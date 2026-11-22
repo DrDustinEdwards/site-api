@@ -3,14 +3,11 @@
 
 import { describe, expect, it, vi } from "vitest";
 import { RefusedError } from "../src/adapter.js";
-import { createSiteClient, SiteApiError } from "../src/client.js";
+import { SiteApiError } from "../src/client.js";
 import { memoryAdapter } from "../src/testing.js";
-import { KEY, ORIGIN, req, site } from "./helpers.js";
+import { KEY, req, site, siteWithClient } from "./helpers.js";
 
-function client(adapter = memoryAdapter()) {
-  const s = site(adapter);
-  return { ...s, client: createSiteClient({ baseUrl: ORIGIN, key: KEY, fetch: s.fetch }) };
-}
+const client = siteWithClient;
 
 async function seeded(adapter = memoryAdapter()) {
   const c = client(adapter);

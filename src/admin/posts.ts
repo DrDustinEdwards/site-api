@@ -49,7 +49,7 @@ import {
   actingClient,
 } from "./kit.js";
 
-export type PostSort = "updated" | "published" | "title";
+type PostSort = "updated" | "published" | "title";
 const POST_SORTS: readonly PostSort[] = ["updated", "published", "title"];
 
 export interface PostQuery {
@@ -68,7 +68,7 @@ export interface PostQuery {
   cursor?: string;
 }
 
-export interface PostRow {
+interface PostRow {
   id: string;
   title: string;
   kind: string;
@@ -380,7 +380,7 @@ const POST_INTENTS = [
   "rename",
   "preview-link",
 ] as const;
-export type PostIntent = (typeof POST_INTENTS)[number];
+type PostIntent = (typeof POST_INTENTS)[number];
 
 /** A tag as a post's frontmatter list can hold it: one short piece of text with nothing that would break the list. */
 function cleanPostTag(raw: string): string | null {

@@ -1,15 +1,11 @@
 // The whole content round trip through the client, as Carrel will drive it.
 
 import { describe, expect, it } from "vitest";
-import { createSiteClient } from "../src/client.js";
 import { schemaHash } from "../src/contract.js";
 import { MEMORY_MEDIA_LIMITS, memoryAdapter } from "../src/testing.js";
-import { KEY, ORIGIN, site } from "./helpers.js";
+import { siteWithClient } from "./helpers.js";
 
-function client(adapter = memoryAdapter()) {
-  const s = site(adapter);
-  return { ...s, client: createSiteClient({ baseUrl: ORIGIN, key: KEY, fetch: s.fetch }) };
-}
+const client = siteWithClient;
 
 describe("client round trip", () => {
   it("reads meta with this contract's hash and the capabilities, media and its limits included", async () => {

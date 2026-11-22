@@ -406,6 +406,16 @@ export const MediaBulkInput = z.object({
   actor: Actor.optional(),
 });
 
+const MediaFileFailure = z.object({
+  ok: z.literal(false),
+  id: MediaId,
+  changeId: ChangeId,
+  error: z.enum(["not-found", "version-conflict", "refused", "invalid", "internal"]),
+  message: z.string(),
+  /** On version-conflict: what the site holds now. */
+  currentVersion: Version.nullable().optional(),
+});
+
 /** The outcome of one file. A refusal for one file never stops the others. */
 export const MediaBulkOutcome = z.discriminatedUnion("ok", [
   z.object({
@@ -415,14 +425,7 @@ export const MediaBulkOutcome = z.discriminatedUnion("ok", [
     /** The file's version after the write; absent after a delete. */
     version: Version.optional(),
   }),
-  z.object({
-    ok: z.literal(false),
-    id: MediaId,
-    changeId: ChangeId,
-    error: z.enum(["not-found", "version-conflict", "refused", "invalid", "internal"]),
-    message: z.string(),
-    /** On version-conflict: what the site holds now. */
-    currentVersion: Version.nullable().optional(),
+  MediaFileFailure.extend({
     /** On a refused delete: every place the file is used. */
     usedBy: z.array(MediaUse).optional(),
   }),
@@ -582,14 +585,7 @@ export const MediaResizeOutcome = z.discriminatedUnion("ok", [
     height: z.number().int().min(1).nullable(),
     bytes: z.number().int().min(0),
   }),
-  z.object({
-    ok: z.literal(false),
-    id: MediaId,
-    changeId: ChangeId,
-    error: z.enum(["not-found", "version-conflict", "refused", "invalid", "internal"]),
-    message: z.string(),
-    currentVersion: Version.nullable().optional(),
-  }),
+  MediaFileFailure,
 ]);
 
 export const MediaResizePassResult = z.object({
