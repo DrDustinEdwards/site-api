@@ -3,7 +3,6 @@
 // A site and Carrel agree when their schema hashes match. The hash covers these schemas and the
 // route table, so any change to either is a new contract, and Carrel's health check sees it.
 
-import { canonicalJson, sha256Hex } from "@dustinedwards/site-runtime/encoding";
 import { z } from "zod";
 import { POST_FIELDS, SEARCH_FIELDS } from "./frontmatter.js";
 
@@ -23,6 +22,7 @@ export * from "./contract/media.js";
 export * from "./contract/mentions.js";
 export * from "./contract/insight.js";
 import { SiteInfo, Version } from "./contract/base.js";
+import { SCHEMA_HASH } from "./schema-hash.js";
 import {
   BacklinkList,
   HookRunList,
@@ -606,7 +606,7 @@ export const ROUTES = [
   { group: "publications", method: "*", path: "/publications/*", response: "not-implemented" },
 ] as const;
 
-const HASHED = {
+export const HASHED = {
   Meta,
   ContentSummary,
   ContentDoc,
@@ -687,18 +687,11 @@ const HASHED = {
   TranscriptWriteResult,
 };
 
-let cachedHash: Promise<string> | undefined;
-
-/** The SHA-256 of the contract: every schema as JSON Schema, plus the route table. */
+/**
+ * The SHA-256 of the contract: every schema as JSON Schema, plus the route table. Recorded in
+ * schema-hash.ts so no Worker builds every JSON Schema to learn it; test/schema-hash.test.ts
+ * recomputes it and fails when the record is stale.
+ */
 export function schemaHash(): Promise<string> {
-  cachedHash ??= (async () => {
-    const schemas = Object.fromEntries(
-      Object.entries(HASHED).map(([name, schema]) => [
-        name,
-        z.toJSONSchema(schema, { io: "input" }),
-      ]),
-    );
-    return sha256Hex(canonicalJson({ prefix: PREFIX, routes: ROUTES, schemas }));
-  })();
-  return cachedHash;
+  return Promise.resolve(SCHEMA_HASH);
 }
