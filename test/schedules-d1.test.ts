@@ -29,6 +29,12 @@ describe("d1ScheduledUpdates (v0.10.0)", () => {
       { id: "a", kind: "update", publishAt: "2030-01-01T15:00:00.000Z", changeId: "c1" },
     ]);
     expect(await store.due(new Date("2030-01-01T15:00:00Z"), 1)).toHaveLength(1);
+    expect(await store.waiting()).toEqual(
+      new Map([
+        ["a", { publishAt: "2030-01-01T15:00:00.000Z", changeId: "c1" }],
+        ["b", { publishAt: "2030-01-01T12:00:00.000Z", changeId: "c2" }],
+      ]),
+    );
 
     // A reschedule between the listing and the apply: the remove the apply sends matches nothing.
     await store.put("a", { source: "A3", publishAt: "2030-02-01T00:00:00Z", changeId: "c3" }).run();
