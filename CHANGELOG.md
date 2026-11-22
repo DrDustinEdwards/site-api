@@ -1,5 +1,11 @@
 # @dustinedwards/site-api
 
+## 0.46.13
+
+### Patch Changes
+
+- The webmention hook no longer fails when the changed page answers 404 or 410 because it was trashed, deleted or unpublished after the event; it tells the page's earlier targets and stops.
+
 ## 0.46.12
 
 ### Patch Changes
