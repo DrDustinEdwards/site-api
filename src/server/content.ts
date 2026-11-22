@@ -53,6 +53,7 @@ import {
   ID,
   checked,
   fail,
+  notImplemented,
   pathParam,
   readBody,
   readQuery,
@@ -221,7 +222,7 @@ export function contentRoutes(
       run: async (m) => {
         const contentId = id(m);
         if (!adapter.schedules)
-          return fail("not-implemented", "This site does not schedule updates to live posts.");
+          return notImplemented("This site does not schedule updates to live posts.");
         const update = await adapter.schedules.get(contentId);
         if (!update) throw new NotFoundError("Nothing is scheduled for this item.");
         return jsonResponse(
@@ -238,7 +239,7 @@ export function contentRoutes(
       run: async (m, url) => {
         const contentId = id(m);
         if (!adapter.schedules)
-          return fail("not-implemented", "This site does not schedule updates to live posts.");
+          return notImplemented("This site does not schedule updates to live posts.");
         return jsonResponse(
           checked(
             WriteResult,
@@ -293,7 +294,7 @@ export function contentRoutes(
         const contentId = id(m);
         // A site with no delete answers 501 whatever the query says.
         if (!adapter.content.delete)
-          return fail("not-implemented", "This site does not delete content through the API.");
+          return notImplemented("This site does not delete content through the API.");
         const query = readQuery(url, ContentDeleteQuery);
         await adapter.content.delete(contentId, withActor(query));
         return jsonResponse(
@@ -313,7 +314,7 @@ export function contentRoutes(
       run: async (m, _u, request) => {
         const contentId = id(m);
         if (!adapter.content.setTags)
-          return fail("not-implemented", "This site does not keep tags on posts through the API.");
+          return notImplemented("This site does not keep tags on posts through the API.");
         const input = await readBody(request, ContentTagsInput);
         // One spelling per tag: the first one given wins, so "News" and "news" are one tag.
         const seen = new Set<string>();
@@ -337,7 +338,7 @@ export function contentRoutes(
       run: async (m, _u, request) => {
         const contentId = id(m);
         if (!adapter.content.setTranscript)
-          return fail("not-implemented", "This site does not take transcripts through the API.");
+          return notImplemented("This site does not take transcripts through the API.");
         const input = await readBody(request, TranscriptInput);
         const transcript = input.transcript.replace(/\r\n/g, "\n");
         const written = await adapter.content.setTranscript(contentId, { ...input, transcript });
@@ -363,7 +364,7 @@ export function contentRoutes(
       run: async (m, _u, request) => {
         const contentId = id(m);
         if (!adapter.content.rename)
-          return fail("not-implemented", "This site does not rename content through the API.");
+          return notImplemented("This site does not rename content through the API.");
         const input = await readBody(request, RenameInput);
         if (input.newId === contentId)
           throw new BadRequest("invalid", "newId is the item's own id.");
@@ -380,7 +381,7 @@ export function contentRoutes(
       run: async (m) => {
         const contentId = id(m);
         if (!adapter.content.backlinks)
-          return fail("not-implemented", "This site does not list the posts that link to one.");
+          return notImplemented("This site does not list the posts that link to one.");
         if (!(await adapter.content.get(contentId))) throw new NotFoundError();
         return jsonResponse(
           checked(BacklinkList, { items: await adapter.content.backlinks(contentId) }, "backlinks"),
@@ -395,7 +396,7 @@ export function contentRoutes(
       run: async (m: RegExpMatchArray, _u: URL, request: Request) => {
         const contentId = id(m);
         if (!hasContentTrash(adapter))
-          return fail("not-implemented", "This site has no content trash.");
+          return notImplemented("This site has no content trash.");
         const input = await readBody(request, ContentTrashInput);
         return jsonResponse(
           checked(WriteResult, await adapter.content[op]!(contentId, input), `content ${op}`),
