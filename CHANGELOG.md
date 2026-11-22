@@ -1,5 +1,11 @@
 # @dustinedwards/site-api
 
+## 0.48.0
+
+### Minor Changes
+
+- `waitingUpdates(db)` replaces `d1ScheduledUpdates().waiting()`. A Worker that never lists waiting updates no longer bundles it.
+
 ## 0.47.0
 
 ### Minor Changes
