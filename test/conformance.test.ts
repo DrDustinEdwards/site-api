@@ -12,6 +12,28 @@ function failing(report: Awaited<ReturnType<typeof runConformance>>) {
   return report.checks.filter((c) => !c.ok).map((c) => c.name);
 }
 
+function metaEdited(
+  s: ReturnType<typeof site>,
+  edit: (meta: { capabilities: Record<string, unknown> }) => unknown,
+): typeof fetch {
+  return async (input, init) => {
+    const response = await s.fetch(input, init);
+    if (!new URL(new Request(input).url).pathname.endsWith("/meta") || !response.ok)
+      return response;
+    return Response.json(edit(await response.json()));
+  };
+}
+
+function seedPng(s: ReturnType<typeof site>) {
+  return s.adapter.media!.upload({
+    bytes: new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    contentType: "image/png",
+    filename: "real.png",
+    alt: "",
+    changeId: "seed",
+  });
+}
+
 describe("conformance", () => {
   it("passes a conforming site, with the media checks when it offers media", async () => {
     const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: site().fetch });
@@ -306,14 +328,10 @@ describe("conformance", () => {
 
   it("PLANT: fails a site that offers mentions but does not say so in its capabilities", async () => {
     const s = site();
-    const silent = (async (input: RequestInfo | URL, init?: RequestInit) => {
-      const response = await s.fetch(input, init);
-      if (!new URL(new Request(input).url).pathname.endsWith("/meta") || !response.ok)
-        return response;
-      const meta = await response.json();
+    const silent = metaEdited(s, (meta) => {
       const { mentions: _gone, ...capabilities } = meta.capabilities;
-      return Response.json({ ...meta, capabilities });
-    }) as typeof fetch;
+      return { ...meta, capabilities };
+    });
     const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: silent });
     expect(failing(report)).toEqual([
       "mentions: advertised in capabilities, or answered 501",
@@ -356,14 +374,10 @@ describe("conformance", () => {
 
   it("PLANT: fails a site that offers a delete but does not say so in its capabilities", async () => {
     const s = site();
-    const silent = (async (input: RequestInfo | URL, init?: RequestInit) => {
-      const response = await s.fetch(input, init);
-      if (!new URL(new Request(input).url).pathname.endsWith("/meta") || !response.ok)
-        return response;
-      const meta = await response.json();
+    const silent = metaEdited(s, (meta) => {
       const { contentDelete: _gone, ...capabilities } = meta.capabilities;
-      return Response.json({ ...meta, capabilities });
-    }) as typeof fetch;
+      return { ...meta, capabilities };
+    });
     const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: silent });
     expect(failing(report)).toEqual([
       "content delete of an unknown id: refused, or not implemented where the site has no delete",
@@ -372,13 +386,7 @@ describe("conformance", () => {
 
   it("changes nothing on a conforming site: no content, no file stored, no file deleted", async () => {
     const s = site();
-    await s.adapter.media!.upload({
-      bytes: new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
-      contentType: "image/png",
-      filename: "real.png",
-      alt: "",
-      changeId: "seed",
-    });
+    await seedPng(s);
     await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: s.fetch });
     expect(s.adapter.store.size).toBe(0);
     expect(s.adapter.deletedContent).toEqual([]);
@@ -388,13 +396,7 @@ describe("conformance", () => {
 
   it("with probeMediaUpload, uploads a file of its own and deletes that file and no other", async () => {
     const s = site();
-    await s.adapter.media!.upload({
-      bytes: new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
-      contentType: "image/png",
-      filename: "real.png",
-      alt: "",
-      changeId: "seed",
-    });
+    await seedPng(s);
     const report = await runConformance({
       baseUrl: ORIGIN,
       key: KEY,
@@ -454,14 +456,10 @@ describe("conformance", () => {
 
   it("PLANT: fails a site that offers a trash but does not say so in its capabilities", async () => {
     const s = site();
-    const silent = (async (input: RequestInfo | URL, init?: RequestInit) => {
-      const response = await s.fetch(input, init);
-      if (!new URL(new Request(input).url).pathname.endsWith("/meta") || !response.ok)
-        return response;
-      const meta = await response.json();
+    const silent = metaEdited(s, (meta) => {
       const { mediaTrash: _gone, ...capabilities } = meta.capabilities;
-      return Response.json({ ...meta, capabilities });
-    }) as typeof fetch;
+      return { ...meta, capabilities };
+    });
     const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: silent });
     expect(failing(report)).toEqual([
       "media trash of an unknown id: refused, or not implemented where the site lacks it",
@@ -486,14 +484,10 @@ describe("conformance", () => {
 
   it("PLANT: fails a site that offers media without declaring its limits", async () => {
     const s = site();
-    const unlimited = (async (input: RequestInfo | URL, init?: RequestInit) => {
-      const response = await s.fetch(input, init);
-      if (!new URL(new Request(input).url).pathname.endsWith("/meta") || !response.ok)
-        return response;
-      const meta = await response.json();
+    const unlimited = metaEdited(s, (meta) => {
       const { mediaUpload: _gone, ...capabilities } = meta.capabilities;
-      return Response.json({ ...meta, capabilities });
-    }) as typeof fetch;
+      return { ...meta, capabilities };
+    });
     const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: unlimited });
     expect(failing(report)).toEqual(["media: upload limits declared"]);
   });
@@ -524,13 +518,9 @@ describe("conformance", () => {
 
   it("PLANT: fails a site on a different contract", async () => {
     const s = site();
-    const drifted = (async (input: RequestInfo | URL, init?: RequestInit) => {
-      const response = await s.fetch(input, init);
-      if (!new URL(new Request(input).url).pathname.endsWith("/meta") || !response.ok)
-        return response;
-      const meta = await response.json();
-      return Response.json({ ...meta, schemaHash: "0".repeat(64), packageVersion: "0.0.9" });
-    }) as typeof fetch;
+    const drifted = metaEdited(s, (meta) => {
+      return { ...meta, schemaHash: "0".repeat(64), packageVersion: "0.0.9" };
+    });
     const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: drifted });
     expect(failing(report)).toEqual(["meta: answers with this contract's schema hash"]);
   });

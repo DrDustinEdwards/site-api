@@ -394,4 +394,4 @@ function knownCapabilities(raw: unknown): unknown {
 }
 
 // A site's own admin: the same client, answered in process by its own adapter (./local.ts).
-export { localClient, type LocalClientOptions } from "./local.js";
+export { localClient } from "./local.js";

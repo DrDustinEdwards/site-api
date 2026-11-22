@@ -117,5 +117,3 @@ export function d1ScheduledUpdates(db: D1Like) {
     },
   };
 }
-
-export type D1ScheduledUpdates = ReturnType<typeof d1ScheduledUpdates>;
