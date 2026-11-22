@@ -1178,6 +1178,8 @@ export async function runConformance(config: ConformanceConfig): Promise<Conform
       passedOver ? (skip(name, passedOver), false) : check(name, run);
 
     let id = `carrel-conformance-${run}`;
+    // Set before the rename is sent: a rename that failed after the site moved the post leaves it under this id.
+    let renamedTo: string | null = null;
     let version = "";
     let path = "";
     const word = `probeword${run.replace(/[^a-z0-9]/gi, "")}`;
@@ -1414,6 +1416,7 @@ export async function runConformance(config: ConformanceConfig): Promise<Conform
             : "the site does not rename content",
         async () => {
           const newId = `${id}-renamed`;
+          renamedTo = newId;
           const written = await ok(
             await json("POST", `/content/${id}/rename`, {
               newId,
@@ -1503,7 +1506,13 @@ export async function runConformance(config: ConformanceConfig): Promise<Conform
       );
     } finally {
       await check(names[11], async () => {
-        const left = await json("GET", `/content/${encodeURIComponent(id)}`);
+        let left = await json("GET", `/content/${encodeURIComponent(id)}`);
+        // A rename that threw never moved `id`, yet the site may have moved the post: look under the new id before
+        // calling the post gone, or it stays on the site for good.
+        if (left.status === 404 && renamedTo && renamedTo !== id) {
+          const moved = await json("GET", `/content/${encodeURIComponent(renamedTo)}`);
+          if (moved.status !== 404) [id, left] = [renamedTo, moved];
+        }
         if (left.status === 404) return `${id} is gone`;
         const doc = await ok(left, ContentDoc, "read before cleaning up");
         const current = await trashFirst(doc);
