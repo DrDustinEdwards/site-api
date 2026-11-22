@@ -230,5 +230,10 @@ describe("webmentionHook", () => {
     expect(sent.slice(3)).toEqual(["https://c.example/wm https://c.example/3"]);
     await hook.run(event("delete"));
     expect(sent).toHaveLength(4);
+
+    // A retry of a publish whose page was trashed since answers 404 or 410: no error, and nothing left to tell.
+    await expect(
+      hook.run({ ...event("publish", "published"), changeId: "c2" }),
+    ).resolves.toBeUndefined();
   });
 });
