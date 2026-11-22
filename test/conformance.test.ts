@@ -632,15 +632,20 @@ describe("conformance", () => {
               .then((body: { source: string }) =>
                 /^slug:/m.test(body.source) && /^image: "https?:/m.test(body.source) === url
                   ? inner(request)
-                  : Response.json({ error: "refused" }, { status: 422 }),
+                  : Response.json(
+                      { error: "refused", message: "invalid frontmatter: slug" },
+                      { status: 422 },
+                    ),
               )
           : inner(input, init);
       }) as typeof globalThis.fetch;
     const base = { baseUrl: ORIGIN, key: KEY, probePosts: true };
     const newSource = (id: string) => `---\ntitle: ""\nslug: ${id}\n---\n`;
-    expect(failing(await runConformance({ ...base, fetch: picky(false) }))).toEqual([
-      "probe post: created as a draft",
-    ]);
+    const refused = await runConformance({ ...base, fetch: picky(false) });
+    expect(failing(refused)).toEqual(["probe post: created as a draft"]);
+    expect(refused.checks.find((c) => !c.ok)!.detail).toBe(
+      "create: 422 refused (invalid frontmatter: slug)",
+    );
     expect(failing(await runConformance({ ...base, fetch: picky(false), newSource }))).toEqual([]);
     expect(
       failing(await runConformance({ ...base, fetch: picky(true), newSource, imageAsUrl: true })),
