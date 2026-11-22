@@ -1140,8 +1140,15 @@ export async function runConformance(config: ConformanceConfig): Promise<Conform
       schema: { parse(v: unknown): T },
       what: string,
     ): Promise<T> {
-      if (!response.ok)
-        throw new Error(`${what}: ${response.status} ${(await errorCode(response)) ?? ""}`.trim());
+      if (!response.ok) {
+        // The refusal's own words (a site says which field it refused), which the report would otherwise hide.
+        const body = (await response.json().catch(() => null)) as {
+          error?: string;
+          message?: string;
+        } | null;
+        const words = body?.message ? ` (${body.message})` : "";
+        throw new Error(`${what}: ${response.status} ${body?.error ?? ""}${words}`.trim());
+      }
       return schema.parse(await response.json());
     }
     // The site's own public route, through baseUrl, never following a redirect. Given the status it should answer, it asks
