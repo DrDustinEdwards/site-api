@@ -24,4 +24,4 @@ jobs:
       actions: read
       security-events: write
       id-token: write
-    uses: DrDustinEdwards/devkit/.github/workflows/scorecard.yml@56ee28ee00f613b77643071d4187d998bad5e55e # v0.58.0
+    uses: DrDustinEdwards/devkit/.github/workflows/scorecard.yml@273124fb3deebd40d390108269460c80d9dab00b # v0.58.1
