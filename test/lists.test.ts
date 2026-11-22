@@ -3,6 +3,7 @@
 // v0.16.0's 404 report, the insight group's one list.
 
 import { describe, expect, it, vi } from "vitest";
+import { orderAndPage } from "../src/adapter.js";
 import { createSiteClient } from "../src/client.js";
 import { memoryAdapter, type MemoryAdapterOptions } from "../src/testing.js";
 import { KEY, ORIGIN, req, site } from "./helpers.js";
@@ -140,5 +141,38 @@ describe("the 404 report (v0.16.0)", () => {
     expect(spy).not.toHaveBeenCalled();
     const without = await site(memoryAdapter()).api.handle(req("/api/carrel/v1/insight/not-found"));
     expect(without.status).toBe(501);
+  });
+});
+
+const rows = [
+  { title: "b", at: 2 },
+  { title: "A", at: 3 },
+  { title: "c", at: 1 },
+];
+const keys = {
+  updated: (r: (typeof rows)[number]) => r.at,
+  published: (r: (typeof rows)[number]) => r.at,
+  title: (r: (typeof rows)[number]) => r.title,
+};
+
+describe("orderAndPage", () => {
+  it("orders dates newest first and titles A to Z, flips on dir, and cuts the page at the cursor", () => {
+    expect(orderAndPage(rows, { limit: 2 }, keys)).toMatchObject({
+      page: [rows[1], rows[0]],
+      total: 3,
+      nextCursor: "2",
+      sorted: { sort: "updated", dir: "desc" },
+    });
+    expect(orderAndPage(rows, { sort: "title", limit: 5 }, keys).page.map((r) => r.title)).toEqual([
+      "A",
+      "b",
+      "c",
+    ]);
+    expect(
+      orderAndPage(rows, { sort: "title", dir: "desc", cursor: "2", limit: 5 }, keys),
+    ).toMatchObject({
+      page: [rows[1]],
+      nextCursor: null,
+    });
   });
 });
