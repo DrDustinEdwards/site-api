@@ -1,5 +1,11 @@
 # @dustinedwards/site-api
 
+## 0.46.10
+
+### Patch Changes
+
+- The conformance probe sends the share image as a site-absolute path again, and as a whole address only when the config sets `imageAsUrl` (foxing.app), because dustinedwards.info refuses a full URL.
+
 ## 0.46.9
 
 ### Patch Changes
