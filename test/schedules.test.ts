@@ -257,7 +257,6 @@ describe("publish hooks (v0.10.0)", () => {
         origin: ORIGIN,
         key: "indexnow-key",
         urls: [`${ORIGIN}/blog/a`],
-        from: `${ORIGIN}/api/carrel/v1/content/a/publish`,
       },
     ]);
     const page = {

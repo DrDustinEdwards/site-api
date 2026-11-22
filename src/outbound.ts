@@ -16,6 +16,9 @@ const DOH = "https://cloudflare-dns.com/dns-query";
 const DOH_TIMEOUT_MS = 5000;
 
 /** A refusal with words for the person or the log. */
+/** Gives up on a response's body, so its connection is freed. */
+export const discard = (response: Response) => response.body?.cancel().catch(() => {});
+
 export class OutboundRefusal extends Error {
   constructor(message: string) {
     super(message);
@@ -210,7 +213,7 @@ export async function guardedFetch(
     const response = await doFetch(url, { ...init, redirect: "manual" });
     const location = response.headers.get("location");
     if (response.status >= 300 && response.status < 400 && location) {
-      await response.body?.cancel().catch(() => {});
+      await discard(response);
       if (hop >= maxRedirects)
         throw new OutboundRefusal(`The address redirects more than ${maxRedirects} times.`);
       url = new URL(location, url).href;

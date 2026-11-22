@@ -117,7 +117,6 @@ export type SubmitIndexNow = (input: {
   origin: string;
   key: string;
   urls: string[];
-  from?: string;
 }) => Promise<boolean>;
 
 /**
@@ -143,7 +142,6 @@ export function indexNowHook(options: {
         key: options.key,
         // A rename's old address now redirects: the engines hear both.
         urls: event.previousUrl ? [event.url, event.previousUrl] : [event.url],
-        ...(event.request ? { from: event.request.url } : {}),
       });
     },
   };

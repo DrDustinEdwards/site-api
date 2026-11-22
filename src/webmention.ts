@@ -9,7 +9,7 @@
 import { unescapeHtml } from "@dustinedwards/site-runtime/html";
 
 import type { PublishHook } from "./hooks.js";
-import { guardedFetch, outboundRefusal } from "./outbound.js";
+import { discard, guardedFetch, outboundRefusal } from "./outbound.js";
 import type { SiteApiStore } from "./store.js";
 
 const MAX_REDIRECTS = 5;
@@ -171,7 +171,7 @@ async function getPage(
     { allowHttp: true, dnsFetch, maxRedirects: MAX_REDIRECTS },
   );
   if (!response.ok) {
-    await response.body?.cancel().catch(() => {});
+    await discard(response);
     throw Object.assign(new Error(`${url} answered ${response.status}`), {
       status: response.status,
     });
@@ -230,14 +230,14 @@ export function webmentionHook(options: {
   const log = options.log ?? ((entry) => console.warn(JSON.stringify(entry)));
 
   async function send(source: string, target: string, deadline: AbortSignal): Promise<void> {
+    const say = (result: string) => log({ siteApi: "webmention", source, target, result });
     try {
       const page = await getPage(doFetch, dnsFetch, target, userAgent, deadline);
       const endpoint = endpointOf(page.link, page.html, page.url);
-      if (!endpoint) return log({ siteApi: "webmention", source, target, result: "no endpoint" });
+      if (!endpoint) return say("no endpoint");
       // The endpoint is posted to once, never followed: checked like every address, DNS included.
-      if (await outboundRefusal(endpoint, { allowHttp: true, dnsFetch })) {
-        return log({ siteApi: "webmention", source, target, result: "refused endpoint" });
-      }
+      if (await outboundRefusal(endpoint, { allowHttp: true, dnsFetch }))
+        return say("refused endpoint");
       const response = await doFetch(endpoint, {
         method: "POST",
         redirect: "manual",
@@ -245,20 +245,10 @@ export function webmentionHook(options: {
         body: new URLSearchParams({ source, target }).toString(),
         signal: limit(deadline),
       });
-      await response.body?.cancel().catch(() => {});
-      log({
-        siteApi: "webmention",
-        source,
-        target,
-        result: response.ok ? "sent" : `endpoint answered ${response.status}`,
-      });
+      await discard(response);
+      say(response.ok ? "sent" : `endpoint answered ${response.status}`);
     } catch (error) {
-      log({
-        siteApi: "webmention",
-        source,
-        target,
-        result: error instanceof Error ? error.message : String(error),
-      });
+      say(error instanceof Error ? error.message : String(error));
     }
   }
 
@@ -272,20 +262,18 @@ export function webmentionHook(options: {
     // cache keys on the query, so a query of this change's own is always a fresh render.
     const fresh = new URL(source);
     fresh.searchParams.set("webmention", change);
-    // A page that answers 404 or 410 is not live now (trashed, deleted or unpublished since this event): it links to
-    // nothing, so the targets it had are told, and a retry of an earlier event never fails on it.
-    let links: string[] = [];
-    if (!gone) {
-      try {
-        links = outboundLinks(
-          (await getPage(doFetch, dnsFetch, fresh.href, userAgent, deadline)).html,
+    // A 404 or 410 page is no longer live: it links to nothing.
+    const links = gone
+      ? []
+      : outboundLinks(
+          (
+            await getPage(doFetch, dnsFetch, fresh.href, userAgent, deadline).catch((error) => {
+              if (/ 4(04|10)$/.test(error.message)) return { html: "" };
+              throw error;
+            })
+          ).html,
           source,
         );
-      } catch (error) {
-        const status = (error as { status?: number }).status;
-        if (status !== 404 && status !== 410) throw error;
-      }
-    }
     const before = await options.store.webmentionTargets(source);
     const targets = [...new Set([...links, ...before])];
     if (targets.length > MAX_TARGETS)
