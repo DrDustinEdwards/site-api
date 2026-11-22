@@ -2,7 +2,7 @@
 // the request is refused and the adapter's method never ran.
 
 import { describe, expect, it, vi } from "vitest";
-import { createSiteClient, SiteApiError } from "../src/client.js";
+import { createSiteClient } from "../src/client.js";
 import { transformFocus } from "../src/media.js";
 import { MEDIA_TRANSFORMS } from "../src/contract.js";
 import { memoryAdapter, type MemoryAdapterOptions } from "../src/testing.js";
@@ -12,7 +12,7 @@ import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 import { stripMetadata } from "../src/media-upload.js";
 import { d1SiteApiStore, SITE_API_STORE_SQL, SITE_API_STORE_SQL_V0_21 } from "../src/store.js";
 import { d1 } from "./d1.js";
-import { KEY, ORIGIN, allow, body, png, req, site, withDns } from "./helpers.js";
+import { KEY, ORIGIN, allow, body, png, req, site, withDns, statusOf } from "./helpers.js";
 
 function setup(options: MemoryAdapterOptions = {}) {
   const s = site(memoryAdapter(options));
@@ -32,15 +32,6 @@ function setup(options: MemoryAdapterOptions = {}) {
     put: (name: string, bytes: Uint8Array, extra?: { resize?: "no" }) =>
       put(client, name, bytes, extra),
   };
-}
-
-async function status(promise: Promise<unknown>) {
-  const error = await promise.then(
-    () => null,
-    (e: unknown) => e,
-  );
-  expect(error).toBeInstanceOf(SiteApiError);
-  return (error as SiteApiError).status;
 }
 
 const path = (id: string, rest = "") => `/api/carrel/v1/media/${encodeURIComponent(id)}${rest}`;
@@ -331,7 +322,7 @@ describe("credit, license and its end (6, 12, 13)", () => {
       file.id,
     ]);
     expect(
-      await status(
+      await statusOf(
         client.media.setCredit(file.id, {
           credit: "",
           license: "",
@@ -409,7 +400,7 @@ describe("transform, history and revert (7)", () => {
     expect(back).toMatchObject({ width: 40, height: 20, focus: null, asNewFile: false });
     expect((await client.media.history(file.id)).revisions).toHaveLength(3);
     expect(
-      await status(
+      await statusOf(
         client.media.revert(file.id, {
           to: history.revisions[1]!.rev,
           expectedVersion: turned.version!,
@@ -632,7 +623,7 @@ describe("suggestions (14)", () => {
   it("answers the model's tags in the contract's spelling and its alt text, and applies neither", async () => {
     const { client, adapter, put } = setup();
     const file = await put("river at dusk.png", png(10, 10));
-    expect(await status(client.media.suggestions("uploads/none.png"))).toBe(404);
+    expect(await statusOf(client.media.suggestions("uploads/none.png"))).toBe(404);
     adapter.media!.suggest = async () => ({
       tags: ["River", "golden hour", "dusk", "dusk", "not/a tag"],
       alt: "  The Brazos at dusk.  ",

@@ -2,29 +2,14 @@
 
 import { FOCUS_METADATA, focusOf } from "@dustinedwards/site-runtime/image";
 import { describe, expect, it } from "vitest";
-import { createSiteClient, SiteApiError } from "../src/client.js";
 import { replaceObject, writeFocus, type R2BucketLike, type R2ObjectLike } from "../src/r2.js";
-import { memoryAdapter } from "../src/testing.js";
-import { KEY, ORIGIN, body, req, site } from "./helpers.js";
+import { body, req, siteWithClient, statusOf } from "./helpers.js";
 
 const PNG = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1]);
 const PNG2 = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 2, 2]);
 const JPEG = Uint8Array.from([0xff, 0xd8, 0xff, 0xe0]);
 
-function setup() {
-  const s = site(memoryAdapter());
-  const client = createSiteClient({ baseUrl: ORIGIN, key: KEY, fetch: s.fetch });
-  return { ...s, client };
-}
-
-async function status(promise: Promise<unknown>) {
-  const error = await promise.then(
-    () => null,
-    (e: unknown) => e,
-  );
-  expect(error).toBeInstanceOf(SiteApiError);
-  return (error as SiteApiError).status;
-}
+const setup = siteWithClient;
 
 describe("focal point and caption", () => {
   it("stores the point in focusOf's spelling, clears it, keeps a caption, and refuses a point off the picture", async () => {
@@ -59,7 +44,7 @@ describe("focal point and caption", () => {
     );
     expect(off.status).toBe(400);
     expect(
-      await status(
+      await statusOf(
         client.media.setFocus(file.id, {
           focus: null,
           expectedVersion: set.version,
@@ -123,7 +108,7 @@ describe("replace", () => {
 
     const again = { bytes: PNG, filename: "a.png", alt: "A test picture", changeId: "r2" };
     expect(
-      await status(
+      await statusOf(
         client.media.replace(file.id, {
           ...again,
           contentType: "image/png",
@@ -132,7 +117,7 @@ describe("replace", () => {
       ),
     ).toBe(409);
     expect(
-      await status(
+      await statusOf(
         client.media.replace(file.id, {
           ...again,
           bytes: JPEG,
@@ -142,7 +127,7 @@ describe("replace", () => {
       ),
     ).toBe(400);
     expect(
-      await status(
+      await statusOf(
         client.media.replace("uploads/none.png", {
           ...again,
           contentType: "image/png",

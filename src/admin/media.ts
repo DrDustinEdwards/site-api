@@ -73,7 +73,7 @@ export interface MediaQuery {
  * A file as the library shows it: the site's item, plus the absolute address a browser loads and (v0.13.1) which way a
  * picture lies, so a screen filters and warns by the package's own rule (orientationOf) rather than a copy of it.
  */
-export type MediaRow = MediaItem & { src: string; orientation?: MediaOrientation };
+type MediaRow = MediaItem & { src: string; orientation?: MediaOrientation };
 
 function rowOf<T extends MediaItem>(
   source: ContentSource,
@@ -91,7 +91,7 @@ function rowOf<T extends MediaItem>(
  * What the site's model suggests for the file in the inspector (v0.13.0): only what would change it, the tags it does not
  * carry and an alt text unlike its own, so each shows as a suggestion to accept (the `tag-add` and `alt` intents) or dismiss.
  */
-export interface MediaSuggestionView {
+interface MediaSuggestionView {
   tags: string[];
   alt: string | null;
   model: string;
@@ -358,7 +358,7 @@ const MEDIA_INTENTS = [
   "resize",
   "suggest",
 ] as const;
-export type MediaIntent = (typeof MEDIA_INTENTS)[number];
+type MediaIntent = (typeof MEDIA_INTENTS)[number];
 
 /** A typed list of tags (commas between them) as a tag set: each in the site's spelling, unique, at most 12. */
 function parseMediaTags(

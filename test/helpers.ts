@@ -1,3 +1,5 @@
+import { expect } from "vitest";
+import { createSiteClient, SiteApiError } from "../src/client.js";
 import { createSiteApi, type RateLimiter, type SiteAdapter } from "../src/index.js";
 import { memoryAdapter } from "../src/testing.js";
 
@@ -26,6 +28,20 @@ export function site<A extends SiteAdapter = ReturnType<typeof memoryAdapter>>(
     });
   }) as typeof globalThis.fetch;
   return { api, fetch, logs, adapter };
+}
+
+export function siteWithClient(adapter?: ReturnType<typeof memoryAdapter>) {
+  const s = site(adapter);
+  return { ...s, client: createSiteClient({ baseUrl: ORIGIN, key: KEY, fetch: s.fetch }) };
+}
+
+export async function statusOf(promise: Promise<unknown>) {
+  const error = await promise.then(
+    () => null,
+    (e: unknown) => e,
+  );
+  expect(error).toBeInstanceOf(SiteApiError);
+  return (error as SiteApiError).status;
 }
 
 /** The fake site serves only / and /blog/*; everything else is its own 404. */

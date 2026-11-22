@@ -30,7 +30,7 @@ import {
   eachItem,
 } from "./kit.js";
 
-export type MentionFilter = MentionStatus | "all";
+type MentionFilter = MentionStatus | "all";
 const MENTION_FILTERS: readonly MentionFilter[] = [
   "pending",
   "failed",
@@ -153,7 +153,7 @@ export async function loadMentions(
 }
 
 const MENTION_INTENTS = ["approve", "reject", "reset", "delete", "sweep"] as const;
-export type MentionIntent = (typeof MENTION_INTENTS)[number];
+type MentionIntent = (typeof MENTION_INTENTS)[number];
 
 /** Said when the write moved but the site could not clear its cache. */
 const PURGE_FAILED =

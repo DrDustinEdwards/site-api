@@ -504,44 +504,27 @@ export function mediaRoutes(
         );
       },
     },
-    {
+    ...(["trash", "restore"] as const).map((action): Route => ({
       method: "POST",
-      pattern: new RegExp(`^/media/${ID}/trash$`),
+      pattern: new RegExp(`^/media/${ID}/${action}$`),
       run: async (m, _u, request) => {
         const id = mediaId(m);
         if (!media.trash || !media.restore) return notImplemented("This site has no media trash.");
         const input = await readBody(request, MediaTrashInput);
-        const result = await media.trash(id, input);
+        const result = await (action === "trash"
+          ? media.trash(id, input)
+          : media.restore(id, input));
         return jsonResponse(
           checked(
             MediaWriteResult,
             { id, version: result.version, changeId: input.changeId },
-            "media trash",
+            `media ${action}`,
           ),
           200,
           BASE_HEADERS,
         );
       },
-    },
-    {
-      method: "POST",
-      pattern: new RegExp(`^/media/${ID}/restore$`),
-      run: async (m, _u, request) => {
-        const id = mediaId(m);
-        if (!media.trash || !media.restore) return notImplemented("This site has no media trash.");
-        const input = await readBody(request, MediaTrashInput);
-        const result = await media.restore(id, input);
-        return jsonResponse(
-          checked(
-            MediaWriteResult,
-            { id, version: result.version, changeId: input.changeId },
-            "media restore",
-          ),
-          200,
-          BASE_HEADERS,
-        );
-      },
-    },
+    })),
     {
       method: "POST",
       pattern: /^\/media\/trash\/empty$/,
