@@ -618,7 +618,7 @@ describe("conformance", () => {
     expect(adapter.store.size).toBe(0);
   });
 
-  it("starts the probe post from the site's own new-post source, for a site that requires more than a title", async () => {
+  it("starts the probe post from the site's own new-post source and a whole share-image address, for a site that requires both", async () => {
     const { adapter, fetch: inner } = liveSite();
     const needsSlug = ((input: RequestInfo | URL, init?: RequestInit) => {
       const request = new Request(input, init);
@@ -628,7 +628,7 @@ describe("conformance", () => {
             .clone()
             .json()
             .then((body: { source: string }) =>
-              /^slug:/m.test(body.source)
+              /^slug:/m.test(body.source) && !/^image: "\//m.test(body.source)
                 ? inner(request)
                 : Response.json({ error: "refused" }, { status: 422 }),
             )

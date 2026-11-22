@@ -15,7 +15,13 @@ import {
   type SiteAdapter,
 } from "./adapter.js";
 import { joinSource, splitSource } from "@drdustinedwards/site-helpers/frontmatter";
-import { POST_FIELDS, postFieldsOf, setTags as writeTags, tagsOf } from "./frontmatter.js";
+import {
+  POST_FIELDS,
+  SEARCH_FIELDS,
+  postFieldsOf,
+  setTags as writeTags,
+  tagsOf,
+} from "./frontmatter.js";
 import { LARGE_MEDIA_BYTES, MEDIA_LENSES } from "./contract.js";
 import type {
   ContentDoc,
@@ -1115,6 +1121,7 @@ export function memoryAdapter(options: MemoryAdapterOptions = {}): SiteAdapter &
             publishedAtSettable: true,
             hasDraft: true,
             postFields: POST_FIELDS,
+            searchFields: SEARCH_FIELDS,
             filters: ["kind", "tag", "author", "published"] as const,
           }
         : {}),
