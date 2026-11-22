@@ -1,5 +1,11 @@
 # @dustinedwards/site-api
 
+## 0.46.12
+
+### Patch Changes
+
+- The conformance probe credits the author the config names (`author`), for a site that credits only names it knows: foxing.app refused "Conformance Probe".
+
 ## 0.46.11
 
 ### Patch Changes
