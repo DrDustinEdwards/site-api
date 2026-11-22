@@ -618,37 +618,33 @@ describe("conformance", () => {
     expect(adapter.store.size).toBe(0);
   });
 
-  it("starts the probe post from the site's own new-post source and a whole share-image address, for a site that requires both", async () => {
+  it("starts the probe post from the site's own new-post source and share-image form, for a site that requires both", async () => {
     const { adapter, fetch: inner } = liveSite();
-    const needsSlug = ((input: RequestInfo | URL, init?: RequestInit) => {
-      const request = new Request(input, init);
-      return request.method === "PUT" &&
-        /\/content\/carrel-conformance-[0-9a-f]{8}\/draft/.test(request.url)
-        ? request
-            .clone()
-            .json()
-            .then((body: { source: string }) =>
-              /^slug:/m.test(body.source) && !/^image: "\//m.test(body.source)
-                ? inner(request)
-                : Response.json({ error: "refused" }, { status: 422 }),
-            )
-        : inner(input, init);
-    }) as typeof globalThis.fetch;
-    const without = await runConformance({
-      baseUrl: ORIGIN,
-      key: KEY,
-      fetch: needsSlug,
-      probePosts: true,
-    });
-    expect(failing(without)).toEqual(["probe post: created as a draft"]);
-    const report = await runConformance({
-      baseUrl: ORIGIN,
-      key: KEY,
-      fetch: needsSlug,
-      probePosts: true,
-      newSource: (id) => `---\ntitle: ""\nslug: ${id}\n---\n`,
-    });
-    expect(failing(report)).toEqual([]);
+    // A site that needs a slug, and takes the share image as a path (or, with `url`, as a whole address).
+    const picky = (url: boolean) =>
+      ((input: RequestInfo | URL, init?: RequestInit) => {
+        const request = new Request(input, init);
+        return request.method === "PUT" &&
+          /\/content\/carrel-conformance-[0-9a-f]{8}\/draft/.test(request.url)
+          ? request
+              .clone()
+              .json()
+              .then((body: { source: string }) =>
+                /^slug:/m.test(body.source) && /^image: "https?:/m.test(body.source) === url
+                  ? inner(request)
+                  : Response.json({ error: "refused" }, { status: 422 }),
+              )
+          : inner(input, init);
+      }) as typeof globalThis.fetch;
+    const base = { baseUrl: ORIGIN, key: KEY, probePosts: true };
+    const newSource = (id: string) => `---\ntitle: ""\nslug: ${id}\n---\n`;
+    expect(failing(await runConformance({ ...base, fetch: picky(false) }))).toEqual([
+      "probe post: created as a draft",
+    ]);
+    expect(failing(await runConformance({ ...base, fetch: picky(false), newSource }))).toEqual([]);
+    expect(
+      failing(await runConformance({ ...base, fetch: picky(true), newSource, imageAsUrl: true })),
+    ).toEqual([]);
     expect(adapter.store.size).toBe(0);
   });
 
