@@ -1,6 +1,6 @@
 {
   "baseline": {
-    "measured_at": "5398b14",
+    "measured_at": "84f12b4",
     "knip": {
       "files": 1,
       "exports": 2,
@@ -17,14 +17,28 @@
       "lines": 0
     },
     "legacy": {},
+    "size": {
+      "src/adapter.ts": 674,
+      "src/admin/media.ts": 1285,
+      "src/admin/posts.ts": 942,
+      "src/conformance.ts": 1541,
+      "src/contract.ts": 697,
+      "src/contract/media.ts": 672,
+      "src/media-library.ts": 1300,
+      "src/media-upload.ts": 1306,
+      "src/server.ts": 665,
+      "src/server/media.ts": 918,
+      "src/testing.ts": 1390,
+      "test/admin.test.ts": 1252
+    },
     "tests": {
       "files": 34,
       "cases": 289
     },
     "comments": {
-      "lines": 2456,
-      "code": 22297,
-      "percentage": 9.92
+      "lines": 2462,
+      "code": 22376,
+      "percentage": 9.91
     }
   }
 }
