@@ -1,5 +1,11 @@
 # @dustinedwards/site-api
 
+## 0.46.11
+
+### Patch Changes
+
+- A conformance step that a site refuses now reports the refusal's own message beside its code, so the report says which field the site refused.
+
 ## 0.46.10
 
 ### Patch Changes
