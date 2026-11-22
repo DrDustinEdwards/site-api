@@ -1,5 +1,11 @@
 # @dustinedwards/site-api
 
+## 0.46.9
+
+### Patch Changes
+
+- One `notImplemented` helper for the refusals the server routes repeat, which shortens a site's bundle.
+
 ## 0.46.8
 
 ### Patch Changes
