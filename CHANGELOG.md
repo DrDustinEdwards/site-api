@@ -1,5 +1,11 @@
 # @dustinedwards/site-api
 
+## 0.48.2
+
+### Patch Changes
+
+- Refuse an SVG link whose `javascript:` scheme is split by a tab or line break.
+
 ## 0.48.1
 
 ### Patch Changes
