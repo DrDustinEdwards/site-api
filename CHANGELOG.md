@@ -1,5 +1,11 @@
 # @dustinedwards/site-api
 
+## 0.48.5
+
+### Patch Changes
+
+- Refuse an SVG that declares an encoding other than UTF-8 or holds an ESC byte, which a browser can use to hide a script keyword from the check.
+
 ## 0.48.4
 
 ### Patch Changes
