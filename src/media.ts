@@ -74,7 +74,8 @@ const SIGNATURES: Record<string, (b: Uint8Array) => boolean> = {
  */
 const ACTIVE: Record<string, (b: Uint8Array) => boolean> = {
   "image/svg+xml": (b) => {
-    const text = new TextDecoder().decode(b);
+    // A browser drops tab, LF and CR from a URL, so java<TAB>script: is a script link.
+    const text = new TextDecoder().decode(b).replace(/[\t\n\r]/g, "");
     return (
       // An element name may carry a namespace prefix (<x:script>), and a link or animation value may hide a scheme in an entity.
       /<(?:[\w.-]+:)?(?:script|foreignObject|iframe|embed|object)\b|[\s/"']on[a-z]+\s*=|javascript:/i.test(
