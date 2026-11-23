@@ -1,5 +1,11 @@
 # @dustinedwards/site-api
 
+## 0.48.4
+
+### Patch Changes
+
+- Refuse an SVG whose script element has a non-ASCII namespace prefix, or whose DTD declares an attribute or element.
+
 ## 0.48.3
 
 ### Patch Changes
