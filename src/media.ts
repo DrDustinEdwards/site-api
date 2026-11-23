@@ -78,9 +78,11 @@ const ACTIVE: Record<string, (b: Uint8Array) => boolean> = {
     // A browser drops tab, LF and CR from a URL, so java<TAB>script: is a script link; that strip is for the scheme only.
     const url = text.replace(/[\t\n\r]/g, "");
     return (
-      // An element name may carry a namespace prefix (<x:script>, in any script), a link or animation value may hide a scheme in an
-      // entity, and a declared encoding other than UTF-8 (ISO-2022-JP drops an ESC byte inside a keyword), a DTD may add markup or a handler the file never spells out.
-      /<(?:[^\s/>:]+:)?(?:script|foreignObject|iframe|embed|object)\b|[\s/"']on[a-z]+\s*=|<!(?:ENTITY|ATTLIST|ELEMENT)|\u001b|<\?xml[^>]*encoding\s*=\s*["'](?!utf-8["'])/i.test(
+      // An ESC byte or a declared encoding other than UTF-8 lets ISO-2022-JP hide a keyword from the patterns below.
+      text.includes("\u001b") ||
+      // An element name may carry any namespace prefix, a DTD may add markup or a handler the file never spells out, and
+      // a link or animation value may hide a scheme in an entity.
+      /<(?:[^\s/>:]+:)?(?:script|foreignObject|iframe|embed|object)\b|[\s/"']on[a-z]+\s*=|<!(?:ENTITY|ATTLIST|ELEMENT)|<\?xml[^>]*encoding\s*=\s*["'](?!utf-8["'])/i.test(
         text,
       ) ||
       /javascript:/i.test(url) ||
