@@ -74,13 +74,17 @@ const SIGNATURES: Record<string, (b: Uint8Array) => boolean> = {
  */
 const ACTIVE: Record<string, (b: Uint8Array) => boolean> = {
   "image/svg+xml": (b) => {
-    // A browser drops tab, LF and CR from a URL, so java<TAB>script: is a script link.
-    const text = new TextDecoder().decode(b).replace(/[\t\n\r]/g, "");
+    const text = new TextDecoder().decode(b);
+    // A browser drops tab, LF and CR from a URL, so java<TAB>script: is a script link; that strip is for the scheme only.
+    const url = text.replace(/[\t\n\r]/g, "");
     return (
-      // An element name may carry a namespace prefix (<x:script>), and a link or animation value may hide a scheme in an entity.
-      /<(?:[\w.-]+:)?(?:script|foreignObject|iframe|embed|object)\b|[\s/"']on[a-z]+\s*=|javascript:/i.test(
+      // An element name may carry a namespace prefix (<x:script>), a link or animation value may hide a scheme in an
+      // entity, and an <!ENTITY> may hide whole markup behind &#60;.
+      /<(?:[\w.-]+:)?(?:script|foreignObject|iframe|embed|object)\b|[\s/"']on[a-z]+\s*=|<!ENTITY/i.test(
         text,
-      ) || /\b(?:xlink:)?(?:href|values|to|from)\s*=\s*(?:"[^"]*&|'[^']*&)/i.test(text)
+      ) ||
+      /javascript:/i.test(url) ||
+      /\b(?:xlink:)?(?:href|values|to|from|by)\s*=\s*(?:"[^"]*&|'[^']*&)/i.test(text)
     );
   },
   "application/pdf": (b) => /\/(JS|JavaScript)\b/.test(new TextDecoder().decode(b)),
