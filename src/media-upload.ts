@@ -1135,8 +1135,8 @@ export interface UploadImages extends ImagesLike {
 }
 
 /** Types the Images binding re-encodes in their own type. A GIF is left out: it may be animated, and a shrink would keep one frame. */
-const REENCODED = new Set(["image/jpeg", "image/png", "image/webp", "image/avif"]);
-type Encoded = "image/jpeg" | "image/png" | "image/webp" | "image/avif";
+export const REENCODED = new Set<string>(["image/jpeg", "image/png", "image/webp", "image/avif"]);
+export type Encoded = "image/jpeg" | "image/png" | "image/webp" | "image/avif";
 
 /** Types stored as JPEG: no browser but Safari shows them. */
 const CONVERTED = new Set(["image/heic", "image/heif"]);

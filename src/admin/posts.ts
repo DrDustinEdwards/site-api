@@ -422,7 +422,7 @@ export async function runPostsIntent(
   const newId = intent === "rename" ? text(input, "newId").trim() : "";
   if (intent === "rename" && !ContentId.safeParse(newId).success) {
     return refused(
-      "A new id is lowercase letters, digits and hyphens, and may have / between parts.",
+      "A new id is letters, digits, dots, underscores and hyphens, and starts with a letter or digit.",
     );
   }
 

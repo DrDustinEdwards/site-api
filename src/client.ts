@@ -77,6 +77,8 @@ export interface SiteClientConfig {
   baseUrl: string;
   key: string;
   fetch?: typeof fetch;
+  /** Gives up on a site that does not answer after this long; default 60 seconds. */
+  timeoutMs?: number;
 }
 
 /** A refusal or failure from the site, with the contract's error body when the site sent one. */
@@ -103,6 +105,7 @@ export function createSiteClient(config: SiteClientConfig) {
   ): Promise<Response> {
     const response = await doFetch(`${base}${path}`, {
       method,
+      signal: AbortSignal.timeout(config.timeoutMs ?? 60_000),
       headers: {
         authorization: `Bearer ${config.key}`,
         ...(raw

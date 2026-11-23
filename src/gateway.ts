@@ -4,6 +4,7 @@
 import { submitIndexNow } from "@drdustinedwards/site-helpers/indexnow";
 import { schedulePurgeHook } from "@dustinedwards/site-runtime/edge-cache";
 import { indexNowHook, type PublishHook } from "./hooks.js";
+import { PREFIX } from "./contract.js";
 import {
   createSiteApi,
   isSiteApiRequest,
@@ -106,7 +107,8 @@ async function changesNothingPublic(
   response: Response,
   url: URL,
 ): Promise<boolean> {
-  if (url.pathname.includes("/preview-links")) return true;
+  const links = `${PREFIX}/preview-links`;
+  if (url.pathname === links || url.pathname.startsWith(`${links}/`)) return true;
   if (
     request.method !== "PUT" ||
     !/\/content\/[^/]+\/draft$/.test(url.pathname) ||

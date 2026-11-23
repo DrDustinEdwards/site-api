@@ -3,6 +3,7 @@
 // the shareable preview links and the webmentions each page last sent. A D1 site passes `d1SiteApiStore(env.DB)` as `store` and adds
 // `SITE_API_STORE_SQL` as its next migration. Exported as `@dustinedwards/site-api/store`.
 
+import { siteApiLog } from "./log.js";
 import type { D1Like } from "./schedules.js";
 
 /** One write as the store holds it: claimed and running, or done with the answer it gave. */
@@ -436,7 +437,7 @@ export function d1SiteApiStore(db: D1Like): D1SiteApiStore {
             .first()) !== null
         );
       } catch (error) {
-        console.warn(JSON.stringify({ siteApi: "gone-check-failed", error: String(error) }));
+        siteApiLog({ siteApi: "gone-check-failed", error: String(error) });
         return false;
       }
     },

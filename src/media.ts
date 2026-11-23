@@ -73,10 +73,15 @@ const SIGNATURES: Record<string, (b: Uint8Array) => boolean> = {
  * package does not rewrite what an editor uploads.
  */
 const ACTIVE: Record<string, (b: Uint8Array) => boolean> = {
-  "image/svg+xml": (b) =>
-    /<script\b|[\s/"']on[a-z]+\s*=|<foreignObject\b|<(iframe|embed|object)\b|javascript:|href\s*=\s*["']\s*&#/i.test(
-      new TextDecoder().decode(b),
-    ),
+  "image/svg+xml": (b) => {
+    const text = new TextDecoder().decode(b);
+    return (
+      // An element name may carry a namespace prefix (<x:script>), and a link or animation value may hide a scheme in an entity.
+      /<(?:[\w.-]+:)?(?:script|foreignObject|iframe|embed|object)\b|[\s/"']on[a-z]+\s*=|javascript:/i.test(
+        text,
+      ) || /\b(?:xlink:)?(?:href|values|to|from)\s*=\s*(?:"[^"]*&|'[^']*&)/i.test(text)
+    );
+  },
   "application/pdf": (b) => /\/(JS|JavaScript)\b/.test(new TextDecoder().decode(b)),
 };
 

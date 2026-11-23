@@ -9,6 +9,7 @@
 import { unescapeHtml } from "@dustinedwards/site-runtime/html";
 
 import type { PublishHook } from "./hooks.js";
+import { siteApiLog } from "./log.js";
 import { discard, guardedFetch, outboundRefusal } from "./outbound.js";
 import type { SiteApiStore } from "./store.js";
 
@@ -227,7 +228,7 @@ export function webmentionHook(options: {
   const doFetch = options.fetch ?? fetch;
   const dnsFetch = options.dnsFetch ?? doFetch;
   const userAgent = options.userAgent ?? "site-api webmention sender";
-  const log = options.log ?? ((entry) => console.warn(JSON.stringify(entry)));
+  const log = options.log ?? siteApiLog;
 
   async function send(source: string, target: string, deadline: AbortSignal): Promise<void> {
     const say = (result: string) => log({ siteApi: "webmention", source, target, result });
