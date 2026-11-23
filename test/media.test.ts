@@ -261,6 +261,7 @@ describe("PLANT: an upload the site does not accept", () => {
       '<svg xmlns="http://www.w3.org/2000/svg"><ж:script xmlns:ж="http://www.w3.org/2000/svg">x</ж:script></svg>',
       '<!DOCTYPE svg [<!ATTLIST svg onload CDATA "x">]><svg xmlns="http://www.w3.org/2000/svg"/>',
       '<?xml version="1.0" encoding="iso-2022-jp"?><svg xmlns="http://www.w3.org/2000/svg"><sc\x1b(Jript>x</script></svg>',
+      '<?xml-stylesheet type="text/xsl" href="#s"?><svg xmlns="http://www.w3.org/2000/svg"/>',
       '<svg xmlns="http://www.w3.org/2000/svg"><foreignObject><iframe src="/x"/></foreignObject></svg>',
     ]) {
       const response = await api.handle(

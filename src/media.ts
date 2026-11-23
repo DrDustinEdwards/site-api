@@ -80,9 +80,9 @@ const ACTIVE: Record<string, (b: Uint8Array) => boolean> = {
     return (
       // An ESC byte or a declared encoding other than UTF-8 lets ISO-2022-JP hide a keyword from the patterns below.
       text.includes("\u001b") ||
-      // An element name may carry any namespace prefix, a DTD may add markup or a handler the file never spells out, and
+      // An element name may carry any namespace prefix, a stylesheet instruction can build script (XSLT), a DTD may add markup or a handler the file never spells out, and
       // a link or animation value may hide a scheme in an entity.
-      /<(?:[^\s/>:]+:)?(?:script|foreignObject|iframe|embed|object)\b|[\s/"']on[a-z]+\s*=|<!(?:ENTITY|ATTLIST|ELEMENT)|<\?xml[^>]*encoding\s*=\s*["'](?!utf-8["'])/i.test(
+      /<(?:[^\s/>:]+:)?(?:script|foreignObject|iframe|embed|object)\b|[\s/"']on[a-z]+\s*=|<!(?:ENTITY|ATTLIST|ELEMENT)|<\?xml-stylesheet|XSL\/Transform|<\?xml[^>]*encoding\s*=\s*["'](?!utf-8["'])/i.test(
         text,
       ) ||
       /javascript:/i.test(url) ||
