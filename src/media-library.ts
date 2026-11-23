@@ -43,7 +43,8 @@ import {
 import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 import { kindOf, orientationOf, transformFocus, turnsSize } from "./media.js";
 import { mediaRev, mediaVersion, toArrayBuffer } from "./media-kit.js";
-import { placeholderAndColor, prepareUpload, type UploadImages } from "./media-upload.js";
+import { REENCODED, placeholderAndColor, prepareUpload } from "./media-upload.js";
+import type { Encoded, UploadImages } from "./media-upload.js";
 
 /** One file's index row, in the contract's terms. A site's store maps its own columns to and from it. */
 export interface MediaRecord {
@@ -355,10 +356,6 @@ const LIBRARY_LENSES = [
   "duplicates",
   "license-expired",
 ] as const satisfies readonly MediaLens[];
-
-/** What the Images binding re-encodes in its own type. Not a GIF: it may be animated, and an edit keeps one frame. */
-type Encoded = "image/jpeg" | "image/png" | "image/webp" | "image/avif";
-const REENCODED = new Set<string>(["image/jpeg", "image/png", "image/webp", "image/avif"]);
 
 /** The quality a turn or a mirror encodes at: high, since each one re-encodes a lossy picture. */
 const TRANSFORM_QUALITY = 92;

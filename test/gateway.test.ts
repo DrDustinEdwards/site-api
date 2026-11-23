@@ -53,7 +53,7 @@ describe("siteApiStep", () => {
     const source = "---\ntitle: A\n---\n\nText\n";
     const saved = (await (
       await run(
-        req("/api/carrel/v1/content/a/draft", {
+        req("/api/carrel/v1/content/preview-links-a/draft", {
           method: "PUT",
           ...body({ source, expectedVersion: null, changeId: "c1" }),
         }),
@@ -62,21 +62,21 @@ describe("siteApiStep", () => {
     expect(purged).toEqual([]);
     const published = (await (
       await run(
-        req("/api/carrel/v1/content/a/publish", {
+        req("/api/carrel/v1/content/preview-links-a/publish", {
           method: "POST",
           ...body({ expectedVersion: saved.version, changeId: "c2" }),
         }),
       )
     )?.json()) as { version: string };
     await run(
-      req("/api/carrel/v1/content/a/draft", {
+      req("/api/carrel/v1/content/preview-links-a/draft", {
         method: "PUT",
         ...body({ source: source + "More\n", expectedVersion: published.version, changeId: "c3" }),
       }),
     );
     expect(purged).toEqual([
-      "carrel POST /api/carrel/v1/content/a/publish",
-      "carrel PUT /api/carrel/v1/content/a/draft",
+      "carrel POST /api/carrel/v1/content/preview-links-a/publish",
+      "carrel PUT /api/carrel/v1/content/preview-links-a/draft",
     ]);
   });
 });

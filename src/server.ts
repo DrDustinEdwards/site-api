@@ -10,7 +10,7 @@ import { isDatabaseDown } from "@dustinedwards/site-runtime/log";
 import { hasContentTrash, type DueSchedule, type SiteAdapter } from "./adapter.js";
 import { PREFIX } from "./contract.js";
 import { Timestamp } from "./contract/base.js";
-import type { ContentStatus } from "./contract.js";
+import type { ContentStatus, ContentSummary } from "./contract.js";
 import {
   hears,
   runHooks,
@@ -376,8 +376,10 @@ export function createSiteApi(config: SiteApiConfig): SiteApi {
     if (!hasContentTrash(adapter)) return 0;
     const before = now.getTime() - TRASH_DAYS * DAY;
     let emptied = 0;
-    let cursor: string | undefined;
     try {
+      // Gathered before any delete: a cursor into a list that is shrinking would skip items.
+      const expired: ContentSummary[] = [];
+      let cursor: string | undefined;
       do {
         const page = await content.list({
           trashed: true,
@@ -385,32 +387,30 @@ export function createSiteApi(config: SiteApiConfig): SiteApi {
           ...(cursor ? { cursor } : {}),
         });
         for (const item of page.items) {
-          if (emptied >= limit) return emptied;
           // Only a contract timestamp past 30 days deletes: Date.parse reads "1 Oct" as 2001, so it is never asked alone.
-          if (!Timestamp.safeParse(item.trashedAt).success || Date.parse(item.trashedAt!) > before)
-            continue;
-          if (!item.version) {
-            log({
-              siteApi: "trash-empty-skipped",
-              id: item.id,
-              reason: "the list gives no version",
-            });
-            continue;
-          }
-          const changeId = `trash-expired-${item.id}`.replace(/[^A-Za-z0-9_-]/g, "-").slice(0, 128);
-          try {
-            await content.delete!(item.id, { expectedVersion: item.version, changeId });
-            emptied++;
-          } catch (error) {
-            log({
-              siteApi: "trash-empty-failed",
-              id: item.id,
-              error: error instanceof Error ? error.message : String(error),
-            });
-          }
+          if (Timestamp.safeParse(item.trashedAt).success && Date.parse(item.trashedAt!) <= before)
+            expired.push(item);
         }
         cursor = page.nextCursor ?? undefined;
       } while (cursor);
+      for (const item of expired) {
+        if (emptied >= limit) return emptied;
+        if (!item.version) {
+          log({ siteApi: "trash-empty-skipped", id: item.id, reason: "the list gives no version" });
+          continue;
+        }
+        const changeId = `trash-expired-${item.id}`.replace(/[^A-Za-z0-9_-]/g, "-").slice(0, 128);
+        try {
+          await content.delete!(item.id, { expectedVersion: item.version, changeId });
+          emptied++;
+        } catch (error) {
+          log({
+            siteApi: "trash-empty-failed",
+            id: item.id,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
     } catch (error) {
       log({ siteApi: "trash-empty-failed", error: String(error) });
     }
