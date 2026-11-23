@@ -1,5 +1,11 @@
 # @dustinedwards/site-api
 
+## 0.48.6
+
+### Patch Changes
+
+- Refuse an SVG that carries an XSLT stylesheet instruction or the XSLT namespace.
+
 ## 0.48.5
 
 ### Patch Changes
