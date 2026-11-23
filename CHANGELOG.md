@@ -1,5 +1,11 @@
 # @dustinedwards/site-api
 
+## 0.48.3
+
+### Patch Changes
+
+- Refuse an SVG whose event handler follows a tab or line break, and one that hides markup in an `<!ENTITY>`.
+
 ## 0.48.2
 
 ### Patch Changes
