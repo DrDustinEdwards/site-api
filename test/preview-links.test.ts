@@ -106,3 +106,29 @@ describe("preview links (v0.17.0)", () => {
     expect(records).toEqual([{ kind: "post-preview-link", ids: ["a"] }]);
   });
 });
+
+describe("preview link pruning", () => {
+  it("drops links that expired or were revoked before the cut, and keeps the rest", async () => {
+    const db = d1(SITE_API_STORE_SQL);
+    const store = d1SiteApiStore(db);
+    const link = (hash: string, expiresAt: string, revokedAt: string | null) => ({
+      tokenHash: hash,
+      contentId: "a",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      expiresAt,
+      revokedAt,
+      changeId: "c",
+    });
+    await store.putPreviewLink(link("old", "2026-02-01T00:00:00.000Z", null));
+    await store.putPreviewLink(
+      link("revoked", "2026-12-01T00:00:00.000Z", "2026-03-01T00:00:00.000Z"),
+    );
+    await store.putPreviewLink(link("live", "2026-12-01T00:00:00.000Z", null));
+    await store.putPreviewLink(link("recent", "2026-04-20T00:00:00.000Z", null));
+    await store.prunePreviewLinks!("2026-04-01T00:00:00.000Z");
+    const left = await Promise.all(
+      ["old", "revoked", "live", "recent"].map(async (h) => (await store.previewLink(h)) !== null),
+    );
+    expect(left).toEqual([false, false, true, true]);
+  });
+});

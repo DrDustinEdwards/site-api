@@ -358,6 +358,14 @@ export function d1MediaStore(
       return row?.seq ?? 0;
     },
 
+    async compactChanges() {
+      await db
+        .prepare(
+          "DELETE FROM media_changes WHERE seq NOT IN (SELECT max(seq) FROM media_changes GROUP BY media_key)",
+        )
+        .run();
+    },
+
     async changedSince(from, head, limit) {
       const { results } = await db
         .prepare(

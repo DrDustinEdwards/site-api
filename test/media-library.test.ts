@@ -408,3 +408,28 @@ describe("media library", () => {
     expect(media.objects.has(a.id) && media.objects.has(b.id)).toBe(true);
   });
 });
+
+describe("change log compaction", () => {
+  it("keeps each file's newest entry, so a poll answers the same and the head stays", async () => {
+    const { db, adapter } = library();
+    const a = await upload(adapter, png(8, 8));
+    await adapter.setAlt!(a.id, { alt: "one", expectedVersion: a.version!, changeId: "c1" });
+    const before = db.db
+      .prepare("SELECT count(*) AS n, max(seq) AS head FROM media_changes")
+      .get() as {
+      n: number;
+      head: number;
+    };
+    expect(before.n).toBeGreaterThan(1);
+    const polled = await adapter.changes!({ since: "0", limit: 10 });
+    await adapter.compactChanges!();
+    const after = db.db
+      .prepare("SELECT count(*) AS n, max(seq) AS head FROM media_changes")
+      .get() as {
+      n: number;
+      head: number;
+    };
+    expect(after).toEqual({ n: 1, head: before.head });
+    expect((await adapter.changes!({ since: "0", limit: 10 })).items).toEqual(polled.items);
+  });
+});

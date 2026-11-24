@@ -70,6 +70,8 @@ export interface SiteApiStore {
   pruneHookRuns?(before: string): Promise<void>;
   /** Drops the tombstones the conformance probe's deleted posts left (a path ending in `carrel-conformance-…`) kept before `before`. */
   pruneProbeGone?(before: string): Promise<void>;
+  /** Drops the preview links that expired, and those revoked, before `before`. */
+  prunePreviewLinks?(before: string): Promise<void>;
 }
 
 /** The D1 store, with every method of v0.22.0. */
@@ -456,6 +458,12 @@ export function d1SiteApiStore(db: D1Like): D1SiteApiStore {
     },
     async pruneHookRuns(before) {
       await db.prepare("DELETE FROM hook_runs WHERE at < ?").bind(before).run();
+    },
+    async prunePreviewLinks(before) {
+      await db
+        .prepare("DELETE FROM preview_links WHERE expires_at < ?1 OR revoked_at < ?1")
+        .bind(before)
+        .run();
     },
     async pruneProbeGone(before) {
       await db

@@ -336,6 +336,8 @@ export interface MediaAdapter {
     since: string;
     limit: number;
   }): Promise<{ items: MediaItem[]; removed: string[]; cursor: string; more: boolean }>;
+  /** Optional: drops the change-log entries a later one of the same file replaced; `changes` answers the same. The package runs it about once a day. */
+  compactChanges?(): Promise<void>;
   /**
    * Shrinks one stored picture to `resize` (capabilities.mediaResizePass), in place, keeping the old bytes where the site
    * keeps history. Throws VersionConflictError, NotFoundError or RefusedError like the writes; `resized: false` and the
