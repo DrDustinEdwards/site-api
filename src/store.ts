@@ -374,12 +374,12 @@ export function d1SiteApiStore(db: D1Like): D1SiteApiStore {
       return results.map(toLink);
     },
     async revokePreviewLink(prefix, at) {
-      // The prefix is hex the package checked, so it is safe inside LIKE.
+      // The prefix is lowercase hex the package checked, and a hash is too: a range on the key, where LIKE scans the table.
       const row = await db
         .prepare(
-          "UPDATE preview_links SET revoked_at = ? WHERE token_hash LIKE ? AND revoked_at IS NULL RETURNING token_hash",
+          "UPDATE preview_links SET revoked_at = ? WHERE token_hash >= ? AND token_hash < ? AND revoked_at IS NULL RETURNING token_hash",
         )
-        .bind(at, `${prefix}%`)
+        .bind(at, prefix, `${prefix}g`)
         .first();
       return row !== null;
     },
