@@ -154,8 +154,6 @@ export interface MediaLibraryStore {
     head: number,
     limit: number,
   ): Promise<Array<{ key: string; seq: number }>>;
-  /** Drops each change another one of the same file replaced. A poll answers each file once, so none is lost; the head stays. */
-  compactChanges?(): Promise<void>;
 }
 
 /** The parts of an R2 object the library reads: no index signature, so Workers' own R2Object fits it. */
@@ -1210,8 +1208,6 @@ export function mediaLibrary(options: MediaLibraryOptions): MediaAdapter {
       await options.onWrite?.({ op: "revert", id, changeId: input.changeId });
       return { item: await itemWithUse(after), sizesNeedPurge: false };
     },
-
-    compactChanges: store.compactChanges ? () => store.compactChanges!() : undefined,
 
     // From the change log the store keeps: every insert, update and delete of a row.
     async changes({ since, limit }) {

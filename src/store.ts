@@ -72,6 +72,11 @@ export interface SiteApiStore {
   pruneProbeGone?(before: string): Promise<void>;
   /** Drops the preview links that expired, and those revoked, before `before`. */
   prunePreviewLinks?(before: string): Promise<void>;
+  /**
+   * Drops each media change-log entry a newer one for the same file replaced (a poll answers each file once, so none is
+   * lost; the newest entry stays, so cursors keep working). A site with no standard media tables has none to drop.
+   */
+  compactMediaChanges?(): Promise<void>;
 }
 
 /** The D1 store, with every method of v0.22.0. */
@@ -464,6 +469,17 @@ export function d1SiteApiStore(db: D1Like): D1SiteApiStore {
         .prepare("DELETE FROM preview_links WHERE expires_at < ?1 OR revoked_at < ?1")
         .bind(before)
         .run();
+    },
+    async compactMediaChanges() {
+      try {
+        await db
+          .prepare(
+            "DELETE FROM media_changes WHERE seq NOT IN (SELECT max(seq) FROM media_changes GROUP BY media_key)",
+          )
+          .run();
+      } catch (error) {
+        if (!String(error).includes("no such table")) throw error;
+      }
     },
     async pruneProbeGone(before) {
       await db

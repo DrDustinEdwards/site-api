@@ -39,7 +39,8 @@ import {
   previewLinkRoutes,
   servePreviewLink,
 } from "./server/preview-links.js";
-import { claim, REPLAY_DAYS, REPLAYED } from "./server/replay.js";
+import { pruneStore } from "./server/prune.js";
+import { claim, REPLAYED } from "./server/replay.js";
 import { siteApiLog } from "./log.js";
 import type { SiteApiStore } from "./store.js";
 
@@ -143,10 +144,6 @@ export interface SiteApi {
 export const MIN_KEY_LENGTH = 32;
 
 const DAY = 24 * 60 * 60 * 1000;
-const HOUR = 60 * 60 * 1000;
-const PREVIEW_LINK_KEEP_DAYS = 30;
-/** When this isolate last ran the daily prunes: they scan whole tables, so once a day, not every minute's pass. */
-let lastDailyPrune = 0;
 
 /** True for a request the site API or a preview link answers (or refuses): the only ones that need it built. */
 export function isSiteApiRequest(url: URL): boolean {
@@ -434,29 +431,7 @@ export function createSiteApi(config: SiteApiConfig): SiteApi {
       retried: 0,
     };
     const now = options.now ?? new Date();
-    if (store) {
-      const before = new Date(now.getTime() - REPLAY_DAYS * DAY).toISOString();
-      await store
-        .pruneWrites(before)
-        .catch((error) => log({ siteApi: "replay-store-failed", error: String(error) }));
-      await store
-        .pruneHookRuns?.(before)
-        .catch((error) => log({ siteApi: "hook-runs-prune-failed", error: String(error) }));
-      // The probe's own 410 marker has done its job once the probe verified it; it never outlives the hour.
-      await store
-        .pruneProbeGone?.(new Date(now.getTime() - HOUR).toISOString())
-        .catch((error) => log({ siteApi: "probe-gone-prune-failed", error: String(error) }));
-    }
-    if (store && now.getTime() - lastDailyPrune >= DAY) {
-      lastDailyPrune = now.getTime();
-      // A link keeps its page (410 expired, 404 revoked) for 30 days, then the row goes.
-      await store
-        .prunePreviewLinks?.(new Date(now.getTime() - PREVIEW_LINK_KEEP_DAYS * DAY).toISOString())
-        .catch((error) => log({ siteApi: "preview-links-prune-failed", error: String(error) }));
-      await adapter.media
-        ?.compactChanges?.()
-        .catch((error) => log({ siteApi: "media-changes-compact-failed", error: String(error) }));
-    }
+    if (store) await pruneStore(store, now, log);
     const limit = options.limit ?? SCHEDULE_BATCH_LIMIT;
     run.emptied = await emptyTrash(now, limit);
     run.retried = await retryHooks(now, limit);
