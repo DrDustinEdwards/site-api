@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { runPostsIntent, type ContentSource } from "../src/admin.js";
 import { createSiteClient } from "../src/client.js";
 import { createSiteApi } from "../src/index.js";
+import { MEDIA_LIBRARY_SQL } from "../src/media-store.js";
 import { d1SiteApiStore, SITE_API_STORE_SQL } from "../src/store.js";
 import { memoryAdapter } from "../src/testing.js";
 import { d1 } from "./d1.js";
@@ -104,5 +105,49 @@ describe("preview links (v0.17.0)", () => {
     const made = await runPostsIntent(source(true), ask);
     expect(made).toMatchObject({ ok: true, previewLink: { url: expect.any(String) } });
     expect(records).toEqual([{ kind: "post-preview-link", ids: ["a"] }]);
+  });
+});
+
+describe("preview link pruning", () => {
+  it("drops links that expired or were revoked before the cut, and keeps the rest", async () => {
+    const db = d1(SITE_API_STORE_SQL);
+    const store = d1SiteApiStore(db);
+    const link = (hash: string, expiresAt: string, revokedAt: string | null) => ({
+      tokenHash: hash,
+      contentId: "a",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      expiresAt,
+      revokedAt,
+      changeId: "c",
+    });
+    await store.putPreviewLink(link("old", "2026-02-01T00:00:00.000Z", null));
+    await store.putPreviewLink(
+      link("revoked", "2026-12-01T00:00:00.000Z", "2026-03-01T00:00:00.000Z"),
+    );
+    await store.putPreviewLink(link("live", "2026-12-01T00:00:00.000Z", null));
+    await store.putPreviewLink(link("recent", "2026-04-20T00:00:00.000Z", null));
+    await store.prunePreviewLinks!("2026-04-01T00:00:00.000Z");
+    const left = await Promise.all(
+      ["old", "revoked", "live", "recent"].map(async (h) => (await store.previewLink(h)) !== null),
+    );
+    expect(left).toEqual([false, false, true, true]);
+  });
+
+  it("compacts the media change log to each file's newest entry, and does nothing on a site without the tables", async () => {
+    const db = d1(SITE_API_STORE_SQL + MEDIA_LIBRARY_SQL);
+    const insert = (key: string) =>
+      db.prepare("INSERT INTO media_changes (media_key) VALUES (?)").bind(key).run();
+    for (const key of ["a", "b", "a", "a", "b"]) await insert(key);
+    await d1SiteApiStore(db).compactMediaChanges!();
+    const { results } = await db
+      .prepare("SELECT seq, media_key FROM media_changes ORDER BY seq")
+      .all<{ seq: number; media_key: string }>();
+    expect(results).toEqual([
+      { seq: 4, media_key: "a" },
+      { seq: 5, media_key: "b" },
+    ]);
+    await expect(
+      d1SiteApiStore(d1(SITE_API_STORE_SQL)).compactMediaChanges!(),
+    ).resolves.toBeUndefined();
   });
 });
