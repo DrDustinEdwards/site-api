@@ -1,5 +1,11 @@
 # @dustinedwards/site-api
 
+## 0.48.7
+
+### Patch Changes
+
+- Mark the package side-effect free so a Worker bundles only the modules it imports.
+
 ## 0.48.6
 
 ### Patch Changes
