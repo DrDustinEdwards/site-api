@@ -69,13 +69,7 @@ const SIGNATURES: Record<string, (b: Uint8Array) => boolean> = {
   // An MP3 opens with an ID3 tag or an MPEG audio frame (sync bits, then a layer other than the reserved 00).
   "audio/mpeg": (b) =>
     ascii(b, 0, 3) === "ID3" || (b[0] === 0xff && (b[1]! & 0xe0) === 0xe0 && (b[1]! & 0x06) !== 0),
-  // Raw AAC is an ADTS stream (sync bits, then layer 00), sometimes behind an ID3 tag.
-  "audio/aac": (b) => ascii(b, 0, 3) === "ID3" || (b[0] === 0xff && (b[1]! & 0xf6) === 0xf0),
   "audio/mp4": (b) => ascii(b, 4, 4) === "ftyp",
-  "audio/wav": (b) => ascii(b, 0, 4) === "RIFF" && ascii(b, 8, 4) === "WAVE",
-  // Ogg pages carry Vorbis, Opus and FLAC alike.
-  "audio/ogg": (b) => ascii(b, 0, 4) === "OggS",
-  "audio/flac": (b) => ascii(b, 0, 4) === "fLaC" || ascii(b, 0, 3) === "ID3",
   // Text, so no magic number: no NUL byte in the head, and an <svg element near the start.
   "image/svg+xml": (b) => {
     const head = new TextDecoder().decode(b.subarray(0, 4096));
