@@ -14,6 +14,7 @@ export {
 } from "./outbound.js";
 export {
   altRefusal,
+  checkUpload,
   imageRights,
   kindOf,
   orientationOf,
