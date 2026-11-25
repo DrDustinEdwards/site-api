@@ -23,7 +23,7 @@ export const ACTION: Record<string, PublishAction> = {
   "DELETE schedule": "unschedule",
 };
 
-/** How long a failed hook waits before each retry (v0.17.0), in minutes; after the last it is given up and logged. */
+/** How long a failed hook waits before each retry, in minutes; after the last it is given up and logged. */
 export const HOOK_BACKOFF_MINUTES = [1, 5, 30, 120, 720] as const;
 
 export const MINUTE = 60 * 1000;
@@ -35,7 +35,7 @@ export function bearer(request: Request): string | null {
 }
 
 // The event for one content write, from the page before it and after it. A draft that was never published has no page,
-// so its writes tell no one, except a schedule or an unschedule (v0.22.0), which a hook naming them hears with no path.
+// so its writes tell no one, except a schedule or an unschedule, which a hook naming them hears with no path.
 export function pageEvent(
   origin: string,
   id: string,
@@ -64,7 +64,7 @@ export function pageEvent(
 }
 
 /**
- * v0.22.0 (F5): the tombstones. A delete or a trash of a live item leaves its path answering 410; a publish there, or a
+ * The tombstones. A delete or a trash of a live item leaves its path answering 410; a publish there, or a
  * rename onto it, takes the tombstone away. The trash emptying itself keeps it. A store that cannot keep one is logged,
  * and the write stands.
  */

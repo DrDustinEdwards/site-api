@@ -41,7 +41,7 @@ const V0130_ITEM = [
   "usedCount",
 ];
 
-/** Every v0.5.0 schema later versions extend, and exactly the optional properties each adds (v0.10.0: scheduled updates, and a file's focal point and caption). */
+/** Every v0.5.0 schema later versions extend, and exactly the optional properties each adds. */
 const ADDED: Record<string, string[]> = withV0220(
   withV0190(
     withV0170({

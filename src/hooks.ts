@@ -1,4 +1,4 @@
-// Publish hooks (v0.10.0): what a site runs when a public page changes, whether a Carrel request changed it or a
+// Publish hooks: what a site runs when a public page changes, whether a Carrel request changed it or a
 // schedule did. A hook never decides anything: the write has already happened, so a hook that fails is logged and the
 // write stands.
 
@@ -7,7 +7,7 @@ import type { ContentStatus } from "./contract.js";
 /**
  * publish: the item went live (a first publish, a publish again, or a scheduled item at its time). update: a live
  * item's page changed (a save, a tag change, or its scheduled update at its time). unpublish: it left the site.
- * delete: it was deleted. v0.17.0: trash and restore (to and from the content trash), rename (a move to a new id, its
+ * delete: it was deleted. Also trash and restore (to and from the content trash), rename (a move to a new id, its
  * old path redirecting), schedule and unschedule (a schedule made or canceled, nothing changed yet).
  */
 export type PublishAction =
@@ -25,7 +25,7 @@ export interface PublishEvent {
   action: PublishAction;
   id: string;
   /**
-   * The item's public path, such as /blog/some-post. v0.22.0: null for a schedule or an unschedule of an item never
+   * The item's public path, such as /blog/some-post. Null for a schedule or an unschedule of an item never
    * published, which has no page yet; a hook that needs a live page skips such an event itself.
    */
   path: string | null;
@@ -36,10 +36,10 @@ export interface PublishEvent {
   changeId: string | null;
   /** The request that made the change; absent for a schedule, and for a hook's retry. */
   request?: Request;
-  /** v0.17.0: the item's status before the write and after it (after a delete, absent). */
+  /** The item's status before the write and after it (after a delete, absent). */
   previousStatus?: ContentStatus;
   status?: ContentStatus;
-  /** v0.17.0, on a rename of an item that was ever published: its old path, which now redirects, and that page's address. */
+  /** On a rename of an item that was ever published: its old path, which now redirects, and that page's address. */
   previousPath?: string;
   previousUrl?: string;
 }
@@ -48,7 +48,7 @@ export interface PublishHook {
   /** Names the hook in the log, and in the store's retries. */
   name: string;
   /**
-   * v0.17.0: the actions the hook hears. Absent: the ones that change a public page, as before (PAGE_ACTIONS): a publish,
+   * The actions the hook hears. Absent: the ones that change a public page, as before (PAGE_ACTIONS): a publish,
    * a live item's update, an unpublish, and a delete, trash or rename of a live item.
    */
   on?: readonly PublishAction[];
@@ -69,7 +69,7 @@ export const PAGE_ACTIONS: readonly PublishAction[] = [
 /** Whether a hook hears the event: one it names, or with no `on`, a page action that changed a public page. */
 export function hears(hook: PublishHook, event: PublishEvent): boolean {
   if (hook.on) return hook.on.includes(event.action);
-  // No page, no page change (v0.22.0): only a hook that names schedule or unschedule hears one without a path.
+  // No page, no page change: only a hook that names schedule or unschedule hears one without a path.
   if (event.path === null) return false;
   if (!PAGE_ACTIONS.includes(event.action)) return false;
   const live =
@@ -79,7 +79,7 @@ export function hears(hook: PublishHook, event: PublishEvent): boolean {
 }
 
 /**
- * Runs every hook that hears the event at once, and logs each one that fails. Never throws. `failed` (v0.17.0) is told
+ * Runs every hook that hears the event at once, and logs each one that fails. Never throws. `failed` is told
  * each failure, so the package keeps it for a retry where the site has a store.
  */
 export async function runHooks(
@@ -133,7 +133,7 @@ export function indexNowHook(options: {
   return {
     name: "indexnow",
     run: (event) => {
-      // No page yet (v0.22.0: a schedule of a draft, heard only by a hook that names it): nothing to tell, and not a failure.
+      // No page yet (a schedule of a draft, heard only by a hook that names it): nothing to tell, and not a failure.
       if (!event.url) return true;
       // A preview is not a failure: it has nothing to tell.
       if (event.request && new URL(event.request.url).origin !== options.origin) return true;

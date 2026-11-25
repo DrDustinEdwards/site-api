@@ -1,5 +1,4 @@
-// The media group (v0.2.0, writes v0.4.0, lenses v0.6.0, focal point, caption and replace v0.10.0, the media library's
-// fourteen ideas v0.13.0).
+// The media group: uploads and their limits, lenses, metadata, focal point, caption, replace and the media library's ideas.
 
 import { SLUG_PATTERN } from "@drdustinedwards/site-helpers/slug";
 import { focusOf } from "@dustinedwards/site-runtime/image";
@@ -10,7 +9,7 @@ import { Limit, SortDir, Timestamp, Version } from "./base.js";
 export const MAX_MEDIA_BYTES = 25 * 1024 * 1024;
 
 /**
- * What a site accepts as an upload, declared by the site (v0.2.0). `types` are MIME types, such as
+ * What a site accepts as an upload, declared by the site. `types` are MIME types, such as
  * image/png; the package refuses anything else before the site sees a byte.
  */
 export const MediaUploadLimits = z.object({
@@ -22,8 +21,8 @@ export const MediaUploadLimits = z.object({
 });
 
 /**
- * The ready-made views of a library (v0.6.0), each optional per site: files nothing uses (by the
- * site's own reference check), files with no alt text, and files larger than LARGE_MEDIA_BYTES. v0.13.0 adds files whose
+ * The ready-made views of a library, each optional per site: files nothing uses (by the
+ * site's own reference check), files with no alt text, and files larger than LARGE_MEDIA_BYTES, files whose
  * bytes are exactly another file's (by content hash, never a picture's likeness), files whose license has run out
  * (`licenseExpires` before today, in UTC), and pictures with an edge longer than the site's `mediaResize.maxEdge`.
  */
@@ -64,11 +63,11 @@ export const MediaUse = z.object({
 /** A tag: lower case words joined by single hyphens, so the same tag is always spelled one way. */
 export const MediaTag = z.string().min(1).max(32).regex(SLUG_PATTERN);
 
-/** A file's whole tag set (v0.4.0). The most any file carries is 12. */
+/** A file's whole tag set. The most any file carries is 12. */
 export const MediaTags = z.array(MediaTag).max(12);
 
 /**
- * A file's focal point (v0.10.0): "XxY", each from 0 to 1 from the top left with up to three decimals, such as
+ * A file's focal point: "XxY", each from 0 to 1 from the top left with up to three decimals, such as
  * "0.25x0.4". The site keeps it where site-runtime's ./image reads it for its crops (an R2 object's customMetadata
  * `focus`, FOCUS_METADATA), so the package takes only what that module's `focusOf` takes.
  */
@@ -80,7 +79,7 @@ export const MediaFocus = z
     'A focal point is "XxY", each from 0 to 1 with up to three decimals',
   );
 
-/** A file's caption (v0.10.0): what a figure shows under it, beside its alt text. "" for none. */
+/** A file's caption: what a figure shows under it, beside its alt text. "" for none. */
 export const MediaCaption = z.string().max(2000);
 
 /** Where the site serves a file, or offers it: a path on the site, such as /media/2026/09/photo.webp, or a full https URL. */
@@ -90,11 +89,11 @@ const MediaAddress = z
   .max(2000)
   .refine((u) => u.startsWith("/") || u.startsWith("https://"), "A path or an https URL");
 
-/** The longest placeholder a file may carry (v0.13.0): a tiny blurred picture, never the picture itself. */
+/** The longest placeholder a file may carry: a tiny blurred picture, never the picture itself. */
 export const MAX_PLACEHOLDER_CHARS = 2048;
 
 /**
- * A file's placeholder (v0.13.0): a tiny picture as a base64 data: URI in a raster type, which a page shows while the file
+ * A file's placeholder: a tiny picture as a base64 data: URI in a raster type, which a page shows while the file
  * loads. No SVG, so a placeholder never carries markup.
  */
 export const MediaPlaceholder = z
@@ -105,33 +104,32 @@ export const MediaPlaceholder = z
     "A base64 data: URI of a png, jpeg, gif, webp or avif",
   );
 
-/** A file's main color (v0.13.0), as #rrggbb in lower case. */
+/** A file's main color, as #rrggbb in lower case. */
 export const MediaColor = z.string().regex(/^#[0-9a-f]{6}$/, "A color as #rrggbb in lower case");
 
-/** Who made a file and the terms it is used under (v0.13.0): free text, "" for none. */
+/** Who made a file and the terms it is used under: free text, "" for none. */
 export const MediaCredit = z.string().max(300);
 export const MediaLicense = z.string().max(300);
 
-/** Where a file came from (v0.13.0): the page or file it was taken from, http or https. */
+/** Where a file came from: the page or file it was taken from, http or https. */
 export const MediaSourceUrl = z.url({ protocol: /^https?$/ }).max(2000);
 
 /**
- * The longest alt text a write takes (v0.19.0): a description beyond it belongs in the caption or a long description. A
+ * The longest alt text a write takes: a description beyond it belongs in the caption or a long description. A
  * file stored before keeps a longer one.
  */
 export const MAX_ALT_CHARS = 250;
 
-/** What a file is, from its type (v0.13.0): kindOf in the package says which. */
+/** What a file is, from its type: kindOf in the package says which. */
 export const MEDIA_KINDS = ["image", "document", "video", "audio"] as const;
 export const MediaKind = z.enum(MEDIA_KINDS);
 
-/** Which way a picture lies (v0.13.0): orientationOf in the package says which. */
+/** Which way a picture lies: orientationOf in the package says which. */
 export const MEDIA_ORIENTATIONS = ["landscape", "portrait", "square"] as const;
 export const MediaOrientation = z.enum(MEDIA_ORIENTATIONS);
 
 /**
- * The fields a site may fill from a file's own embedded metadata (XMP, IPTC, EXIF) at upload (v0.13.0; the copyright notice
- * and the two license addresses v0.19.0).
+ * The fields a site may fill from a file's own embedded metadata (XMP, IPTC, EXIF) at upload.
  */
 export const MEDIA_EMBEDDED_FIELDS = [
   "credit",
@@ -158,19 +156,19 @@ export const MediaItem = z.object({
   /** False for files the site will never delete through this API, such as its own static assets. */
   deletable: z.boolean(),
   /**
-   * Opaque, like a content version (v0.4.0): it identifies the file's editable metadata, so alt,
+   * Opaque, like a content version: it identifies the file's editable metadata, so alt,
    * tags and trash state each move it. Present on a site that offers any media write.
    */
   version: Version.optional(),
-  /** The file's tags (v0.4.0), present on a site that keeps them. */
+  /** The file's tags, present on a site that keeps them. */
   tags: MediaTags.optional(),
-  /** When the file was moved to the trash (v0.4.0); null or absent when it is in the library. */
+  /** When the file was moved to the trash; null or absent when it is in the library. */
   trashedAt: Timestamp.nullable().optional(),
-  /** The file's focal point (v0.10.0), on a site that keeps one: null when it has none, and the crop is the site's guess. */
+  /** The file's focal point, on a site that keeps one: null when it has none, and the crop is the site's guess. */
   focus: MediaFocus.nullable().optional(),
-  /** The file's caption (v0.10.0), on a site that keeps one: "" when it has none. */
+  /** The file's caption, on a site that keeps one: "" when it has none. */
   caption: MediaCaption.optional(),
-  // ---------- v0.13.0, each on a site that keeps it
+  // ---------- each on a site that keeps it
   /** How many places use the file, by the site's own reference check (capabilities.mediaUsage). */
   usedCount: z.number().int().min(0).optional(),
   /** A tiny placeholder picture and the main color, both made at upload. null when the site made none for this file. */
@@ -186,7 +184,7 @@ export const MediaItem = z.object({
   takenAt: z.iso.datetime({ offset: true, local: true }).nullable().optional(),
   /** Where the original file downloads from, where the site offers it. It may be `url` itself. */
   downloadUrl: MediaAddress.optional(),
-  // ---------- v0.19.0, each on a site that keeps it
+  // ---------- each on a site that keeps it
   /**
    * True when the person who placed the file said it is decorative, so its empty alt is a choice and not a gap (the no-alt
    * lens leaves it out). Absent on a file stored before, whose empty alt is a gap.
@@ -200,38 +198,38 @@ export const MediaItem = z.object({
   acquireLicenseUrl: MediaSourceUrl.nullable().optional(),
 });
 
-/** Another file whose bytes are exactly this one's (v0.13.0). */
+/** Another file whose bytes are exactly this one's. */
 export const MediaTwin = z.object({ id: MediaId, filename: z.string().max(300).nullable() });
 
 /** One file with the places it is used: what a delete would be refused over. */
 export const MediaDetail = MediaItem.extend({
   usedBy: z.array(MediaUse),
-  /** Files whose bytes are exactly this one's (v0.13.0, capabilities.mediaDuplicates): [] when there are none. */
+  /** Files whose bytes are exactly this one's (capabilities.mediaDuplicates): [] when there are none. */
   twins: z.array(MediaTwin).max(50).optional(),
 });
 
 /**
- * What a media list can be sorted by (v0.6.0). added runs newest first, size largest first and name A to Z, unless `dir`
- * says otherwise. used (v0.13.0, capabilities.mediaUsage) runs most used first.
+ * What a media list can be sorted by. added runs newest first, size largest first and name A to Z, unless `dir`
+ * says otherwise. used (capabilities.mediaUsage) runs most used first.
  */
 export const MEDIA_SORTS = ["added", "name", "size", "used"] as const;
 
 export const MediaListQuery = z.object({
   q: z.string().max(200).optional(),
-  /** v0.6.0, on a site that lists the lens in capabilities.mediaLenses; any other site answers 501. */
+  /** On a site that lists the lens in capabilities.mediaLenses; any other site answers 501. */
   lens: MediaLens.optional(),
-  /** v0.6.0. A site that sorts says so in the answer's `sorted`. */
+  /** A site that sorts says so in the answer's `sorted`. */
   sort: z.enum(MEDIA_SORTS).optional(),
   dir: SortDir.optional(),
-  /** Only files carrying this tag (v0.4.0). A site without tags ignores it. */
+  /** Only files carrying this tag. A site without tags ignores it. */
   tag: MediaTag.optional(),
-  /** "only" lists the trash (v0.4.0). Without it the trash is left out. A site without a trash ignores it. */
+  /** "only" lists the trash. Without it the trash is left out. A site without a trash ignores it. */
   trashed: z.enum(["only"]).optional(),
-  /** v0.13.0, on a site with capabilities.mediaFilters; any other site answers 501. A file with no size has no orientation. */
+  /** On a site with capabilities.mediaFilters; any other site answers 501. A file with no size has no orientation. */
   orientation: MediaOrientation.optional(),
   kind: MediaKind.optional(),
   /**
-   * v0.13.0, on a site with capabilities.mediaChanges: the `changeCursor` of an earlier answer. The list then answers every
+   * On a site with capabilities.mediaChanges: the `changeCursor` of an earlier answer. The list then answers every
    * file changed since, trash included, and `removed`, and takes no other filter but `limit`.
    */
   changedSince: z.string().min(1).max(500).optional(),
@@ -242,11 +240,11 @@ export const MediaListQuery = z.object({
 export const MediaList = z.object({
   items: z.array(MediaItem),
   nextCursor: z.string().nullable(),
-  /** How many files match across every page (v0.6.0), where the site can count them. */
+  /** How many files match across every page, where the site can count them. */
   total: z.number().int().min(0).optional(),
-  /** The order the site applied (v0.6.0). Absent: the site did not sort as asked. */
+  /** The order the site applied. Absent: the site did not sort as asked. */
   sorted: z.object({ sort: z.enum(MEDIA_SORTS), dir: SortDir }).optional(),
-  /** v0.13.0, on a site with capabilities.mediaChanges: the point to poll from next, as `changedSince`. */
+  /** On a site with capabilities.mediaChanges: the point to poll from next, as `changedSince`. */
   changeCursor: z.string().min(1).max(500).optional(),
   /** On a `changedSince` answer only: the ids deleted for good since. */
   removed: z.array(MediaId).optional(),

@@ -27,14 +27,27 @@ import {
   result,
   Conflict,
   eachItem,
+  failedFile,
   megabytes,
   parseMediaTags,
 } from "./kit.js";
 
+/** The result of an intent on one file: its outcome's words, any conflict, any Undo. */
+function single(
+  outcomes: Outcome[],
+  conflict: IntentResult["conflict"],
+  undo?: IntentResult["undo"],
+): IntentResult {
+  return result(outcomes, outcomes[0]!.message, {
+    ...(conflict ? { conflict } : {}),
+    ...(undo ? { undo } : {}),
+  });
+}
+
 /** The most rounds one empty-trash intent sends; each round deletes up to the site's limit. */
 const EMPTY_ROUNDS = 20;
 
-/** Saves a file's credit, license, source address and license end (v0.13.0), each the whole value after it. */
+/** Saves a file's credit, license, source address and license end, each the whole value after it. */
 export async function setCredit(
   source: ContentSource,
   input: IntentInput,
@@ -63,7 +76,7 @@ export async function setCredit(
       message: "Credit saved." + (await recordDone(source, "media-credit", id, change)),
     };
   });
-  return result(outcomes, outcomes[0]!.message, conflict ? { conflict } : {});
+  return single(outcomes, conflict);
 }
 
 const INVERSE: Record<TransformOp, TransformOp> = {
@@ -75,7 +88,7 @@ const INVERSE: Record<TransformOp, TransformOp> = {
 };
 
 /**
- * Turns or mirrors one picture (v0.13.0), `op` one of MEDIA_TRANSFORMS. Undo puts the old bytes back where the site keeps
+ * Turns or mirrors one picture, `op` one of MEDIA_TRANSFORMS. Undo puts the old bytes back where the site keeps
  * history (a revert, so nothing is encoded twice), else turns it back. A quarter turn the site saves as a new file has no
  * Undo: the old file is as it was, and the message says so.
  */
@@ -125,13 +138,10 @@ export async function transformFile(
       message: "Turned. Every page that uses it shows the new picture." + stale + note,
     };
   });
-  return result(outcomes, outcomes[0]!.message, {
-    ...(conflict ? { conflict } : {}),
-    ...(undo ? { undo } : {}),
-  });
+  return single(outcomes, conflict, undo);
 }
 
-/** Puts a file's earlier bytes back (v0.13.0), `to` a revision from the inspector's history. Undo puts back the bytes it had. */
+/** Puts a file's earlier bytes back, `to` a revision from the inspector's history. Undo puts back the bytes it had. */
 export async function revertFile(
   source: ContentSource,
   file: { id: string; version: string },
@@ -162,14 +172,11 @@ export async function revertFile(
         (await recordDone(source, "media-revert", id, change)),
     };
   });
-  return result(outcomes, outcomes[0]!.message, {
-    ...(conflict ? { conflict } : {}),
-    ...(undo ? { undo } : {}),
-  });
+  return single(outcomes, conflict, undo);
 }
 
 /**
- * Shrinks the chosen stored pictures to the site's size (v0.13.0), after asking: each changes every page that uses it. Sent
+ * Shrinks the chosen stored pictures to the site's size, after asking: each changes every page that uses it. Sent
  * in requests of the site's limit, each file with its own change id; one file's refusal is its own outcome.
  */
 export async function resizeFiles(
@@ -214,14 +221,7 @@ export async function resizeFiles(
       } else {
         if (outcome.error === "version-conflict" && !conflict)
           conflict = { id: outcome.id, currentVersion: outcome.currentVersion ?? null };
-        all.push({
-          id: outcome.id,
-          ok: false,
-          message:
-            outcome.error === "version-conflict"
-              ? "This file changed on the site since the page loaded. It was left as it was."
-              : outcome.message,
-        });
+        all.push(failedFile(outcome));
       }
     }
   }
@@ -251,7 +251,7 @@ export async function setAlt(
       message: "Alt text saved." + (await recordDone(source, "media-alt", id, change)),
     };
   });
-  return result(outcomes, outcomes[0]!.message, conflict ? { conflict } : {});
+  return single(outcomes, conflict);
 }
 
 /**
@@ -294,7 +294,7 @@ export async function setFocus(
         (await recordDone(source, "media-focus", id, change)),
     };
   });
-  return result(outcomes, outcomes[0]!.message, conflict ? { conflict } : {});
+  return single(outcomes, conflict);
 }
 
 export async function setCaption(
@@ -316,7 +316,7 @@ export async function setCaption(
       message: "Caption saved." + (await recordDone(source, "media-caption", id, change)),
     };
   });
-  return result(outcomes, outcomes[0]!.message, conflict ? { conflict } : {});
+  return single(outcomes, conflict);
 }
 
 /**
@@ -364,7 +364,7 @@ export async function replaceFile(
         (await recordDone(source, "media-replace", id, change)),
     };
   });
-  return result(outcomes, outcomes[0]!.message, conflict ? { conflict } : {});
+  return single(outcomes, conflict);
 }
 
 /** Sets a file's whole tag set. Undo sets back the set it held, at the version this write made. */
@@ -396,10 +396,7 @@ export async function setFileTags(
       message: "Tags saved." + (await recordDone(source, "media-tags", id, change)),
     };
   });
-  return result(outcomes, outcomes[0]!.message, {
-    ...(conflict ? { conflict } : {}),
-    ...(undo ? { undo } : {}),
-  });
+  return single(outcomes, conflict, undo);
 }
 
 /**

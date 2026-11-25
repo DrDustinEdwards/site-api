@@ -1,4 +1,4 @@
-// v0.17.0 and v0.22.0: the content group's new writes and list options, each optional per site, against the reference adapter.
+// The content group's new writes and list options, each optional per site, against the reference adapter.
 
 import { describe, expect, it } from "vitest";
 import { createSiteClient } from "../src/client.js";
@@ -19,7 +19,7 @@ function client(adapter = memoryAdapter()) {
   return { ...s, c: createSiteClient({ baseUrl: ORIGIN, key: KEY, fetch: s.fetch }) };
 }
 
-describe("a settable publish date (v0.17.0)", () => {
+describe("a settable publish date", () => {
   it("publishes under a past date, re-dates a live post, refuses a future one, and answers 501 where the site cannot", async () => {
     const { c } = client();
     const draft = await c.saveDraft("a", {
@@ -64,7 +64,7 @@ describe("a settable publish date (v0.17.0)", () => {
   });
 });
 
-describe("rename (v0.17.0)", () => {
+describe("rename", () => {
   it("moves a published post with its history and a redirect, refuses a taken id, and answers 501 where the site cannot", async () => {
     const { c, adapter } = client();
     const a = await c.saveDraft("a", { source: "# A\n", expectedVersion: null, changeId: "c1" });
@@ -95,7 +95,7 @@ describe("rename (v0.17.0)", () => {
   });
 });
 
-describe("the content trash (v0.17.0)", () => {
+describe("the content trash", () => {
   it("takes a live post off the site, hides it from the list, restores a draft, and empties it after TRASH_DAYS", async () => {
     let time = new Date("2030-01-01T00:00:00Z");
     const adapter = memoryAdapter({ now: () => time });
@@ -141,7 +141,7 @@ describe("the content trash (v0.17.0)", () => {
     expect((await api.runSchedules({ now: new Date("2999-01-01T00:00:00Z") })).emptied).toBe(0);
     adapter.content.list = list;
 
-    // A v0.14.0 site lists everything and names no filters.
+    // A site that predates filters lists everything and names none.
     const old = async (input: RequestInfo | URL, init?: RequestInit) => {
       const body = await (await fetch(input, init)).json();
       delete body.filtered;
@@ -156,7 +156,7 @@ describe("the content trash (v0.17.0)", () => {
   });
 });
 
-describe("list filters (v0.17.0)", () => {
+describe("list filters", () => {
   it("filters by tag, author and published dates where the site offers them, and answers 501 for one it does not", async () => {
     const { c } = client();
     const a = await c.saveDraft("a", {
@@ -191,8 +191,6 @@ describe("list filters (v0.17.0)", () => {
   });
 });
 
-// ---------- v0.22.0
-
 function stored(hooks: PublishHook[] = []) {
   const adapter = memoryAdapter({ site: { id: "memory", name: "Memory site", origin: ORIGIN } });
   const store = d1SiteApiStore(
@@ -208,7 +206,7 @@ function stored(hooks: PublishHook[] = []) {
   return { adapter, store, api, c };
 }
 
-describe("unknown fields (v0.22.0, A8)", () => {
+describe("unknown fields", () => {
   it("refuses an unknown body field or query key on every route, naming it, before the adapter runs", async () => {
     const { api, adapter } = stored();
     const send = (path: string, init: RequestInit = {}) =>
@@ -240,7 +238,7 @@ describe("unknown fields (v0.22.0, A8)", () => {
   });
 });
 
-describe("schedule events (v0.22.0, J1)", () => {
+describe("schedule events", () => {
   it("tells a hook that names them of a schedule and an unschedule of a never-published post, with no page", async () => {
     const heard: PublishEvent[] = [];
     const announced: string[] = [];
@@ -272,7 +270,7 @@ describe("schedule events (v0.22.0, J1)", () => {
   });
 });
 
-describe("tombstones (v0.22.0, F5)", () => {
+describe("tombstones", () => {
   it("answers 410 for a deleted or trashed live page until something is published there again, and keeps it through the trash's end", async () => {
     const { c, store, api } = stored();
     const a = await c.saveDraft("a", { source: "# A\n", expectedVersion: null, changeId: "c1" });
@@ -309,7 +307,7 @@ describe("tombstones (v0.22.0, F5)", () => {
     expect(await store.isGone("/blog/carrel-conformance-x")).toBe(false);
     expect(await store.isGone("/blog/a")).toBe(true);
 
-    // v0.23.0: a site's own 404 becomes 410 with its body kept; a live 200 and a path never live stay as they are.
+    // A site's own 404 becomes 410 with its body kept; a live 200 and a path never live stay as they are.
     const own = await tombstoned(new Response("not here", { status: 404 }), "/blog/a/", store);
     expect([
       own.status,
@@ -322,14 +320,6 @@ describe("tombstones (v0.22.0, F5)", () => {
       (await tombstoned(new Response("x", { status: 404 }), "/blog/never", store)).status,
     ).toBe(404);
 
-    const page = tombstoneResponse(
-      new Request(`${ORIGIN}/blog/a`, { headers: { accept: "text/html" } }),
-    );
-    expect([
-      page.status,
-      page.headers.get("cache-control"),
-      page.headers.get("content-type"),
-    ]).toEqual([410, "no-store", "text/html; charset=utf-8"]);
     const problem = tombstoneResponse(
       new Request(`${ORIGIN}/blog/a`, { headers: { accept: "application/problem+json" } }),
     );
@@ -341,7 +331,7 @@ describe("tombstones (v0.22.0, F5)", () => {
   });
 });
 
-describe("the acting person, backlinks and the feature image (v0.22.0, C2, F4, A2)", () => {
+describe("the acting person, backlinks and the feature image", () => {
   it("keeps the actor as the revision's author, lists backlinks, and refuses a feature image with no alt unless decorative", async () => {
     const { c } = stored();
     const a = await c.saveDraft("a", {

@@ -10,15 +10,15 @@ export interface MediaOffers {
   tags: boolean;
   trash: boolean;
   delete: boolean;
-  /** The lenses the site answers (v0.6.0); empty where it answers none. */
+  /** The lenses the site answers; empty where it answers none. */
   lenses: MediaLens[];
-  /** v0.10.0: the site keeps a focal point, keeps a caption, and replaces a file's bytes under its own address. */
+  /** The site keeps a focal point, keeps a caption, and replaces a file's bytes under its own address. */
   focus: boolean;
   caption: boolean;
   replace: boolean;
-  /** v0.11.0: a replace must keep the picture's size (capabilities.mediaReplaceKeepsSize), so a crop is saved as a new file. */
+  /** A replace must keep the picture's size (capabilities.mediaReplaceKeepsSize), so a crop is saved as a new file. */
   replaceKeepsSize: boolean;
-  // v0.13.0, each false (or null) where the site lacks it.
+  // Each false (or null) where the site lacks it.
   /** An upload of bytes the site holds answers that file; details carry twins; the duplicates lens may be offered. */
   duplicates: boolean;
   /** Rows carry usedCount, and the site sorts by `used` (the kit sorts the page where it does not). */
@@ -43,7 +43,7 @@ export interface MediaOffers {
   embedded: boolean;
   /** The query's `suggest`. */
   suggestions: boolean;
-  /** v0.19.0: the `suggest` intent, the model's alt text and tags for a file before it is uploaded or imported. */
+  /** The `suggest` intent, the model's alt text and tags for a file before it is uploaded or imported. */
   uploadSuggestions: boolean;
 }
 

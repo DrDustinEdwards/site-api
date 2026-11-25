@@ -10,7 +10,7 @@ export interface SiteSummary {
   postsWaiting: number | null;
   /** Files with no alt text; null where the site cannot say. */
   mediaWithoutAlt: number | null;
-  /** Files whose license has run out (v0.13.0, the license-expired lens); null where the site cannot say. */
+  /** Files whose license has run out (the license-expired lens); null where the site cannot say. */
   mediaLicenseExpired: number | null;
 }
 
@@ -21,7 +21,7 @@ export async function summary(source: ContentSource): Promise<SiteSummary> {
     capabilities.mentions === true
       ? (await source.client.mentions.list({ status: "pending", limit: 1 })).counts.pending
       : null;
-  // A site that answers the no-alt lens (v0.6.0) and counts can say how many files lack alt text.
+  // A site that answers the no-alt lens and counts can say how many files lack alt text.
   const lensCount = async (lens: "no-alt" | "license-expired") =>
     capabilities.media === true && (capabilities.mediaLenses ?? []).includes(lens)
       ? ((await source.client.media.list({ lens, limit: 1 })).total ?? null)

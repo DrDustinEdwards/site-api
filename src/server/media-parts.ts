@@ -102,7 +102,7 @@ export function mediaBytes(
 
   /**
    * Stores checked bytes (an upload or an import): the file already holding them where the site finds duplicates, so the
-   * site never stores the same bytes twice, else the site's new file. The key is duplicateKey's (v0.21.0): the bytes as
+   * site never stores the same bytes twice, else the site's new file. The key is duplicateKey's: the bytes as
    * sent without their private metadata, which is what a site stores unless it converts or shrinks the picture. For a
    * file it converted or shrank, the store remembers which file each key became, since the site's own hashes are of other
    * bytes.
@@ -208,7 +208,7 @@ export function mediaBytes(
   return { uploaded, imported, held, store, changesSince };
 }
 
-/** Refuses, as 400 before anything is read or stored, an alt the contract does not take (altRefusal); an upload or import may carry none (v0.30.0). */
+/** Refuses, as 400 before anything is read or stored, an alt the contract does not take (altRefusal); an upload or import may carry none. */
 export function checkAlt(
   alt: string | undefined,
   decorative: boolean,

@@ -9,7 +9,7 @@ import {
 import { type MediaKeyInput } from "./types.js";
 
 /**
- * The picture types every site takes (v0.27.0). No SVG, which would be script on the site's own origin. HEIC and HEIF (an
+ * The picture types every site takes. No SVG, which would be script on the site's own origin. HEIC and HEIF (an
  * iPhone's photos) are taken too and stored as JPEG.
  */
 export const PICTURE_TYPES = [
@@ -22,13 +22,13 @@ export const PICTURE_TYPES = [
   "image/heif",
 ] as const;
 
-/** The upload limits every site starts from (v0.27.0): pictures only, 20 MiB each; a site passes its own `maxBytes` to change the size. */
+/** The upload limits every site starts from: pictures only, 20 MiB each; a site passes its own `maxBytes` to change the size. */
 export function pictureLimits(maxBytes = 20 * 1024 * 1024): MediaUploadLimits {
   return { maxBytes, types: [...PICTURE_TYPES] };
 }
 
 /**
- * What an upload shrinks to unless it says `resize=no` (v0.27.0): a phone photo (4032 pixels) keeps its size, a larger
+ * What an upload shrinks to unless it says `resize=no`: a phone photo (4032 pixels) keeps its size, a larger
  * camera file is shrunk and its original is kept in the file's history.
  */
 export const PICTURE_RESIZE: MediaResize = { maxEdge: 2560, quality: 85 };

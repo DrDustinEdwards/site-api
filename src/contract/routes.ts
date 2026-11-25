@@ -82,21 +82,10 @@ import {
 import { NotFoundQuery, NotFoundReport } from "./insight.js";
 
 /**
- * Every route, relative to PREFIX. Groups declared for later stages answer 501 until a site
- * implements them, so a route's existence is part of the contract even before its body is. The
- * media group arrived in v0.2.0; a site whose adapter has no `media` still answers it 501. v0.3.0
- * adds the source at a revision and an optional content delete (501 when the adapter has none).
- * v0.4.0 adds media writes, each optional per site (501 when the adapter lacks the method): alt
- * text, tags, trash, restore and empty-trash, and one bulk route that applies any of them to many files.
- * v0.5.0 adds the mentions group: list, decide, delete and sweep, answering 501 for a site whose
- * adapter has no `mentions`. v0.10.0 adds reading and canceling a schedule, 501 for a site whose adapter
- * has no `schedules`, and a file's focal point, caption and replace, each 501 where the adapter lacks it. v0.13.0 adds
- * import, credit, transform, history, revert, suggestions and the resize pass, each 501 where the adapter lacks it, and
- * the upload answers MediaUploadResult, a MediaItem with three optional properties more. v0.16.0 adds the insight group's
- * first route, the 404 report, 501 for a site whose adapter has no `insight`. v0.17.0 adds rename, trash and restore of
- * content and the preview links, each 501 where the adapter or the store is absent. v0.19.0 adds the model's suggestions for
- * a file before it is stored, 501 where the adapter lacks it, and an upload or import with neither alt nor `decorative`
- * answers 400.
+ * Every route, relative to PREFIX. A group a site has not implemented answers 501, so a route's existence is part of
+ * the contract even before its body is. Media, mentions, schedules, insight, the content extras (rename, trash,
+ * preview links, backlinks, transcript) and the media library's ideas are each optional per site, answering 501 where
+ * the adapter lacks the method. An upload or import with neither alt nor `decorative` answers 400.
  */
 export const ROUTES = [
   { group: "meta", method: "GET", path: "/meta", response: "Meta" },
@@ -325,7 +314,7 @@ export const ROUTES = [
     query: "MentionDeleteQuery",
     response: "MentionDeleteResult",
   },
-  // v0.17.0, each 501 where the adapter lacks it.
+  // Each 501 where the adapter lacks it.
   {
     group: "content",
     method: "POST",
@@ -375,7 +364,7 @@ export const ROUTES = [
     query: "NotFoundQuery",
     response: "NotFoundReport",
   },
-  // v0.19.0, 501 where the adapter lacks it.
+  // 501 where the adapter lacks it.
   {
     group: "media",
     method: "POST",
@@ -384,7 +373,7 @@ export const ROUTES = [
     request: "the file's bytes, or none with url",
     response: "MediaFileSuggestions",
   },
-  // v0.22.0: backlinks, 501 where the adapter lacks them, and the hook runs a store keeps, 501 without a store.
+  // Backlinks, 501 where the adapter lacks them, and the hook runs a store keeps, 501 without a store.
   { group: "content", method: "GET", path: "/content/:id/backlinks", response: "BacklinkList" },
   {
     group: "hooks",
@@ -393,7 +382,7 @@ export const ROUTES = [
     query: "HookRunsQuery",
     response: "HookRunList",
   },
-  // v0.36.0: an item's transcript, 501 where the adapter lacks it.
+  // An item's transcript, 501 where the adapter lacks it.
   {
     group: "content",
     method: "PUT",

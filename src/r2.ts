@@ -1,4 +1,4 @@
-// The R2 half of a media adapter's v0.10.0 writes, for a site that keeps its files in an R2 bucket: the focal point,
+// The R2 half of a media adapter's focal point and replace writes, for a site that keeps its files in an R2 bucket: the focal point,
 // kept where site-runtime's ./image reads it for its crops, and new bytes under the same key. The site's own index (its
 // version, alt, caption, size) is the adapter's; these touch only the object.
 //
@@ -39,7 +39,7 @@ const RACED =
 /**
  * Sets the object's focal point (customMetadata `focus`, FOCUS_METADATA, in `focusOf`'s spelling), or removes it for
  * null, keeping its bytes and every other metadata field. Answers the object as written; its etag moves, so the
- * image route's cached sizes (keyed by etag from site-runtime 0.27.0) are made afresh around the new point.
+ * image route's cached sizes (keyed by etag) are made afresh around the new point.
  */
 export async function writeFocus(
   bucket: R2BucketLike,

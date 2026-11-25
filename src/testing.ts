@@ -27,9 +27,9 @@ export function memoryAdapter(options: MemoryAdapterOptions = {}): SiteAdapter &
   purged: string[];
   /** Adds a mention as the site's endpoint would, and returns its id. */
   receiveMention(fields: ReceivedMention): string;
-  /** The permanent redirects a rename left (v0.17.0), old path to new. */
+  /** The permanent redirects a rename left, old path to new. */
   redirects: Map<string, string>;
-  /** Each item's transcript (v0.33.0), by id, read back on `get`; set one to seed it, as a site's admin would. */
+  /** Each item's transcript, by id, read back on `get`; set one to seed it, as a site's admin would. */
   transcripts: Map<string, string>;
 } {
   const site = options.site ?? {

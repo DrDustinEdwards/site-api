@@ -28,20 +28,20 @@ export const MediaUploadQuery = z.object({
     // oxlint-disable-next-line no-control-regex
     .regex(/^[^/\\\u0000-\u001f]+$/, "A file name, with no path"),
   /**
-   * What the picture shows (v0.30.0: optional; with none the picture is stored with no alt and an alt is written afterward, and the site refuses it where it is placed on a page). Sent, it is checked: what the picture shows, at most MAX_ALT_CHARS, never its file name, a bare
+   * What the picture shows (optional; with none the picture is stored with no alt and an alt is written afterward, and the site refuses it where it is placed on a page). Sent, it is checked: what the picture shows, at most MAX_ALT_CHARS, never its file name, a bare
    * "image" or an address.
    */
   alt: z.string().max(2000).optional(),
-  /** v0.19.0: "yes" says the picture is decorative, so it is stored with alt "" on purpose. Not with an alt. */
+  /** "yes" says the picture is decorative, so it is stored with alt "" on purpose. Not with an alt. */
   decorative: z.enum(["yes"]).optional(),
   changeId: ChangeId,
-  /** "no" keeps this file at its own size on a site that shrinks large pictures at upload (v0.13.0, capabilities.mediaResize). */
+  /** "no" keeps this file at its own size on a site that shrinks large pictures at upload (capabilities.mediaResize). */
   resize: z.enum(["no"]).optional(),
   actorName: ActorName.optional(),
 });
 
 /**
- * The answer to an upload or an import (v0.13.0; before it, a MediaItem): the file, and what the site did with it. The
+ * The answer to an upload or an import (a MediaItem plus the extras): the file, and what the site did with it. The
  * extra properties are each absent where they do not apply.
  */
 export const MediaUploadResult = MediaItem.extend({
@@ -70,11 +70,11 @@ export const MediaDeleteResult = z.object({
   changeId: ChangeId,
 });
 
-// ---------- media writes (v0.4.0)
+// ---------- media writes
 
 /** Every media metadata write names the version the caller last saw and Carrel's change id. */
 export const MediaAltInput = z.object({
-  /** v0.19.0: as an upload's, and "" only with `decorative: true`. */
+  /** As an upload's, and "" only with `decorative: true`. */
   alt: z.string().max(2000),
   decorative: z.literal(true).optional(),
   expectedVersion: Version,
@@ -104,7 +104,7 @@ export const MediaWriteResult = z.object({
   changeId: ChangeId,
 });
 
-// ---------- focal point, caption and replace (v0.10.0)
+// ---------- focal point, caption and replace
 
 /** Sets or clears (null) the point a file's crops are cut around. */
 export const MediaFocusInput = z.object({
@@ -142,7 +142,7 @@ export const MediaReplaceResult = MediaItem.extend({
   /**
    * True when the site's cache may still serve sizes made from the old bytes, so they need purging (or wait out their
    * cache lifetime). False when none can be stale: the site's image route keys its cache by the file's etag
-   * (site-runtime ./image 0.27.0 and later) or the site purged them in the write. Either way, a browser that already
+   * (site-runtime ./image) or the site purged them in the write. Either way, a browser that already
    * holds the old file under a long cache lifetime keeps it until that runs out.
    */
   sizesNeedPurge: z.boolean(),
@@ -220,7 +220,7 @@ export const MediaTrashEmptyResult = z.object({
   more: z.boolean(),
 });
 
-// ---------- the media library's ideas (v0.13.0), each optional per site
+// ---------- the media library's ideas, each optional per site
 
 /** What a site does to large pictures at upload: the longest edge it keeps, and the quality it encodes them at. */
 export const MediaResize = z.object({
@@ -239,7 +239,7 @@ export const MediaImportInput = z.object({
     // oxlint-disable-next-line no-control-regex
     .regex(/^[^/\\\u0000-\u001f]+$/, "A file name, with no path")
     .optional(),
-  /** An upload's: optional since v0.30.0, and checked when sent. */
+  /** An upload's: optional, and checked when sent. */
   alt: z.string().max(2000).optional(),
   decorative: z.literal(true).optional(),
   resize: z.enum(["no"]).optional(),
@@ -248,8 +248,8 @@ export const MediaImportInput = z.object({
 });
 
 /**
- * The file's credit, license, source and license end, as one write: each is the whole value after it. v0.19.0 adds the
- * copyright notice and the two license addresses, each kept as it was where the write leaves it out.
+ * The file's credit, license, source and license end, as one write: each is the whole value after it. The
+ * copyright notice and the two license addresses are each kept as it was where the write leaves it out.
  */
 export const MediaCreditInput = z.object({
   credit: MediaCredit,
@@ -361,7 +361,7 @@ export const MediaSuggestions = z.object({
   /** The model that made them, as the site names it. */
   model: z.string().min(1).max(200),
   /**
-   * v0.34.0: the tokens the suggestion spent, as Anthropic reported them, so a caller that pays for the call (Carrel's monthly
+   * The tokens the suggestion spent, as Anthropic reported them, so a caller that pays for the call (Carrel's monthly
    * cap) counts what was spent. Absent: the site's adapter did not report them.
    */
   usage: z
@@ -375,7 +375,7 @@ export const MediaSuggestions = z.object({
 });
 
 /**
- * What the site's model suggests for a file before it is stored (v0.19.0, capabilities.mediaUploadSuggestions): the body
+ * What the site's model suggests for a file before it is stored (capabilities.mediaUploadSuggestions): the body
  * is the file's bytes, typed by Content-Type, as an upload's; or, for an import, no body and the address as `url`, fetched
  * and checked as an import is. Nothing is stored.
  */

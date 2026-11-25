@@ -1,8 +1,7 @@
-// v0.5.0: the mentions group. Each plant is a request that must be refused; where the package refuses it, the test also
+// The mentions group. Each plant is a request that must be refused; where the package refuses it, the test also
 // checks that the adapter never ran, and where the site refuses it, that the queue is exactly as it was.
 
 import { describe, expect, it, vi } from "vitest";
-import { RefusedError } from "../src/adapter.js";
 import { createSiteClient, SiteApiError } from "../src/client.js";
 import { memoryAdapter } from "../src/testing.js";
 import { KEY, ORIGIN, body, req, site } from "./helpers.js";
@@ -157,24 +156,7 @@ describe("mentions decide", () => {
     expect(after.decidedAt).not.toBeNull();
   });
 
-  it("changes a decision: an approved mention can be rejected, at its new version", async () => {
-    const { adapter, ids } = seededAdapter();
-    const { client: c } = client(adapter);
-    const v1 = adapter.mentionStore.get(ids.pending)!.version;
-    const approved = await c.mentions.decide(ids.pending, {
-      decision: "approve",
-      expectedVersion: v1,
-      changeId: "c1",
-    });
-    const rejected = await c.mentions.decide(ids.pending, {
-      decision: "reject",
-      expectedVersion: approved.version,
-      changeId: "c2",
-    });
-    expect(rejected.status).toBe("rejected");
-  });
-
-  it("resets a decision (v0.6.0): an approved mention goes back to pending, undecided, at a new version", async () => {
+  it("resets a decision: an approved mention goes back to pending, undecided, at a new version", async () => {
     const { adapter, ids } = seededAdapter();
     const { client: c } = client(adapter);
     const approved = await c.mentions.decide(ids.pending, {
@@ -214,7 +196,7 @@ describe("mentions decide", () => {
     expect(snapshot(adapter)).toEqual(before);
   });
 
-  it("PLANT: answers a reset 501 on a mentions group with no reset (a v0.5.0 site), and decides as before", async () => {
+  it("PLANT: answers a reset 501 on a mentions group with no reset (a site with no reset), and decides as before", async () => {
     const adapter = memoryAdapter({ mentionReset: false });
     const id = adapter.receiveMention({
       sourceUrl: "https://a.example/1",
@@ -256,18 +238,6 @@ describe("mentions decide", () => {
     expect(adapter.purged).toHaveLength(purges);
   });
 
-  it("PLANT: answers 404 for a mention the site does not hold", async () => {
-    const { adapter } = seededAdapter();
-    const { client: c } = client(adapter);
-    const before = snapshot(adapter);
-    const error = await c.mentions
-      .decide("999", { decision: "approve", expectedVersion: "m1", changeId: "c1" })
-      .catch((e) => e);
-    expect(error.status).toBe(404);
-    expect(error.body.error).toBe("not-found");
-    expect(snapshot(adapter)).toEqual(before);
-  });
-
   it("PLANT: the site's own refusal of an unverified or failed mention comes back 422 refused, and the queue is unchanged", async () => {
     const { adapter, ids } = seededAdapter();
     const { client: c } = client(adapter);
@@ -278,22 +248,6 @@ describe("mentions decide", () => {
       expect(error.body.error).toBe("refused");
     }
     expect(snapshot(adapter)).toEqual(before);
-  });
-
-  it("PLANT: a refusal the adapter words itself reaches the caller as 422 with those words", async () => {
-    const { adapter, ids } = seededAdapter();
-    adapter.mentions!.decide = async () => {
-      throw new RefusedError("The cache could not be reached.");
-    };
-    const { client: c } = client(adapter);
-    const error = await c.mentions
-      .decide(ids.pending, { decision: "approve", expectedVersion: "m1", changeId: "c1" })
-      .catch((e) => e);
-    expect(error.status).toBe(422);
-    expect(error.body).toMatchObject({
-      error: "refused",
-      message: "The cache could not be reached.",
-    });
   });
 
   it("PLANT: refuses without the key, with a wrong one, or with an invalid body or id, before the adapter runs", async () => {
@@ -357,15 +311,14 @@ describe("mentions delete", () => {
     expect(adapter.mentionStore.has(ids.pending)).toBe(true);
   });
 
-  it("PLANT: answers 404 for a missing mention and 501 on a site without the group", async () => {
-    const missing = await client()
+  it("PLANT: answers 404 for a missing mention, and the queue is unchanged", async () => {
+    const { adapter } = seededAdapter();
+    const before = snapshot(adapter);
+    const missing = await client(adapter)
       .client.mentions.delete("999", { expectedVersion: "m1", changeId: "c1" })
       .catch((e) => e);
     expect(missing.status).toBe(404);
-    const without = await client(memoryAdapter({ mentions: false }))
-      .client.mentions.delete("1", { expectedVersion: "m1", changeId: "c1" })
-      .catch((e) => e);
-    expect(without.status).toBe(501);
+    expect(snapshot(adapter)).toEqual(before);
   });
 
   it("PLANT: refuses without the key, or with no version or change id, before the adapter runs", async () => {

@@ -1,4 +1,4 @@
-// v0.17.0: the keyless live check (bin/site-api-live.mjs), run as devkit runs it, against a local site.
+// The keyless live check (bin/site-api-live.mjs), run as devkit runs it, against a local site.
 
 import { execFile } from "node:child_process";
 import { createServer } from "node:http";
@@ -49,7 +49,7 @@ describe("site-api-live", () => {
       log: () => {},
       store: d1SiteApiStore(d1(SITE_API_STORE_SQL)),
     });
-    // v0.22.0: a header layer that adds `private` still passes K4.
+    // A header layer that adds `private` still passes K4.
     const good = await serve(async (request) => {
       const answer = api.matchesPreviewLink(request)
         ? await api.servePreviewLink(request)
@@ -68,7 +68,7 @@ describe("site-api-live", () => {
     );
     try {
       expect(await live(good.origin)).toEqual({ code: 0, out: "" });
-      // v0.22.0: --from is where the site is served now, as devkit runs it, so the probes go there and not to --origin.
+      // --from is where the site is served, as devkit runs it, so the probes go there and not to --origin.
       expect(await live("https://site.invalid", good.origin)).toEqual({ code: 0, out: "" });
       const found = await live(leaky.origin);
       expect(found.code).toBe(1);

@@ -1,4 +1,4 @@
-// Where a D1 site keeps the updates scheduled on its live items (v0.10.0): one table beside the site's own content
+// Where a D1 site keeps the updates scheduled on its live items: one table beside the site's own content
 // table, so each D1 site's `schedules` adapter is a few lines over this instead of its own copy. A site that keeps its
 // content elsewhere (dustinedwards.info keeps files in git) implements `SchedulesAdapter` its own way.
 //

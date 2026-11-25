@@ -28,11 +28,11 @@ export interface PostQuery {
   status?: ContentStatus;
   kind?: string;
   tag?: string;
-  /** v0.17.0, where the site filters by them: one of the post's authors, and a published range in whole days (YYYY-MM-DD, both included). */
+  /** Where the site filters by them: one of the post's authors, and a published range in whole days (YYYY-MM-DD, both included). */
   author?: string;
   from?: string;
   to?: string;
-  /** v0.17.0, where the site has a trash: "1" lists only the trash. */
+  /** Where the site has a trash: "1" lists only the trash. */
   trashed?: "1";
   sort?: PostSort;
   dir?: SortDir;
@@ -51,17 +51,17 @@ interface PostRow {
   publishedAt: string | null;
   updatedAt: string | null;
   /**
-   * The update scheduled to replace a live post (v0.10.0): when it goes live, and where its source is shown
+   * The update scheduled to replace a live post: when it goes live, and where its source is shown
    * (`ContentSource.scheduleHref`, else the editor). Absent when nothing waits.
    */
   scheduledUpdate?: { publishAt: string; href: string };
   /** Present when the site's list carries it. */
   version?: string;
   tags?: string[];
-  /** v0.17.0, where the site keeps them: everyone credited, the primary first, and the excerpt. */
+  /** Where the site keeps them: everyone credited, the primary first, and the excerpt. */
   authors?: string[];
   excerpt?: string;
-  /** v0.17.0, on a trashed post: when it went to the trash. */
+  /** On a trashed post: when it went to the trash. */
   trashedAt?: string | null;
   notes?: RowNote[];
 }
@@ -79,8 +79,8 @@ export interface PostsData {
   counts?: Partial<Record<ContentStatus | "all" | "trash", number>>;
   kinds: string[];
   /**
-   * `scheduledUpdates` (v0.10.0): the site keeps an update waiting on a live post, so reschedule and cancel work on it.
-   * v0.17.0: `trash`, `rename` and `previewLinks` as the site's capabilities say, the list `filters` it applies, and the
+   * `scheduledUpdates`: the site keeps an update waiting on a live post, so reschedule and cancel work on it.
+   * `trash`, `rename` and `previewLinks` as the site's capabilities say, the list `filters` it applies, and the
    * `authors` on this page for the Author select.
    */
   offers: {
@@ -92,7 +92,7 @@ export interface PostsData {
     trash: boolean;
     rename: boolean;
     previewLinks: boolean;
-    /** v0.22.0: the site lists the posts that link to one, so a delete or a trash warns with them first. */
+    /** The site lists the posts that link to one, so a delete or a trash warns with them first. */
     backlinks: boolean;
     filters: ContentFilter[];
     authors: string[];
@@ -180,7 +180,7 @@ export async function loadPosts(source: ContentSource, query: PostQuery = {}): P
   const meta = await source.client.meta();
   const filters = meta.capabilities.contentFilters ?? [];
   const trash = hasTrash(meta.capabilities);
-  // The filters the site applies (v0.17.0) go to it; kind and tag on a site without them still work on the page it sent.
+  // The filters the site applies go to it; kind and tag on a site without them still work on the page it sent.
   const onSite: Partial<ListQuery> = {
     ...(query.kind && filters.includes("kind") ? { kind: query.kind } : {}),
     ...(query.tag && filters.includes("tag") ? { tag: query.tag } : {}),
@@ -213,7 +213,7 @@ export async function loadPosts(source: ContentSource, query: PostQuery = {}): P
   if (query.kind && !onSite.kind) rows = rows.filter((r) => r.kind === query.kind);
   if (query.tag && !onSite.tag)
     rows = rows.filter((r) => (r.tags ?? []).some((t) => sameTag(t, query.tag!)));
-  // A site that sorted says so (v0.6.0); otherwise the kit sorts the page it has and says that.
+  // A site that sorted says so; otherwise the kit sorts the page it has and says that.
   const sortedOnPage = query.sort !== undefined && list.sorted === undefined;
   if (sortedOnPage) {
     const dir = query.dir ?? (query.sort === "title" ? "asc" : "desc");
@@ -222,7 +222,7 @@ export async function loadPosts(source: ContentSource, query: PostQuery = {}): P
         (dir === (query.sort === "title" ? "asc" : "desc") ? 1 : -1) * BY[query.sort!](a, b),
     );
   }
-  // Where the site counts (v0.6.0), each status tab gets its count for the same search, and the Trash its own.
+  // Where the site counts, each status tab gets its count for the same search, and the Trash its own.
   let counts: PostsData["counts"];
   if (list.total !== undefined) {
     const statuses = ["draft", "scheduled", "published"] as const;
@@ -272,7 +272,7 @@ export async function loadPosts(source: ContentSource, query: PostQuery = {}): P
 }
 
 /**
- * The warning before a save to a live post that has an update waiting (v0.10.0): the save changes the live post now,
+ * The warning before a save to a live post that has an update waiting: the save changes the live post now,
  * and the update still replaces the whole post at its time. null when there is nothing to warn about. The editor
  * shows it before saving; the kit adds it to a tag change's outcome. `label` says the time; an admin that writes times its
  * own way elsewhere passes its formatter, so the page says one time one way.
@@ -285,7 +285,7 @@ export function liveSaveWarning(
   return `An update is scheduled for ${label(doc.scheduledUpdate.publishAt)}. Saving changes the live post now, and the scheduled update will still replace it then, without this change. Edit the scheduled update too, or cancel it.`;
 }
 
-/** The update waiting on a live post, with what it changes, for the page that shows its source (v0.10.0). */
+/** The update waiting on a live post, with what it changes, for the page that shows its source. */
 export interface ScheduledUpdateView {
   id: string;
   title: string;

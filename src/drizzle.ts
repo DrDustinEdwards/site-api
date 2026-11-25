@@ -110,20 +110,20 @@ export const webmentionTargets = sqliteTable("webmention_targets", {
   sentAt: text("sent_at").notNull(),
 });
 
-/** SITE_API_STORE_SQL (v0.21.0): the media file each upload's duplicates key became. */
+/** SITE_API_STORE_SQL: the media file each upload's duplicates key became. */
 export const mediaUploads = sqliteTable("media_uploads", {
   sha256: text("sha256").primaryKey(),
   mediaId: text("media_id").notNull(),
   at: text("at").notNull(),
 });
 
-/** SITE_API_STORE_SQL (v0.22.0): the public path of each live item Carrel deleted or trashed, answered 410. */
+/** SITE_API_STORE_SQL: the public path of each live item Carrel deleted or trashed, answered 410. */
 export const gonePaths = sqliteTable("gone_paths", {
   path: text("path").primaryKey(),
   goneAt: text("gone_at").notNull(),
 });
 
-/** SITE_API_STORE_SQL (v0.22.0): each publish hook's run, for GET /hooks/recent. */
+/** SITE_API_STORE_SQL: each publish hook's run, for GET /hooks/recent. */
 export const hookRuns = sqliteTable(
   "hook_runs",
   {

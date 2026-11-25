@@ -1,4 +1,4 @@
-// The upload step (v0.15.0, private metadata v0.19.0): the parts a mistake in would ship silently. A location, a serial
+// The upload step: the parts a mistake in would ship silently. A location, a serial
 // number or an owner's name left in a photo is published with it, and a clean that broke a file's offsets or checksums
 // would store a picture no browser opens; a HEIC must reach the site as a JPEG of the size it asked for, named in words.
 //

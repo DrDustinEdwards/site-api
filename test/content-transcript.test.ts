@@ -1,4 +1,4 @@
-// v0.36.0: an item's transcript is replaced through its own route, live at once, from the transcriptVersion it was
+// An item's transcript is replaced through its own route, live at once, from the transcriptVersion it was
 // written from, and the item's version stays, so a draft of the post is still good after a transcript fix.
 
 import { describe, expect, it } from "vitest";
@@ -14,7 +14,7 @@ function setup(options: Parameters<typeof memoryAdapter>[0] = {}) {
   return { adapter, c };
 }
 
-describe("content transcript (v0.36.0)", () => {
+describe("content transcript", () => {
   it("replaces the transcript at the version read, keeps the item's version, and refuses a stale one", async () => {
     const { adapter, c } = setup();
     const saved = await c.saveDraft("ep", {

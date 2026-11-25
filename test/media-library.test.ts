@@ -1,5 +1,5 @@
-// The shared media library (v0.24.0) over its D1 store, an R2 bucket and the Images binding, each faked at its edge. The
-// conformance suite runs over it, then each behavior the seven sites' own copies disagreed on is checked once.
+// The shared media library over its D1 store, an R2 bucket and the Images binding, each faked at its edge. The
+// conformance suite runs over it, then each behavior that sites' own copies could disagree on is checked once.
 
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "vitest";

@@ -22,22 +22,22 @@ export interface MediaQuery {
   q?: string;
   tag?: string;
   view?: "library" | "trash";
-  /** v0.6.0, where the site names the lens; dropped, never sent, where it does not. */
+  /** Where the site names the lens; dropped, never sent, where it does not. */
   lens?: MediaLens;
   sort?: MediaSort;
   dir?: SortDir;
   cursor?: string;
   /** The file open in the inspector. */
   inspect?: string;
-  /** v0.13.0, where the site filters (offers.filters); dropped, never sent, where it does not. */
+  /** Where the site filters (offers.filters); dropped, never sent, where it does not. */
   orientation?: MediaOrientation;
   kind?: MediaKind;
-  /** v0.13.0: ask the site's model about the file in the inspector (offers.suggestions), as a "Suggest" link does. */
+  /** Ask the site's model about the file in the inspector (offers.suggestions), as a "Suggest" link does. */
   suggest?: boolean;
 }
 
 /**
- * A file as the library shows it: the site's item, plus the absolute address a browser loads and (v0.13.1) which way a
+ * A file as the library shows it: the site's item, plus the absolute address a browser loads and which way a
  * picture lies, so a screen filters and warns by the package's own rule (orientationOf) rather than a copy of it.
  */
 type MediaRow = MediaItem & { src: string; orientation?: MediaOrientation };
@@ -55,7 +55,7 @@ function rowOf<T extends MediaItem>(
 }
 
 /**
- * What the site's model suggests for the file in the inspector (v0.13.0): only what would change it, the tags it does not
+ * What the site's model suggests for the file in the inspector: only what would change it, the tags it does not
  * carry and an alt text unlike its own, so each shows as a suggestion to accept (the `tag-add` and `alt` intents) or dismiss.
  */
 interface MediaSuggestionView {
@@ -73,11 +73,11 @@ export interface MediaData {
     total?: number;
     /** True when the rows were sorted on this page only, because the site's list does not sort. */
     sortedOnPage?: boolean;
-    /** v0.13.0, where offers.live: the point to poll from with loadMediaChanges. */
+    /** Where offers.live: the point to poll from with loadMediaChanges. */
     changeCursor?: string;
   };
   /**
-   * The file in the inspector with every place it is used; null when the site has no such file. v0.13.0: its earlier bytes
+   * The file in the inspector with every place it is used; null when the site has no such file. Its earlier bytes
    * where offers.history, and the model's suggestions where the query asked for them.
    */
   detail?:
@@ -151,7 +151,7 @@ export async function loadMedia(source: ContentSource, query: MediaQuery = {}): 
     ...(query.cursor ? { cursor: query.cursor } : {}),
   });
   let items = list.items;
-  // A site that sorted says so (v0.6.0); otherwise the kit sorts the page it has and says that.
+  // A site that sorted says so; otherwise the kit sorts the page it has and says that.
   const sortedOnPage = query.sort !== undefined && list.sorted === undefined;
   if (sortedOnPage) {
     const natural = query.sort === "name" ? "asc" : "desc";
@@ -197,7 +197,7 @@ async function suggestionsFor(
   }
 }
 
-/** What changed on the site since a cursor (v0.13.0), for a screen that polls: rows to put in place, ids to take out. */
+/** What changed on the site since a cursor, for a screen that polls: rows to put in place, ids to take out. */
 export interface MediaChangesData {
   rows: MediaRow[];
   removed: string[];

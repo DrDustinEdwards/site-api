@@ -1,10 +1,10 @@
-// v0.10.0: the D1 table a site keeps its scheduled updates in, run on SQLite (what D1 is) through a D1-shaped shim.
+// The D1 table a site keeps its scheduled updates in, run on SQLite (what D1 is) through a D1-shaped shim.
 
 import { describe, expect, it } from "vitest";
 import { d1ScheduledUpdates, SCHEDULED_UPDATES_SQL, waitingUpdates } from "../src/schedules.js";
 import { d1 } from "./d1.js";
 
-describe("d1ScheduledUpdates (v0.10.0)", () => {
+describe("d1ScheduledUpdates", () => {
   it("keeps one update per item in UTC, lists the due ones oldest first, and a matched remove keeps a reschedule", async () => {
     const db = d1(SCHEDULED_UPDATES_SQL);
     const store = d1ScheduledUpdates(db);

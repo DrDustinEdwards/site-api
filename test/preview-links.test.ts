@@ -1,4 +1,4 @@
-// v0.17.0: shareable preview links, made under the key and opened by anyone with the address, on a site with a store.
+// Shareable preview links, made under the key and opened by anyone with the address, on a site with a store.
 
 import { describe, expect, it } from "vitest";
 import { runPostsIntent, type ContentSource } from "../src/admin.js";
@@ -27,7 +27,7 @@ function mounted(withStore = true) {
   return { fetch, c: createSiteClient({ baseUrl: ORIGIN, key: KEY, fetch }) };
 }
 
-describe("preview links (v0.17.0)", () => {
+describe("preview links", () => {
   it("serves the current source to anyone with the link, never indexed, until it is revoked; unknown and revoked links say so", async () => {
     const { fetch, c } = mounted();
     expect((await c.meta()).capabilities.previewLinks).toBe(true);
@@ -37,7 +37,7 @@ describe("preview links (v0.17.0)", () => {
     });
 
     const link = await c.previewLinks.create({ id: "a", expiresInHours: 720, changeId: "c3" });
-    // v0.22.0: up to 30 days, said in the answer; more is refused.
+    // Up to 30 days, said in the answer; more is refused.
     expect(Date.parse(link.expiresAt) - Date.now()).toBeGreaterThan(719 * 3600_000);
     await expect(
       c.previewLinks.create({ id: "a", expiresInHours: 721, changeId: "c3b" }),
@@ -53,7 +53,7 @@ describe("preview links (v0.17.0)", () => {
     expect(open.headers.get("cache-control")).toBe("private, no-store");
     expect(open.headers.get("referrer-policy")).toBe("no-referrer");
     expect(open.headers.get("content-security-policy")).toContain("script-src 'none'");
-    // v0.22.0: a HEAD meets the same answer, noindex included, with no body.
+    // A HEAD meets the same answer, noindex included, with no body.
     const head = await fetch(link.url, { method: "HEAD" });
     expect([head.status, head.headers.get("x-robots-tag"), await head.text()]).toEqual([
       200,
@@ -63,7 +63,7 @@ describe("preview links (v0.17.0)", () => {
 
     const [listed] = (await c.previewLinks.list("a")).items;
     await c.previewLinks.revoke(listed!.id, { changeId: "c5" });
-    // v0.22.0: a revoked link is as if it never was.
+    // A revoked link is as if it never was.
     expect((await fetch(link.url)).status).toBe(404);
     expect((await c.previewLinks.list("a")).items).toEqual([]);
     const unknown = await fetch(`${ORIGIN}/preview/${"x".repeat(43)}`);

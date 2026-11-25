@@ -1,4 +1,4 @@
-// The media kit (v0.14.0): the parts a mistake in would ship silently. A write the site refused or lost to another must
+// The media kit: the parts a mistake in would ship silently. A write the site refused or lost to another must
 // reach the handler as the error it answers; a preview found by a crawler must say noindex and cannot be broken out of by
 // its title; a site's cost cap must stop the suggester before the model is paid for; and a gateway or an answer gone
 // wrong must not reach the person as a failure or as alt text.

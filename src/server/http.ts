@@ -27,7 +27,7 @@ const STATUS: Record<ErrorCode, number> = {
   internal: 500,
 };
 
-/** Each code's fixed title (v0.17.0), the `title` of its problem details; the README's Errors table says what each means. */
+/** Each code's fixed title, the `title` of its problem details; the README's Errors table says what each means. */
 const TITLE: Record<ErrorCode, string> = {
   unauthorized: "Unauthorized",
   "rate-limited": "Too many requests",
@@ -54,7 +54,7 @@ export const BASE_HEADERS = {
 };
 
 /**
- * An error answer as RFC 9457 problem details (v0.17.0). `error` and `message` stay as every earlier reader expects;
+ * An error answer as RFC 9457 problem details. `error` and `message` stay as every earlier reader expects;
  * `type`, `title`, `status` and `detail` are the standard's names for the same answer.
  */
 export function fail(code: ErrorCode, message: string, extra: Partial<ErrorBody> = {}): Response {
@@ -87,7 +87,7 @@ export class BadRequest extends Error {
 }
 
 /**
- * The keys a schema names (v0.22.0): an object's own, or every option's for a union of objects. null when the schema is
+ * The keys a schema names: an object's own, or every option's for a union of objects. null when the schema is
  * not an object, so nothing is refused for it.
  */
 function knownKeys(schema: z.ZodType): Set<string> | null {
@@ -118,7 +118,7 @@ function knownKeys(schema: z.ZodType): Set<string> | null {
 }
 
 /**
- * v0.22.0: a body or query key the contract does not name is refused, never dropped, so a caller that misspells a field
+ * A body or query key the contract does not name is refused, never dropped, so a caller that misspells a field
  * or sends one the site's version does not know hears so (400 unknown-field, naming it) instead of a 200 that ignored it.
  */
 function refuseUnknown(schema: z.ZodType, value: unknown, where: "body" | "query"): void {
@@ -134,7 +134,7 @@ function refuseUnknown(schema: z.ZodType, value: unknown, where: "body" | "query
     );
 }
 
-/** A route that takes no query refuses any key in one (v0.22.0). */
+/** A route that takes no query refuses any key in one. */
 export function refuseAnyQuery(url: URL): void {
   const first = [...url.searchParams.keys()][0];
   if (first !== undefined)
@@ -192,7 +192,7 @@ export function checked<T extends z.ZodType>(schema: T, value: unknown, what: st
 }
 
 /**
- * One route. `query` (v0.22.0) is true for a route that reads its query through readQuery, which refuses an unknown key
+ * One route. `query` is true for a route that reads its query through readQuery, which refuses an unknown key
  * itself; on any other route, the handler refuses a query with any key before the route runs.
  */
 export type Route = {

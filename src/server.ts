@@ -89,7 +89,7 @@ export function createSiteApi(config: SiteApiConfig): SiteApi {
   const { store } = config;
 
   const hooks: PublishHook[] = config.hooks ?? [];
-  // v0.22.0: the hooks a publish of a live page runs, by name, for capabilities.hooks and the conformance probe.
+  // The hooks a publish of a live page runs, by name, for capabilities.hooks and the conformance probe.
   const probe: PublishEvent = {
     action: "publish",
     id: "",
@@ -140,8 +140,8 @@ export function createSiteApi(config: SiteApiConfig): SiteApi {
     return { path: doc?.path ?? null, status: doc?.status ?? null };
   }
 
-  // v0.17.0: a hook that fails is kept for the cron to try again, where the site has a store.
-  // v0.22.0: each run is kept under its change id, where the store keeps hook runs, for `GET /hooks/recent`.
+  // A hook that fails is kept for the cron to try again, where the site has a store.
+  // Each run is kept under its change id, where the store keeps hook runs, for `GET /hooks/recent`.
   const tell = (event: PublishEvent) =>
     runHooks(
       hooks,
@@ -208,7 +208,7 @@ export function createSiteApi(config: SiteApiConfig): SiteApi {
     return retried;
   }
 
-  // The content trash's own end (v0.17.0): items trashed more than TRASH_DAYS ago go for good, through the adapter's
+  // The content trash's own end: items trashed more than TRASH_DAYS ago go for good, through the adapter's
   // delete with the version listed, so one changed since is refused and left. Each on its own, like a schedule.
   async function emptyTrash(now: Date, limit: number): Promise<number> {
     const { content } = adapter;
@@ -375,7 +375,7 @@ export function createSiteApi(config: SiteApiConfig): SiteApi {
     const hit = candidates.find((c) => c.route.method === request.method);
     if (!hit) return fail("method-not-allowed", "Method not allowed.");
 
-    // v0.22.0: a route that takes no query refuses one, before anything runs.
+    // A route that takes no query refuses one, before anything runs.
     if (!hit.route.query) {
       try {
         refuseAnyQuery(url);
@@ -483,7 +483,7 @@ export function createSiteApi(config: SiteApiConfig): SiteApi {
       }
       return run;
     },
-    // v0.22.0: HEAD as well, so a link checker's HEAD meets the same noindex answer as a browser's GET.
+    // HEAD as well, so a link checker's HEAD meets the same noindex answer as a browser's GET.
     matchesPreviewLink: (request) =>
       (request.method === "GET" || request.method === "HEAD") &&
       new URL(request.url).pathname.startsWith(PREVIEW_LINK_PATH),

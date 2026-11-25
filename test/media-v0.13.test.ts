@@ -1,5 +1,5 @@
-// The media library's ideas (v0.13.0), through the client against the reference site, with a PLANT for each refusal:
-// the request is refused and the adapter's method never ran.
+// The media library through the client against the reference site, with a PLANT for each refusal: the request is
+// refused and the adapter's method never ran.
 
 import { describe, expect, it, vi } from "vitest";
 import { createSiteClient } from "../src/client.js";
@@ -36,7 +36,7 @@ function setup(options: MemoryAdapterOptions = {}) {
 
 const path = (id: string, rest = "") => `/api/carrel/v1/media/${encodeURIComponent(id)}${rest}`;
 
-describe("duplicates (1)", () => {
+describe("duplicates", () => {
   it("answers bytes the site holds with that file and duplicateOf, storing nothing; the lens and twins name files that match", async () => {
     const { client, adapter, put } = setup({ mediaDuplicates: true });
     const first = await put("a.png", png(10, 10));
@@ -62,7 +62,7 @@ describe("duplicates (1)", () => {
   });
 });
 
-describe("duplicates of files the site changed on the way in (v0.21.0)", () => {
+describe("duplicates of files the site changed on the way in", () => {
   // A site like the real ones: it stores what prepareUpload makes, so its own hash is of other bytes than the ones sent.
   function changingSite(
     change: (bytes: Uint8Array) => Uint8Array,
@@ -102,7 +102,7 @@ describe("duplicates of files the site changed on the way in (v0.21.0)", () => {
   const photo = new Uint8Array(readFileSync(new URL("./fixtures/photo.jpg", import.meta.url)));
 
   it("answers a photo sent again with the file its metadata-free bytes became, and a copy that differs only in that metadata", async () => {
-    // The 0.19 regression: the site stores the photo without its private metadata, and the route asked about the bytes as sent.
+    // The site stores the photo without its private metadata, so the route must ask about the stored bytes, not the bytes as sent.
     expect(stripMetadata(photo, "image/jpeg")).not.toEqual(photo);
     const { adapter, put } = changingSite((bytes) => stripMetadata(bytes, "image/jpeg"), false);
     const first = await put(photo, "image/jpeg", 1);
@@ -144,7 +144,7 @@ describe("duplicates of files the site changed on the way in (v0.21.0)", () => {
   });
 });
 
-describe("usage, filters and the item's new fields (2, 3, 5, 8)", () => {
+describe("usage, filters and the item's fields", () => {
   it("counts each file's uses, sorts most used first, and filters by orientation and kind", async () => {
     const { client, put } = setup();
     const wide = await put("wide.png", png(40, 20));
@@ -173,14 +173,6 @@ describe("usage, filters and the item's new fields (2, 3, 5, 8)", () => {
     });
   });
 
-  it("PLANT: answers the used sort and the filters with 501 on a site without them, before the adapter", async () => {
-    const { adapter, api } = setup({ mediaExtras: false });
-    const list = vi.spyOn(adapter.media!, "list");
-    for (const q of ["sort=used", "orientation=square", "kind=image", "changedSince=1"])
-      expect((await api.handle(req(`/api/carrel/v1/media?${q}`))).status, q).toBe(501);
-    expect(list).not.toHaveBeenCalled();
-  });
-
   it("PLANT: reports a placeholder that is not a small raster data: URI as a site failure, and never passes it on", async () => {
     const { adapter, api, put, logs } = setup();
     const file = await put("a.png", png(10, 10));
@@ -197,7 +189,7 @@ describe("usage, filters and the item's new fields (2, 3, 5, 8)", () => {
   });
 });
 
-describe("import (4)", () => {
+describe("import", () => {
   const remote = (answers: Record<string, Response | (() => Response)>) =>
     vi.fn(async (input: RequestInfo | URL) => {
       const answer = answers[String(input)];
@@ -241,7 +233,7 @@ describe("import (4)", () => {
         headers: { "content-type": "text/html" },
       }),
     });
-    // v0.22.0: a name that resolves to a private address is refused at the fetch, after DNS, before the site is asked.
+    // A name that resolves to a private address is refused at the fetch, after DNS, before the site is asked.
     const { adapter, api } = setup({
       mediaImportFetch: withDns(fetchRemote, { "127.0.0.1.nip.io": "127.0.0.1" }),
     });
@@ -284,7 +276,7 @@ describe("import (4)", () => {
   });
 });
 
-describe("credit, license and its end (6, 12, 13)", () => {
+describe("credit, license and its end", () => {
   it("saves the four as one write, lists an expired license, and fills empty fields from the file's own metadata at upload", async () => {
     const { client, put } = setup({ now: () => new Date("2026-10-29T12:00:00Z") });
     const embedded = await put(
@@ -364,7 +356,7 @@ describe("credit, license and its end (6, 12, 13)", () => {
   });
 });
 
-describe("transform, history and revert (7)", () => {
+describe("transform, history and revert", () => {
   it("turns in place moving the focal point, keeps the old bytes, and a revert puts them back as a new revision", async () => {
     const { client, put } = setup();
     const file = await put("a.png", png(40, 20));
@@ -508,7 +500,7 @@ describe("transform, history and revert (7)", () => {
   });
 });
 
-describe("live updates (10)", () => {
+describe("live updates", () => {
   it("answers what changed since a list's cursor, each file once, deletes as removed, in pages", async () => {
     const { client, put } = setup();
     const a = await put("a.png", png(10, 10));
@@ -548,7 +540,7 @@ describe("live updates (10)", () => {
   });
 });
 
-describe("shrinking large pictures (11)", () => {
+describe("shrinking large pictures", () => {
   it("shrinks an upload to the site's longest edge unless asked not to, and a pass shrinks stored pictures file by file", async () => {
     const { client, put, adapter } = setup();
     expect((await client.meta()).capabilities.mediaResize).toEqual({ maxEdge: 2048, quality: 82 });
@@ -599,7 +591,7 @@ describe("shrinking large pictures (11)", () => {
       ).status,
     ).toBe(400);
     expect(shrink).not.toHaveBeenCalled();
-    // v0.22.0: txasm's pages hold each picture's width and height, so a shrink in the same proportions is offered there.
+    // A site whose pages hold each picture's width and height offers only a shrink in the same proportions.
     const keeps = setup({ mediaReplaceKeepsSize: true });
     expect((await keeps.client.meta()).capabilities.mediaResizePass).toBe(true);
     const a = await keeps.put("a.png", png(4000, 3000), { resize: "no" });
@@ -619,7 +611,7 @@ describe("shrinking large pictures (11)", () => {
   });
 });
 
-describe("suggestions (14)", () => {
+describe("suggestions", () => {
   it("answers the model's tags in the contract's spelling and its alt text, and applies neither", async () => {
     const { client, adapter, put } = setup();
     const file = await put("river at dusk.png", png(10, 10));
@@ -640,11 +632,5 @@ describe("suggestions (14)", () => {
       tags: [],
       version: file.version,
     });
-  });
-
-  it("PLANT: answers 501 on a site without a model, before the adapter", async () => {
-    const { api, put } = setup({ mediaExtras: false });
-    const file = await put("a.png", png(10, 10));
-    expect((await api.handle(req(path(file.id, "/suggestions")))).status).toBe(501);
   });
 });

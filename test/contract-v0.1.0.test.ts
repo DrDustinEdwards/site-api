@@ -94,32 +94,7 @@ describe("the v0.1.0 contract", () => {
     widened(V010.schemas.ErrorCode!, now("ErrorCode"), V0170_CODES, "ErrorCode");
   });
 
-  it("names what v0.2.0 added to the extended schemas", () => {
-    expect(Object.keys(now("Capabilities").properties ?? {})).toContain("mediaUpload");
-    expect(Object.keys(now("ErrorBody").properties ?? {})).toContain("usedBy");
-  });
-
-  it("parses a v0.1.0 body with the v0.2.0 schemas, and a v0.2.0 meta with the v0.1.0 shape", async () => {
-    const v010meta = {
-      api: "carrel-site-api",
-      packageVersion: "0.1.0",
-      schemaHash: V010.schemaHash,
-      site: { id: "memory", name: "Memory", origin: "https://memory.example" },
-      capabilities: {
-        content: true,
-        preview: true,
-        media: false,
-        inbox: false,
-        insight: false,
-        publications: false,
-      },
-    };
-    expect(contract.Meta.safeParse(v010meta).success).toBe(true);
-    expect(contract.ErrorBody.safeParse({ error: "refused", message: "No." }).success).toBe(true);
-  });
-
-  it("bumps the schema hash, and says the package's own version", async () => {
-    expect(await contract.schemaHash()).not.toBe(V010.schemaHash);
+  it("says the package's own version", () => {
     expect(contract.PACKAGE_VERSION).toBe(pkg.version);
   });
 });

@@ -2,8 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 import { memoryAdapter } from "../src/testing.js";
 import { req, site } from "./helpers.js";
 
-// A JSON body is counted as it arrives. Before, request.text() held the whole body in memory and only then
-// checked its size, so a client that sent no Content-Length (or an understated one) chose how much was held.
+// A JSON body is counted as it arrives: holding the whole body before checking its size would let a client
+// that sends no Content-Length (or an understated one) choose how much memory is held.
 describe("PLANT: a 10 MB JSON body", () => {
   it("is refused as too large when it declares no length, and never reaches the site", async () => {
     const adapter = memoryAdapter();

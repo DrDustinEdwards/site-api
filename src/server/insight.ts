@@ -1,4 +1,4 @@
-// The insight routes (v0.16.0), mounted only when the site's adapter has insight. Read only.
+// The insight routes, mounted only when the site's adapter has insight. Read only.
 
 import { jsonResponse } from "@dustinedwards/site-runtime/http";
 import type { InsightAdapter } from "../adapter.js";

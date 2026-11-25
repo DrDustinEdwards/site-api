@@ -83,7 +83,7 @@ export function memoryMedia(
     return { version };
   }
 
-  // ---------- v0.13.0
+  // ---------- the media library's ideas
   const extras = mediaWrites && options.mediaExtras !== false;
   const dedupe = extras && options.mediaDuplicates === true;
   const resize =
@@ -223,7 +223,7 @@ export function memoryMedia(
               .filter((i) => !query.kind || kindOf(i.contentType) === query.kind)
               .map(shown)
               .reverse();
-            // v0.6.0: sorted as asked, newest, largest or A to Z first unless dir says otherwise.
+            // Sorted as asked, newest, largest or A to Z first unless dir says otherwise.
             const sorted =
               lensed && query.sort
                 ? { sort: query.sort, dir: query.dir ?? (query.sort === "name" ? "asc" : "desc") }
@@ -273,7 +273,7 @@ export function memoryMedia(
                 .replace(/^-+|-+$/g, "") || "file";
             const id = `uploads/${++mediaCounter}-${base}.${EXTENSIONS[input.contentType] ?? "bin"}`;
             const size = (extras ? measure(input.bytes) : null) ?? { width: null, height: null };
-            // v0.13.0: shrunk to the site's longest edge unless the upload said no. The reference adapter does not re-encode,
+            // Shrunk to the site's longest edge unless the upload said no. The reference adapter does not re-encode,
             // so only the measured size moves.
             const small = input.resize ? shrunk(size.width, size.height) : null;
             // The embedded metadata fills only what the upload left empty.

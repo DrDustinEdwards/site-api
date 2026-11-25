@@ -1,6 +1,5 @@
-// The media library (v0.24.0): the whole media group over a site's index rows and its R2 bucket, written once. Each site
-// wrote this for itself (bsw, julieedwards.info, txasm, Foxhound, Germomics, Foxing, dustinedwards.info) and the copies
-// drifted; a site now passes `mediaLibrary` its store, bucket and rules and keeps no adapter of its own.
+// The media library: the whole media group over a site's index rows and its R2 bucket, written once. A site
+// passes `mediaLibrary` its store, bucket and rules and keeps no adapter of its own.
 //
 // VERSIONS. A file's version is its row's `rev` (mediaVersion). Every write to its metadata or bytes moves it once, in the
 // statement that checks it (the store's writeAtRev), so a stale write is a 409, never a lost update. A write that changes
@@ -41,7 +40,6 @@ export {
   pictureLimits,
 } from "./media-library/constants.js";
 
-/** The whole media group over the site's store and bucket. */
 export function mediaLibrary(options: MediaLibraryOptions): MediaAdapter {
   const core = libraryCore(options);
   const { resize, lenses } = core;

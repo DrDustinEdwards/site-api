@@ -1,4 +1,4 @@
-// A file's focal point, caption and replace (v0.10.0), through the client, and the R2 half a site's adapter uses.
+// A file's focal point, caption and replace, through the client, and the R2 half a site's adapter uses.
 
 import { FOCUS_METADATA, focusOf } from "@dustinedwards/site-runtime/image";
 import { describe, expect, it } from "vitest";

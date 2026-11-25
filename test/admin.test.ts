@@ -67,7 +67,7 @@ describe("mentions", () => {
     expect((await loadMentions(setup({ mentions: false }).source)).offers.mentions).toBe(false);
   });
 
-  it("Undo is the opposite decision between approved and rejected; on a v0.5.0 site a decision on a waiting mention has none", async () => {
+  it("Undo is the opposite decision between approved and rejected; on a site without reset a decision on a waiting mention has none", async () => {
     const { adapter, source } = setup({ mentionReset: false });
     const done = adapter.receiveMention({
       sourceUrl: "https://a.example/1",
@@ -96,7 +96,7 @@ describe("mentions", () => {
     ).toEqual({ ok: false, message: "This site does not take a mention decision back." });
   });
 
-  it("searches and narrows to one post through the site (v0.6.0), and filters the page itself where the site did not", async () => {
+  it("searches and narrows to one post through the site, and filters the page itself where the site did not", async () => {
     for (const [options, onPage] of [
       [{}, undefined],
       [{ mentionFilters: false }, true],
@@ -126,7 +126,7 @@ describe("mentions", () => {
     }
   });
 
-  it("with reset (v0.6.0), Undo takes a decision on a waiting mention back to waiting, and Undo of that decides again", async () => {
+  it("with reset, Undo takes a decision on a waiting mention back to waiting, and Undo of that decides again", async () => {
     const { adapter, source } = setup();
     const waiting = adapter.receiveMention({ sourceUrl: "https://a.example/1", targetId: "p" });
     const v = (id: string) => adapter.mentionStore.get(id)!.version;
@@ -237,7 +237,7 @@ describe("summary", () => {
   it("counts what waits on one site, and null for what it cannot say", async () => {
     const { adapter, client, source } = setup({}, { waiting: async () => 3 });
     adapter.receiveMention({ sourceUrl: "https://a.example/1", targetId: "p" });
-    // A file stored before v0.19.0 with no alt counts; a decorative one does not.
+    // A file stored with no alt and no decorative choice counts; a decorative one does not.
     await adapter.media!.upload({
       bytes: PNG,
       contentType: "image/png",

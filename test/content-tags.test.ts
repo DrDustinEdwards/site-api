@@ -1,4 +1,4 @@
-// v0.6.0's content additions: each list row carries its version and tags, the list sorts and counts,
+// Content list and tags: each list row carries its version and tags, the list sorts and counts,
 // and a post's tags are written through their own optional route.
 
 import { describe, expect, it, vi } from "vitest";
@@ -26,7 +26,7 @@ async function seed(c: ReturnType<typeof client>["client"]) {
   return a;
 }
 
-describe("content list (v0.6.0)", () => {
+describe("content list", () => {
   it("carries each row's version and tags, and the total across pages", async () => {
     const { client: c } = client();
     const a = await seed(c);
@@ -65,7 +65,7 @@ describe("content list (v0.6.0)", () => {
   });
 });
 
-describe("content tags (v0.6.0)", () => {
+describe("content tags", () => {
   it("sets a post's whole tag set at the version the caller saw, one spelling per tag, and keeps it live", async () => {
     const { client: c } = client();
     const a = await seed(c);

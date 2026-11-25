@@ -1,4 +1,4 @@
-// The insight group (v0.16.0): what a site counted about its own pages, read only.
+// The insight group: what a site counted about its own pages, read only.
 
 import { z } from "zod";
 

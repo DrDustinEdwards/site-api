@@ -1,4 +1,4 @@
-// Alt text asked at upload, and the model's suggestion before it (v0.19.0), through the client against the reference
+// Alt text asked at upload, and the model's suggestion before it, through the client against the reference
 // site, with a PLANT for each refusal: the request is refused and the adapter's method never ran.
 
 import { readFileSync } from "node:fs";
@@ -18,7 +18,7 @@ const refusal = (promise: Promise<unknown>) =>
     (e: unknown) => (e instanceof SiteApiError ? `${e.status} ${e.body?.message}` : e),
   );
 
-describe("alt at upload (B2, B3)", () => {
+describe("alt at upload", () => {
   it("PLANT: refuses an alt that is the file's name, a bare word, too long or sent with decorative, before the adapter; a picture may be stored with none", async () => {
     const remote = vi.fn(
       async () =>
@@ -47,7 +47,7 @@ describe("alt at upload (B2, B3)", () => {
     expect(upload).not.toHaveBeenCalled();
     expect(remote).not.toHaveBeenCalled();
 
-    // v0.30.0: no alt is allowed at upload, so one can be written afterward; the no-alt lens lists it.
+    // No alt is allowed at upload, so one can be written afterward; the no-alt lens lists it.
     const bare = await client.media.upload({
       ...file,
       bytes: png(6, 6),
@@ -107,7 +107,7 @@ describe("alt at upload (B2, B3)", () => {
   });
 });
 
-describe("suggestions before an upload (B4)", () => {
+describe("suggestions before an upload", () => {
   it("answers the model's alt text and tags for bytes or an import's address, storing nothing", async () => {
     const remote = vi.fn(
       async () =>

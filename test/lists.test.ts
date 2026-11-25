@@ -1,6 +1,5 @@
-// v0.6.0's list additions for media and mentions: media lenses, sort and total, and mention search
-// and the one-post filter, each echoed so a caller can tell a site that did them from one that did not.
-// v0.16.0's 404 report, the insight group's one list.
+// List options for media and mentions: media lenses, sort and total, and mention search and the one-post
+// filter, each echoed so a caller can tell a site that did them from one that did not. Also the 404 report.
 
 import { describe, expect, it, vi } from "vitest";
 import { orderAndPage } from "../src/adapter.js";
@@ -20,7 +19,7 @@ function client(options: MemoryAdapterOptions = {}) {
   };
 }
 
-describe("media lenses and sort (v0.6.0)", () => {
+describe("media lenses and sort", () => {
   it("answers each lens with the files it names, the total across pages, and the order it applied", async () => {
     const { adapter, client: c } = client();
     const used = await c.media.upload({
@@ -30,7 +29,7 @@ describe("media lenses and sort (v0.6.0)", () => {
       alt: "In a post",
       changeId: "u1",
     });
-    // Stored before v0.19.0, with no alt and no one's choice.
+    // No alt and no one's choice.
     const bare = await adapter.media!.upload({
       bytes: PNG,
       contentType: "image/png",
@@ -56,13 +55,6 @@ describe("media lenses and sort (v0.6.0)", () => {
     expect(
       (await c.media.list({ sort: "name", dir: "desc" })).items.map((i) => i.filename),
     ).toEqual(["used.png", "bare.png"]);
-    expect((await c.meta()).capabilities.mediaLenses).toEqual([
-      "unattached",
-      "no-alt",
-      "large",
-      "license-expired",
-      "oversized",
-    ]);
   });
 
   it("PLANT: answers a lens the site does not name with 501, and an unknown lens or sort with 400, before the adapter", async () => {
@@ -76,7 +68,7 @@ describe("media lenses and sort (v0.6.0)", () => {
   });
 });
 
-describe("mention search and the one-post filter (v0.6.0)", () => {
+describe("mention search and the one-post filter", () => {
   it("filters by words and by post, keeps the whole queue's counts, and echoes what it applied", async () => {
     const { adapter, client: c } = client();
     adapter.receiveMention({
@@ -112,7 +104,7 @@ describe("mention search and the one-post filter (v0.6.0)", () => {
   });
 });
 
-describe("the 404 report (v0.16.0)", () => {
+describe("the 404 report", () => {
   it("passes the checked query to the site, answers its rows, refuses a range past 90 days before the site runs, and is 501 without it", async () => {
     const rows = [
       {

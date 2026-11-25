@@ -151,7 +151,7 @@ export async function runPostsIntent(
           const doc = await read(id, version);
           if (doc.status !== "draft" && !source.can.publish)
             return { id, ok: false, message: LIVE_POST };
-          // A site that keeps tags (v0.6.0) writes them through its own route; otherwise the frontmatter is rewritten.
+          // A site that keeps tags writes them through its own route; otherwise the frontmatter is rewritten.
           const viaRoute = capabilities?.contentTags === true;
           const parts = splitSource(doc.source);
           if (!viaRoute && parts.front === null)
@@ -423,7 +423,7 @@ export async function runPostsIntent(
         }
         case "preview-link": {
           await read(id, version);
-          // v0.22.0: how long it lives, where the form says and the site takes it; else the site's 48 hours.
+          // How long it lives, where the form says and the site takes it; else the site's 48 hours.
           const hours = Number(text(input, "expiresInHours"));
           const max = capabilities?.previewLinkHours?.max;
           const expiresInHours =

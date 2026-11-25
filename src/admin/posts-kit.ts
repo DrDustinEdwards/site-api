@@ -12,7 +12,7 @@ import {
   text,
 } from "./kit.js";
 
-/** True where the site has the content trash (v0.17.0): trash and restore, and delete for good from it. */
+/** True where the site has the content trash: trash and restore, and delete for good from it. */
 export const hasTrash = (capabilities: Capabilities | null) => capabilities?.contentTrash === true;
 
 /** A time as the kit's messages say it: "2030-01-01 15:00 UTC", the same wherever the host runs. */
@@ -168,7 +168,7 @@ export async function askBeforeRemoving(
   capabilities: Capabilities | null,
 ): Promise<IntentResult | null> {
   if (targets.length === 0 || (intent !== "delete" && intent !== "trash")) return null;
-  // v0.22.0: where the site lists backlinks, the posts that link to each one about to go, for the confirm to warn with.
+  // Where the site lists backlinks, the posts that link to each one about to go, for the confirm to warn with.
   const backlinks =
     capabilities?.backlinks !== true || text(input, "confirm") !== ""
       ? []

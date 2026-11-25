@@ -1,4 +1,4 @@
-// The mentions group (v0.5.0).
+// The mentions group.
 
 import { z } from "zod";
 import { Actor, ActorName, ChangeId, ContentId, Limit, Timestamp, Version } from "./base.js";
@@ -34,9 +34,9 @@ export const MentionItem = z.object({
 
 export const MentionListQuery = z.object({
   status: MentionStatus.optional(),
-  /** v0.6.0: words in the source address, the author or the excerpt. */
+  /** Words in the source address, the author or the excerpt. */
   q: z.string().max(200).optional(),
-  /** v0.6.0: only the mentions of this content id, such as a post slug. */
+  /** Only the mentions of this content id, such as a post slug. */
   targetId: z.string().min(1).max(300).optional(),
   cursor: z.string().max(500).optional(),
   limit: Limit,
@@ -58,13 +58,13 @@ export const MentionList = z.object({
   counts: MentionCounts,
   /** What a sweep would remove now, by status (the site's retention windows). */
   expiring: z.object({ failed: z.number().int().min(0), rejected: z.number().int().min(0) }),
-  /** The filters of v0.6.0 the site applied, echoed. Absent: the site did not filter by q or targetId. */
+  /** The filters the site applied, echoed. Absent: the site did not filter by q or targetId. */
   filtered: z
     .object({ q: z.string().max(200).optional(), targetId: z.string().max(300).optional() })
     .optional(),
 });
 
-/** `reset` (v0.6.0, optional per site) takes an approved or rejected mention back to pending, so a decision can be undone. */
+/** `reset` (optional per site) takes an approved or rejected mention back to pending, so a decision can be undone. */
 export const MENTION_DECISIONS = ["approve", "reject", "reset"] as const;
 
 export const MentionDecideInput = z.object({

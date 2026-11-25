@@ -1,4 +1,4 @@
-// The media library's store on D1 (v0.24.0), over the network's standard tables: `media`, `media_revisions` and the
+// The media library's store on D1, over the network's standard tables: `media`, `media_revisions` and the
 // trigger-kept `media_changes` (MEDIA_LIBRARY_SQL). A site on these tables passes `d1MediaStore(env.DB)` to
 // `mediaLibrary` and keeps no store of its own; a site whose tables differ writes a MediaLibraryStore over its own.
 
@@ -208,7 +208,6 @@ export interface D1MediaStoreOptions {
   inUse?: string;
 }
 
-/** The library's store over MEDIA_LIBRARY_SQL's tables. */
 export function d1MediaStore(
   db: D1BatchLike,
   options: D1MediaStoreOptions = {},

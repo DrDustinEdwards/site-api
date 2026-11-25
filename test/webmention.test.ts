@@ -1,4 +1,4 @@
-// v0.17.0: sending webmentions. The link reader, the host check and the endpoint discovery read strangers' pages, so
+// Sending webmentions. The link reader, the host check and the endpoint discovery read strangers' pages, so
 // each is tested on the cases that would send to the wrong place; the hook once, end to end, against fake pages.
 
 import { describe, expect, it } from "vitest";
@@ -51,7 +51,7 @@ describe("outboundLinks", () => {
   });
 });
 
-// v0.22.0: the one outbound guard, shared by the webmention sender and the media import.
+// The one outbound guard, shared by the webmention sender and the media import.
 describe("the outbound guard", () => {
   it("refuses local, loopback, private and link-local hosts in every spelling, other ports, and anything but http(s)", () => {
     for (const bad of [

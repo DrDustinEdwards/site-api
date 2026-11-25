@@ -64,7 +64,7 @@ export function mediaEditRoutes(
   { held }: ReturnType<typeof mediaBytes>,
 ): Route[] {
   return [
-    // v0.4.0 writes. A site whose adapter lacks the method answers 501 whatever the body says.
+    // The writes. A site whose adapter lacks the method answers 501 whatever the body says.
     {
       method: "PUT",
       pattern: new RegExp(`^/media/${ID}/alt$`),
@@ -111,7 +111,7 @@ export function mediaEditRoutes(
         );
       },
     },
-    // v0.10.0, each 501 where the adapter lacks it.
+    // Each 501 where the adapter lacks it.
     {
       method: "PUT",
       pattern: new RegExp(`^/media/${ID}/focus$`),
@@ -178,7 +178,7 @@ export function mediaEditRoutes(
         const wrongBytes = checkUpload(contentType, read.bytes, media.limits);
         if (wrongBytes) throw new BadRequest(wrongBytes.code, wrongBytes.message);
         const { item, sizesNeedPurge } = await media.replace(id, {
-          // A replacement's private metadata goes before the site sees it, as an upload's does in prepareUpload (v0.19.0).
+          // A replacement's private metadata goes before the site sees it, as an upload's does in prepareUpload.
           bytes: stripMetadata(read.bytes, contentType),
           contentType,
           filename: query.filename,
@@ -201,7 +201,7 @@ export function mediaEditRoutes(
         );
       },
     },
-    // v0.13.0, each 501 where the adapter lacks it.
+    // Each 501 where the adapter lacks it.
     {
       method: "PUT",
       pattern: new RegExp(`^/media/${ID}/credit$`),
@@ -336,7 +336,7 @@ export function mediaEditRoutes(
         // One at a time, like bulk: image work is slow, and one file's refusal is that file's outcome alone.
         for (const { id, expectedVersion, changeId } of input.items) {
           try {
-            // v0.22.0: where a replace keeps the size, pages hold each picture's width and height, so a shrink may only make
+            // Where a replace keeps the size, pages hold each picture's width and height, so a shrink may only make
             // the picture smaller in the same proportions (the boxes those pages drew still fit it). A site whose addresses
             // carry the size leaves `shrink` out altogether.
             const before = media.replaceKeepsSize

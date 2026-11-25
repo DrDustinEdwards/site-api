@@ -1,5 +1,4 @@
-// The media routes (v0.2.0, writes v0.4.0, focal point, caption and replace v0.10.0, the media library's ideas
-// v0.13.0), mounted only when the site's adapter has media.
+// The media routes, mounted only when the site's adapter has media.
 
 import { mediaType, jsonResponse } from "@dustinedwards/site-runtime/http";
 
@@ -84,7 +83,7 @@ export function mediaRoutes(
         });
       },
     },
-    // v0.19.0: the model's alt text and tags for a file not yet stored, for the upload form to offer. Nothing is stored.
+    // The model's alt text and tags for a file not yet stored, for the upload form to offer. Nothing is stored.
     {
       method: "POST",
       pattern: /^\/media\/suggestions$/,
@@ -111,7 +110,7 @@ export function mediaRoutes(
         );
       },
     },
-    // v0.13.0: the site's own copy of a file on the web, checked as an upload is.
+    // The site's own copy of a file on the web, checked as an upload is.
     {
       method: "POST",
       pattern: /^\/media\/import$/,

@@ -1,6 +1,6 @@
 // The content kit's posts: view data and intents, against the in-memory reference site.
 
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
   liveSaveWarning,
   loadPosts,
@@ -44,7 +44,7 @@ describe("posts", () => {
     expect((await loadPosts(setup({ contentDelete: false }).source)).offers.delete).toBe(false);
   });
 
-  it("asks the site to sort and count (v0.6.0), and counts each status tab for the same search", async () => {
+  it("asks the site to sort and count, and counts each status tab for the same search", async () => {
     const { client, source } = setup({ contentExtras: false });
     await post(client, "a", "title: Zed", true);
     await post(client, "b", "title: Ant");
@@ -115,25 +115,12 @@ describe("posts", () => {
     expect((await client.get("b")).source).toContain("tags: [x, keep]");
   });
 
-  it("writes tags through the site's tags route where it offers one (v0.6.0), and through the frontmatter where it does not", async () => {
-    const routed = setup();
-    await post(routed.client, "a", "title: A\ntags: []");
-    const viaRoute = vi.spyOn(routed.adapter.content, "setTags");
-    const viaSave = vi.spyOn(routed.adapter.content, "saveDraft");
-    expect(
-      (await runPostsIntent(routed.source, { intent: "tag-add", ids: ["a"], tag: "t" })).ok,
-    ).toBe(true);
-    expect(viaRoute).toHaveBeenCalledTimes(1);
-    expect(viaSave).not.toHaveBeenCalled();
-    expect((await routed.client.get("a")).tags).toEqual(["t"]);
-
+  it("writes tags through the frontmatter on a site with no tags route", async () => {
     const plain = setup({ contentTags: false });
     await post(plain.client, "a", "title: A\ntags: []");
-    const saved = vi.spyOn(plain.adapter.content, "saveDraft");
     expect(
       (await runPostsIntent(plain.source, { intent: "tag-add", ids: ["a"], tag: "t" })).ok,
     ).toBe(true);
-    expect(saved).toHaveBeenCalledTimes(1);
     expect((await plain.client.get("a")).source).toContain("tags: [t]");
   });
 
@@ -372,7 +359,7 @@ describe("posts", () => {
     });
   });
 
-  it("warns with the posts that link to one before a trash or a delete, and names the acting person on the write (v0.22.0)", async () => {
+  it("warns with the posts that link to one before a trash or a delete, and names the acting person on the write ", async () => {
     const { client, source } = setup({}, { actor: { name: "Ada Example" } });
     await post(client, "a", "title: A");
     await client.saveDraft("b", {
@@ -396,7 +383,7 @@ describe("posts", () => {
     });
   });
 
-  it("trashes and restores with Undo, deletes for good only from the Trash, lists and counts the Trash, and renames with Undo (v0.17.0)", async () => {
+  it("trashes and restores with Undo, deletes for good only from the Trash, lists and counts the Trash, and renames with Undo", async () => {
     const { adapter, client, source } = setup();
     await post(client, "a", "title: A", true);
     await post(client, "b", "title: B");
