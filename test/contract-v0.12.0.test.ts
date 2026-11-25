@@ -5,7 +5,16 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import * as contract from "../src/contract.js";
-import { additiveOnly, added, changedSince, fixture, now, widened } from "./additive.js";
+import {
+  additiveOnly,
+  added,
+  changedSince,
+  fixture,
+  now,
+  routesKept,
+  schemasKept,
+  widened,
+} from "./additive.js";
 import {
   V0170_ROUTES,
   V0170_SCHEMAS,
@@ -118,17 +127,7 @@ describe("the v0.12.0 contract", () => {
   });
 
   it("keeps every v0.12.0 route exactly, but the upload's answer named MediaUploadResult, and adds only the v0.13.0 media routes and the v0.16.0 404 report", () => {
-    for (const route of V0120.routes) {
-      const expected =
-        route.method === "POST" && route.path === "/media"
-          ? { ...route, response: "MediaUploadResult" }
-          : route;
-      expect(contract.ROUTES, JSON.stringify(route)).toContainEqual(expected);
-    }
-    const fresh = contract.ROUTES.filter(
-      (r) => !V0120.routes.some((old) => old.method === r.method && old.path === r.path),
-    );
-    expect(fresh.map((r) => `${r.method} ${r.path}`)).toEqual([
+    expect(routesKept(V0120)).toEqual([
       "POST /media/import",
       "PUT /media/:id/credit",
       "POST /media/:id/transform",
@@ -156,20 +155,14 @@ describe("the v0.12.0 contract", () => {
     );
   });
 
-  for (const name of Object.keys(V0120.schemas).filter(
-    (n) => own(n) && !(n in ADDED) && n !== "MediaLens" && n !== "ErrorCode",
-  )) {
-    it(`keeps ${name} identical`, () => {
-      expect(now(name)).toEqual(V0120.schemas[name]);
-    });
-  }
-
-  for (const [name, props] of Object.entries(ADDED).filter(([n]) => own(n))) {
-    it(`extends ${name} by optional properties only: ${props.join(", ") || "none of its own"}`, () => {
-      additiveOnly(V0120.schemas[name]!, now(name), name, WIDEN);
-      expect(added(V0120.schemas[name]!, now(name)).sort()).toEqual(props);
-    });
-  }
+  schemasKept(
+    V0120,
+    Object.keys(V0120.schemas).filter(
+      (n) => own(n) && !(n in ADDED) && n !== "MediaLens" && n !== "ErrorCode",
+    ),
+    Object.entries(ADDED).filter(([n]) => own(n)),
+    WIDEN,
+  );
 
   it("widens the lenses by duplicates, license-expired and oversized, and nothing else", () => {
     widened(V0120.schemas.MediaLens!, now("MediaLens"), NEW_LENSES, "MediaLens");

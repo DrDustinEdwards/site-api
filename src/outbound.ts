@@ -1,6 +1,5 @@
 // The one outbound-address guard (v0.22.0), for every fetch the package makes to an address a stranger chose: the
-// webmention sender (targets and their endpoints) and the media import. Before v0.22.0 each had its own copy, and both
-// judged the host name alone, so a name that resolves to a private address (127.0.0.1.nip.io) got through.
+// webmention sender (targets and their endpoints) and the media import.
 //
 // An address passes when it is https (or http, where the caller allows it), on the scheme's default port, with no user
 // name or password, and its host is neither a local name nor an address in a private, loopback, link-local, CGNAT,

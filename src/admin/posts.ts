@@ -541,7 +541,7 @@ export async function runPostsIntent(
           const doc = await read(id, version);
           if (doc.status !== "draft" && !source.can.publish)
             return { id, ok: false, message: LIVE_POST };
-          // A site that keeps tags (v0.6.0) writes them through its own route; otherwise the frontmatter is rewritten, as Carrel did.
+          // A site that keeps tags (v0.6.0) writes them through its own route; otherwise the frontmatter is rewritten.
           const viaRoute = capabilities?.contentTags === true;
           const parts = splitSource(doc.source);
           if (!viaRoute && parts.front === null)

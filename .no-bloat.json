@@ -1,15 +1,15 @@
 {
   "baseline": {
-    "measured_at": "d03165f",
+    "measured_at": "12b0929",
     "knip": {
       "files": 1,
       "exports": 2,
       "types": 1
     },
     "jscpd": {
-      "clones": 14,
-      "lines": 297,
-      "percentage": 1.42,
+      "clones": 7,
+      "lines": 255,
+      "percentage": 1.14,
       "unread": 0
     },
     "shared copies": {
@@ -21,23 +21,22 @@
       "src/adapter.ts": 674,
       "src/admin/media.ts": 1285,
       "src/admin/posts.ts": 942,
-      "src/conformance.ts": 1541,
       "src/contract.ts": 697,
       "src/contract/media.ts": 672,
       "src/media-library.ts": 1297,
-      "src/media-upload.ts": 1306,
+      "src/media-upload.ts": 1304,
       "src/server.ts": 653,
       "src/server/media.ts": 918,
       "src/testing.ts": 1390,
       "test/admin.test.ts": 1252
     },
     "tests": {
-      "files": 34,
-      "cases": 291
+      "files": 33,
+      "cases": 287
     },
     "comments": {
-      "lines": 2475,
-      "code": 22478,
+      "lines": 2481,
+      "code": 22525,
       "percentage": 9.92
     }
   }

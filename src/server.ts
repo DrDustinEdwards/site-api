@@ -85,7 +85,7 @@ export interface SiteApiConfig {
   /**
    * Where the package keeps what it needs between requests (v0.17.0): on D1, `d1SiteApiStore(env.DB)` from
    * `@dustinedwards/site-api/store`, with `SITE_API_STORE_SQL` as a migration. With it, every write is safe to retry
-   * under its change id (capabilities.replay). Absent: everything works as in v0.14.0.
+   * under its change id (capabilities.replay). Absent: nothing is kept between requests.
    */
   store?: SiteApiStore;
 }

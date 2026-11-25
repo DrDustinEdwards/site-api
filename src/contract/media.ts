@@ -268,7 +268,7 @@ export const MediaUploadQuery = z.object({
     .regex(/^[^/\\\u0000-\u001f]+$/, "A file name, with no path"),
   /**
    * What the picture shows (v0.30.0: optional; with none the picture is stored with no alt and an alt is written afterward, and the site refuses it where it is placed on a page). Sent, it is checked: what the picture shows, at most MAX_ALT_CHARS, never its file name, a bare
-   * "image" or an address. Before v0.19.0 it defaulted to "", which stored a picture with no alt and no one's choice.
+   * "image" or an address.
    */
   alt: z.string().max(2000).optional(),
   /** v0.19.0: "yes" says the picture is decorative, so it is stored with alt "" on purpose. Not with an alt. */

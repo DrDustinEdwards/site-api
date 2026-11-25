@@ -8,10 +8,27 @@ import { createSiteApi, indexNowHook, type PublishEvent } from "../src/index.js"
 import { d1SiteApiStore, SITE_API_STORE_SQL } from "../src/store.js";
 import { d1 } from "./d1.js";
 import { memoryAdapter } from "../src/testing.js";
-import { KEY, ORIGIN, allow, clientOf } from "./helpers.js";
+import { KEY, ORIGIN, allow, body, clientOf, req } from "./helpers.js";
 
 const LIVE = "---\ntitle: Live\n---\nThe live words.\n";
 const NEXT = "---\ntitle: Live\n---\nThe updated words.\n";
+
+function siteWithHooks(
+  hooks: NonNullable<Parameters<typeof createSiteApi>[0]["hooks"]>,
+  extra: { store?: ReturnType<typeof d1SiteApiStore> } = {},
+) {
+  const logs: Array<Record<string, unknown>> = [];
+  const adapter = memoryAdapter({ site: { id: "memory", name: "Memory site", origin: ORIGIN } });
+  const api = createSiteApi({
+    adapter,
+    key: KEY,
+    limiter: allow,
+    log: (entry) => logs.push(entry),
+    hooks,
+    ...extra,
+  });
+  return { api, adapter, logs };
+}
 
 function mounted(adapter = memoryAdapter()) {
   const heard: PublishEvent[] = [];
@@ -208,25 +225,17 @@ describe("scheduled updates (v0.10.0)", () => {
 describe("publish hooks (v0.10.0)", () => {
   it("logs a hook that fails and never fails the write; the IndexNow hook sends the page through the site's submit", async () => {
     const sent: Array<{ urls: string[]; from?: string }> = [];
-    const logs: Array<Record<string, unknown>> = [];
-    const adapter = memoryAdapter({ site: { id: "memory", name: "Memory site", origin: ORIGIN } });
-    const api = createSiteApi({
-      adapter,
-      key: KEY,
-      limiter: allow,
-      log: (entry) => logs.push(entry),
-      hooks: [
-        { name: "broken", run: () => Promise.reject(new Error("boom")) },
-        indexNowHook({
-          origin: ORIGIN,
-          key: "indexnow-key",
-          submit: async (input) => {
-            sent.push(input);
-            return true;
-          },
-        }),
-      ],
-    });
+    const { api, logs } = siteWithHooks([
+      { name: "broken", run: () => Promise.reject(new Error("boom")) },
+      indexNowHook({
+        origin: ORIGIN,
+        key: "indexnow-key",
+        submit: async (input) => {
+          sent.push(input);
+          return true;
+        },
+      }),
+    ]);
     const client = clientOf(api);
     const preview = clientOf(api, "https://preview.workers.dev");
 
@@ -283,16 +292,9 @@ describe("publish hooks (v0.17.0)", () => {
   it("hears what a hook names, sends both addresses of a rename, and retries a failed hook from the store until it gives up", async () => {
     const heard: string[] = [];
     const sent: string[][] = [];
-    const logs: Array<Record<string, unknown>> = [];
     let failing = true;
-    const adapter = memoryAdapter({ site: { id: "memory", name: "Memory site", origin: ORIGIN } });
-    const api = createSiteApi({
-      adapter,
-      key: KEY,
-      limiter: allow,
-      log: (entry) => logs.push(entry),
-      store: d1SiteApiStore(d1(SITE_API_STORE_SQL)),
-      hooks: [
+    const { api, logs } = siteWithHooks(
+      [
         {
           name: "all",
           on: ["schedule", "trash", "restore", "rename"],
@@ -304,7 +306,8 @@ describe("publish hooks (v0.17.0)", () => {
           submit: async (input) => (sent.push(input.urls), !failing),
         }),
       ],
-    });
+      { store: d1SiteApiStore(d1(SITE_API_STORE_SQL)) },
+    );
     const client = clientOf(api);
 
     const draft = await client.saveDraft("a", {
@@ -374,5 +377,40 @@ describe("v0.27.0 runSchedulesOrThrow", () => {
     });
     const error = await api.runSchedulesOrThrow().catch((e: Error) => e);
     expect(isDatabaseDown(error)).toBe(true);
+  });
+});
+
+describe("page changes (v0.9.0)", () => {
+  it("names the page a publish, a live save, an unpublish and a delete change, never a draft's, and waits on nothing", async () => {
+    const { api, client: c, heard, settle } = mounted();
+
+    const draft = await c.saveDraft("a", {
+      source: "# A\n",
+      expectedVersion: null,
+      changeId: "c1",
+    });
+    const live = await c.publish("a", { expectedVersion: draft.version, changeId: "c2" });
+    const edited = await c.saveDraft("a", {
+      source: "# A, edited\n",
+      expectedVersion: live.version,
+      changeId: "c3",
+    });
+    const down = await c.unpublish("a", { expectedVersion: edited.version, changeId: "c4" });
+    const again = await c.publish("a", { expectedVersion: down.version, changeId: "c5" });
+    await c.delete("a", { expectedVersion: again.version, changeId: "c6" });
+    const waited = await settle();
+
+    expect(heard.map((e) => e.path)).toEqual(Array(5).fill("/blog/a"));
+    // The first save, to a draft never published, has no page to tell anyone of, so nothing waits on it.
+    expect(waited).toHaveLength(5);
+
+    // PLANT: a malformed escape in the id is the route's 400 (ASVS 16.5.4), not a URIError thrown by the handler.
+    const bad = await api.handle(
+      req("/api/carrel/v1/content/%E0%A4%A/publish", {
+        method: "POST",
+        ...body({ expectedVersion: "v1", changeId: "c7" }),
+      }),
+    );
+    expect(bad.status).toBe(400);
   });
 });

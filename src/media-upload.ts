@@ -70,7 +70,7 @@ const TAGS = {
  * The fields from whichever metadata the file's type carries: a JPEG's EXIF, XMP and IPTC (APP13), a PNG's eXIf, XMP and
  * text chunks, a WebP's EXIF and XMP, and a HEIC's, a HEIF's or an AVIF's Exif and XMP items. Only these fields are read;
  * nothing else in the metadata (a camera's location, its serial number) is kept or passed on. {} for none or for anything
- * unreadable. Moved from dustinedwards.info (v0.15.0); IPTC, XMP and AVIF are v0.19.0.
+ * unreadable.
  */
 export function readEmbedded(bytes: Uint8Array, contentType: string): EmbeddedFields {
   const f = factsOf(blocksOf(bytes, contentType));
@@ -936,9 +936,7 @@ function cleanHeif(b: Uint8Array): Uint8Array {
 }
 
 /**
- * The placeholder fits inside this square, so a tall or a wide picture's stays as small as a square one's. Moved from
- * dustinedwards.info's placeholderFor (v0.15.0), the one site that made one, at 20 pixels wide and unblurred.
- */
+ * The placeholder fits inside this square, so a tall or a wide picture's stays as small as a square one's. */
 const PLACEHOLDER_EDGE = 16;
 
 /** The placeholder's encoding: always with a quality, without which the binding writes a lossless WebP, and one still frame of a GIF. */
@@ -1174,7 +1172,7 @@ export interface PreparedUpload {
   embedded: EmbeddedFields;
   /** True when a HEIC or HEIF upload was converted to JPEG. */
   converted: boolean;
-  /** True when private metadata (a location, a serial number, a MakerNote, a thumbnail) was taken out without re-encoding (v0.19.0; was `located`). */
+  /** True when private metadata (a location, a serial number, a MakerNote, a thumbnail) was taken out without re-encoding. */
   stripped: boolean;
   /** A 16 pixel blurred WebP as a data: URI (MediaPlaceholder); null for a file the binding cannot read, as an SVG. */
   placeholder: string | null;

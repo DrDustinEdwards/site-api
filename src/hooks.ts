@@ -74,7 +74,7 @@ export function hears(hook: PublishHook, event: PublishEvent): boolean {
   if (!PAGE_ACTIONS.includes(event.action)) return false;
   const live =
     event.action === "publish" || event.action === "update" ? event.status : event.previousStatus;
-  // An event that does not say (a site's own runHooks call before v0.17.0) is taken as a page change, as it was then.
+  // An event that does not say (a site's own runHooks call) is taken as a page change.
   return live === undefined || live === "published";
 }
 
