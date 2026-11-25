@@ -255,6 +255,48 @@ export function result(
   return { ok: outcomes.length > 0 && outcomes.every((o) => o.ok), message, outcomes, ...extra };
 }
 
+/** The result of a run whose first outcome says it; `conflict` and `undo` go on only when set. */
+export function firstResult(
+  outcomes: Outcome[],
+  conflict?: IntentResult["conflict"],
+  undo?: IntentResult["undo"],
+): IntentResult {
+  return result(outcomes, outcomes[0]!.message, {
+    ...(conflict ? { conflict } : {}),
+    ...(undo ? { undo } : {}),
+  });
+}
+
+/** Adds a failed bulk outcome to `all`, and returns the run's conflict: the first stale version, else the one it had. */
+export function addFailure(
+  all: Outcome[],
+  outcome: {
+    id: string;
+    error?: string;
+    message: string;
+    currentVersion?: string | null;
+    usedBy?: MediaUse[];
+  },
+  conflict: IntentResult["conflict"] | undefined,
+): IntentResult["conflict"] | undefined {
+  all.push({
+    id: outcome.id,
+    ok: false,
+    message: failedFileMessage(outcome),
+    ...(outcome.usedBy && outcome.usedBy.length > 0 ? { usedBy: outcome.usedBy } : {}),
+  });
+  return outcome.error === "version-conflict" && !conflict
+    ? { id: outcome.id, currentVersion: outcome.currentVersion ?? null }
+    : conflict;
+}
+
+/** A failed bulk outcome's message: a stale version reads as a file that changed. */
+function failedFileMessage(outcome: { error?: string; message: string }): string {
+  return outcome.error === "version-conflict"
+    ? "This file changed on the site since the page loaded. It was left as it was."
+    : outcome.message;
+}
+
 /** A 404 from the site, as null; anything else is the caller's to handle. */
 export async function orNull<T>(read: Promise<T>): Promise<T | null> {
   try {
