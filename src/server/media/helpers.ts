@@ -245,7 +245,7 @@ export function suggestionOf(found: MediaSuggestion): {
 }
 
 /** The name an import keeps when it names none: the address's last segment, made a plain file name. */
-export function nameOf(address: string): string {
+export function fileNameOf(address: string): string {
   const last = new URL(address).pathname.split("/").filter(Boolean).pop() ?? "";
   let name: string;
   try {

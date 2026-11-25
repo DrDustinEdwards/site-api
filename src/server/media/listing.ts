@@ -30,7 +30,7 @@ import {
   readQuery,
   type Route,
 } from "../http.js";
-import { checkAlt, suggestionOf, nameOf } from "./helpers.js";
+import { checkAlt, suggestionOf, fileNameOf } from "./helpers.js";
 import type { MediaRouteContext } from "./helpers.js";
 
 export function listingRoutes(ctx: MediaRouteContext): Route[] {
@@ -114,14 +114,14 @@ export function listingRoutes(ctx: MediaRouteContext): Route[] {
           return notImplemented("This site does not import files from the web.");
         const input = await readBody(request, MediaImportInput);
         const decorative = input.decorative === true;
-        checkAlt(input.alt, decorative, input.filename ?? nameOf(input.url), false);
+        checkAlt(input.alt, decorative, input.filename ?? fileNameOf(input.url), false);
         const { bytes, contentType, address } = await imported(input.url);
         return store(
           bytes,
           contentType,
           {
             ...input,
-            filename: input.filename ?? nameOf(address),
+            filename: input.filename ?? fileNameOf(address),
             alt: decorative ? "" : (input.alt ?? "").trim(),
             decorative,
           },
