@@ -19,6 +19,7 @@ export {
 } from "./contract/base.js";
 export * from "./contract/content.js";
 export * from "./contract/media.js";
+export * from "./contract/media-writes.js";
 export * from "./contract/mentions.js";
 export * from "./contract/insight.js";
 import { SiteInfo, Version } from "./contract/base.js";
@@ -61,6 +62,15 @@ import {
   WriteResult,
 } from "./contract/content.js";
 import {
+  MediaDetail,
+  MediaItem,
+  MediaLens,
+  MediaList,
+  MediaListQuery,
+  MediaUploadLimits,
+  MediaUse,
+} from "./contract/media.js";
+import {
   MediaAltInput,
   MediaBulkInput,
   MediaBulkResult,
@@ -68,14 +78,9 @@ import {
   MediaCreditInput,
   MediaDeleteQuery,
   MediaDeleteResult,
-  MediaDetail,
   MediaFocusInput,
   MediaHistory,
   MediaImportInput,
-  MediaItem,
-  MediaLens,
-  MediaList,
-  MediaListQuery,
   MediaReplaceQuery,
   MediaReplaceResult,
   MediaResize,
@@ -91,12 +96,10 @@ import {
   MediaTrashEmptyInput,
   MediaTrashEmptyResult,
   MediaTrashInput,
-  MediaUploadLimits,
   MediaUploadQuery,
   MediaUploadResult,
-  MediaUse,
   MediaWriteResult,
-} from "./contract/media.js";
+} from "./contract/media-writes.js";
 import {
   MentionDecideInput,
   MentionDeleteQuery,
