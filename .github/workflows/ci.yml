@@ -53,3 +53,5 @@ jobs:
         run: npm run format:check
       - run: npm run build
       - run: npm test
+      - name: Declarations a project with a composite tsconfig can keep
+        run: npx devkit-declarations
