@@ -25,6 +25,8 @@ import {
   result,
   Conflict,
   eachItem,
+  addFailure,
+  firstResult,
 } from "../kit.js";
 import { EMPTY_ROUNDS, megabytes, parseMediaTags } from "./intents.js";
 import { MEDIA_DONE } from "./uploads.js";
@@ -58,7 +60,7 @@ export async function setCredit(
       message: "Credit saved." + (await recordDone(source, "media-credit", id, change)),
     };
   });
-  return result(outcomes, outcomes[0]!.message, conflict ? { conflict } : {});
+  return firstResult(outcomes, conflict);
 }
 
 const INVERSE: Record<TransformOp, TransformOp> = {
@@ -120,10 +122,7 @@ export async function transformFile(
       message: "Turned. Every page that uses it shows the new picture." + stale + note,
     };
   });
-  return result(outcomes, outcomes[0]!.message, {
-    ...(conflict ? { conflict } : {}),
-    ...(undo ? { undo } : {}),
-  });
+  return firstResult(outcomes, conflict, undo);
 }
 
 /** Puts a file's earlier bytes back (v0.13.0), `to` a revision from the inspector's history. Undo puts back the bytes it had. */
@@ -157,10 +156,7 @@ export async function revertFile(
         (await recordDone(source, "media-revert", id, change)),
     };
   });
-  return result(outcomes, outcomes[0]!.message, {
-    ...(conflict ? { conflict } : {}),
-    ...(undo ? { undo } : {}),
-  });
+  return firstResult(outcomes, conflict, undo);
 }
 
 /**
@@ -207,16 +203,7 @@ export async function resizeFiles(
             : "Already within the size. Not changed.",
         });
       } else {
-        if (outcome.error === "version-conflict" && !conflict)
-          conflict = { id: outcome.id, currentVersion: outcome.currentVersion ?? null };
-        all.push({
-          id: outcome.id,
-          ok: false,
-          message:
-            outcome.error === "version-conflict"
-              ? "This file changed on the site since the page loaded. It was left as it was."
-              : outcome.message,
-        });
+        conflict = addFailure(all, outcome, conflict);
       }
     }
   }
@@ -246,7 +233,7 @@ export async function setAlt(
       message: "Alt text saved." + (await recordDone(source, "media-alt", id, change)),
     };
   });
-  return result(outcomes, outcomes[0]!.message, conflict ? { conflict } : {});
+  return firstResult(outcomes, conflict);
 }
 
 /**
@@ -289,7 +276,7 @@ export async function setFocus(
         (await recordDone(source, "media-focus", id, change)),
     };
   });
-  return result(outcomes, outcomes[0]!.message, conflict ? { conflict } : {});
+  return firstResult(outcomes, conflict);
 }
 
 export async function setCaption(
@@ -311,7 +298,7 @@ export async function setCaption(
       message: "Caption saved." + (await recordDone(source, "media-caption", id, change)),
     };
   });
-  return result(outcomes, outcomes[0]!.message, conflict ? { conflict } : {});
+  return firstResult(outcomes, conflict);
 }
 
 /**
@@ -359,7 +346,7 @@ export async function replaceFile(
         (await recordDone(source, "media-replace", id, change)),
     };
   });
-  return result(outcomes, outcomes[0]!.message, conflict ? { conflict } : {});
+  return firstResult(outcomes, conflict);
 }
 
 /** Sets a file's whole tag set. Undo sets back the set it held, at the version this write made. */
@@ -391,10 +378,7 @@ export async function setFileTags(
       message: "Tags saved." + (await recordDone(source, "media-tags", id, change)),
     };
   });
-  return result(outcomes, outcomes[0]!.message, {
-    ...(conflict ? { conflict } : {}),
-    ...(undo ? { undo } : {}),
-  });
+  return firstResult(outcomes, conflict, undo);
 }
 
 /**

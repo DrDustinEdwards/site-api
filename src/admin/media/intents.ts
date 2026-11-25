@@ -20,6 +20,7 @@ import {
   result,
   Conflict,
   eachItem,
+  addFailure,
 } from "../kit.js";
 import { mediaOffers } from "./data.js";
 import {
@@ -319,17 +320,7 @@ export async function runMediaIntent(
             undoTags.add(`${outcome.id}\u0000${g}`);
       }
     } else {
-      if (outcome.error === "version-conflict" && !conflict)
-        conflict = { id: outcome.id, currentVersion: outcome.currentVersion ?? null };
-      all.push({
-        id: outcome.id,
-        ok: false,
-        message:
-          outcome.error === "version-conflict"
-            ? "This file changed on the site since the page loaded. It was left as it was."
-            : outcome.message,
-        ...(outcome.usedBy && outcome.usedBy.length > 0 ? { usedBy: outcome.usedBy } : {}),
-      });
+      conflict = addFailure(all, outcome, conflict);
     }
   }
   const extra: Partial<IntentResult> = conflict ? { conflict } : {};
