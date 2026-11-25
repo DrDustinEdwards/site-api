@@ -260,6 +260,29 @@ describe("PLANT: an upload the site does not accept", () => {
       expect((await response.json()).message).toContain("do not match");
     }
     expect(calls).not.toHaveBeenCalled();
+
+    // Audio a site streams is checked by its head alone, through the same table.
+    const head = (...parts: (string | number[])[]) =>
+      Uint8Array.from(
+        parts.flatMap((p) => (typeof p === "string" ? Array.from(new TextEncoder().encode(p)) : p)),
+      );
+    const audio = [
+      ["audio/mpeg", head("ID3", [4, 0, 0, 0, 0, 0, 0])],
+      ["audio/mpeg", head([0xff, 0xfb, 0x90, 0x64])],
+      ["audio/aac", head([0xff, 0xf1, 0x50, 0x80])],
+      ["audio/mp4", head([0, 0, 0, 0x20], "ftypM4A ")],
+      ["audio/wav", head("RIFF", [0, 0, 0, 0], "WAVE")],
+      ["audio/ogg", head("OggS", [0, 2])],
+      ["audio/flac", head("fLaC", [0, 0, 0, 0x22])],
+    ] as const;
+    const limits = { maxBytes: 1024, types: audio.map(([type]) => type) };
+    const page = new TextEncoder().encode("<html><script>alert(1)</script>");
+    for (const [type, bytes] of audio) {
+      expect(checkUpload(type, bytes, limits), type).toBeNull();
+      expect(checkUpload(type, page, limits)?.message, type).toContain("do not match");
+      expect(checkUpload(type, PNG, limits)?.message, type).toContain("do not match");
+    }
+    expect(checkUpload("audio/mpeg", head([0xff, 0xf1, 0x50, 0x80]), limits)).not.toBeNull();
   });
 
   it("refuses an SVG that would run script on the site, and keeps a plain one", async () => {
@@ -345,38 +368,5 @@ describe("PLANT: a site answering outside the media contract", () => {
       message: "The site answered outside the contract.",
     });
     expect(logs).toContainEqual(expect.objectContaining({ siteApi: "contract-breach" }));
-  });
-});
-
-describe("PLANT: audio a site streams, checked by its head", () => {
-  const head = (...parts: (string | number[])[]) =>
-    Uint8Array.from(
-      parts.flatMap((p) => (typeof p === "string" ? Array.from(new TextEncoder().encode(p)) : p)),
-    );
-  const limits = {
-    maxBytes: 1024,
-    types: ["audio/mpeg", "audio/aac", "audio/mp4", "audio/wav", "audio/ogg", "audio/flac"],
-  };
-  const real = [
-    ["audio/mpeg", head("ID3", [4, 0, 0, 0, 0, 0, 0])],
-    ["audio/mpeg", head([0xff, 0xfb, 0x90, 0x64])],
-    ["audio/aac", head([0xff, 0xf1, 0x50, 0x80])],
-    ["audio/mp4", head([0, 0, 0, 0x20], "ftypM4A ")],
-    ["audio/wav", head("RIFF", [0, 0, 0, 0], "WAVE")],
-    ["audio/ogg", head("OggS", [0, 2])],
-    ["audio/flac", head("fLaC", [0, 0, 0, 0x22])],
-  ] as const;
-
-  it("accepts each audio type's own bytes", () => {
-    for (const [type, bytes] of real) expect(checkUpload(type, bytes, limits), type).toBeNull();
-  });
-
-  it("refuses a page, a script or another type's bytes sent as audio", () => {
-    const page = new TextEncoder().encode("<html><script>alert(1)</script>");
-    for (const [type] of real) {
-      expect(checkUpload(type, page, limits)?.message, type).toContain("do not match");
-      expect(checkUpload(type, PNG, limits)?.message, type).toContain("do not match");
-    }
-    expect(checkUpload("audio/mpeg", head([0xff, 0xf1, 0x50, 0x80]), limits)).not.toBeNull();
   });
 });
