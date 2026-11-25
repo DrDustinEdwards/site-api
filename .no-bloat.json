@@ -1,6 +1,6 @@
 {
   "baseline": {
-    "measured_at": "7d1e552",
+    "measured_at": "b9e081e",
     "knip": {
       "files": 1,
       "exports": 2,
@@ -33,7 +33,7 @@
     },
     "comments": {
       "lines": 2491,
-      "code": 22859,
+      "code": 22854,
       "percentage": 9.83
     }
   }

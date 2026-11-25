@@ -2,7 +2,8 @@ import { escapeXml } from "@drdustinedwards/site-helpers/xml";
 import { crc32, sha256Hex } from "@dustinedwards/site-runtime/encoding";
 
 import { ascii } from "../media.js";
-import { bytesOf, concat, same, u32be } from "./bytes.js";
+import { concatBytes } from "@dustinedwards/site-runtime/encoding";
+import { bytesOf, same, u32be } from "./bytes.js";
 import { type Blocks, type Facts } from "./types.js";
 import { type Entry, TAGS, factsOf, tiffEntries } from "./fields.js";
 import {
@@ -166,7 +167,10 @@ export async function duplicateKey(bytes: Uint8Array, contentType: string): Prom
 }
 
 const jpegSegment = (marker: number, data: Uint8Array) =>
-  concat([new Uint8Array([0xff, marker, (data.length + 2) >> 8, (data.length + 2) & 0xff]), data]);
+  concatBytes(
+    new Uint8Array([0xff, marker, (data.length + 2) >> 8, (data.length + 2) & 0xff]),
+    data,
+  );
 
 /** Where a JPEG's first picture ends, after its EOI, from the start of its first scan; the file's end where it has none. */
 function jpegEnd(b: Uint8Array, scan: number): number {
@@ -196,7 +200,7 @@ function cleanJpeg(b: Uint8Array): Uint8Array {
   for (const s of segments) {
     if (isExif(s)) {
       const tiff = keptTiff(s.data.subarray(6));
-      if (tiff) xmpAt = parts.push(jpegSegment(0xe1, concat([bytesOf(EXIF_JPEG), tiff])));
+      if (tiff) xmpAt = parts.push(jpegSegment(0xe1, concatBytes(bytesOf(EXIF_JPEG), tiff)));
     } else if (s.marker === 0xe0 && ascii(s.data, 0, 5) === "JFIF\u0000") {
       xmpAt = parts.push(b.subarray(s.at, s.end));
     } else if (
@@ -208,9 +212,9 @@ function cleanJpeg(b: Uint8Array): Uint8Array {
     }
   }
   const xmp = freshXmp(jpegBlocks(b));
-  if (xmp) parts.splice(xmpAt, 0, jpegSegment(0xe1, concat([bytesOf(XMP_JPEG), xmp])));
+  if (xmp) parts.splice(xmpAt, 0, jpegSegment(0xe1, concatBytes(bytesOf(XMP_JPEG), xmp)));
   parts.push(b.subarray(scan, jpegEnd(b, scan)));
-  return concat(parts);
+  return concatBytes(...parts);
 }
 
 /** One PNG chunk: its length, type, data and the CRC-32 of the type and data. */
@@ -260,7 +264,7 @@ function cleanPng(b: Uint8Array): Uint8Array {
   for (const c of chunks) {
     // The XMP goes before the picture data, as the PNG specification asks of eXIf too.
     if (xmp && !wroteXmp && (c.type === "IDAT" || c.type === "IEND")) {
-      parts.push(pngChunk("iTXt", concat([bytesOf(XMP_PNG), new Uint8Array(5), xmp])));
+      parts.push(pngChunk("iTXt", concatBytes(bytesOf(XMP_PNG), new Uint8Array(5), xmp)));
       wroteXmp = true;
     }
     const keyword = pngText(c.type, c.data)?.keyword;
@@ -271,7 +275,7 @@ function cleanPng(b: Uint8Array): Uint8Array {
       parts.push(b.subarray(c.at, c.end));
     }
   }
-  return concat(parts);
+  return concatBytes(...parts);
 }
 
 const RIFF_KEPT = new Set(["VP8X", "ICCP", "ANIM", "ANMF", "ALPH", "VP8 ", "VP8L"]);
@@ -280,7 +284,7 @@ function riffChunk(fourcc: string, data: Uint8Array): Uint8Array {
   const head = new Uint8Array(8);
   head.set(bytesOf(fourcc));
   new DataView(head.buffer).setUint32(4, data.length, true);
-  return concat([head, data, new Uint8Array(data.length % 2)]);
+  return concatBytes(head, data, new Uint8Array(data.length % 2));
 }
 
 /** Kept: the picture's chunks (VP8X, ICCP, ANIM, ANMF, ALPH, VP8, VP8L), then a new EXIF and XMP, flagged in VP8X. */
@@ -299,7 +303,7 @@ function cleanWebp(b: Uint8Array): Uint8Array {
   if (tiff) parts.push(riffChunk("EXIF", tiff));
   if (xmp) parts.push(riffChunk("XMP ", xmp));
   if (extended) parts[1]![8] = (parts[1]![8]! & ~0x0c) | (tiff ? 0x08 : 0) | (xmp ? 0x04 : 0);
-  const out = concat(parts);
+  const out = concatBytes(...parts);
   // The RIFF size counts everything after its own eight bytes.
   new DataView(out.buffer).setUint32(4, out.length - 8, true);
   return out;

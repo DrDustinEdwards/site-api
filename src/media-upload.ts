@@ -4,14 +4,14 @@
 // answers. readEmbedded, stripMetadata and the PNG reader are byte work on Web APIs alone, so they run in a Worker; the
 // conversion, the shrink and the placeholder go through the Images binding.
 
-import { sha256Hex, toBase64, toHex } from "@dustinedwards/site-runtime/encoding";
+import { concatBytes, sha256Hex, toBase64, toHex } from "@dustinedwards/site-runtime/encoding";
 import { IMAGE_QUALITY, editImage, type ImagesLike } from "@dustinedwards/site-runtime/image";
 
 import { RefusedError, type MediaUpload } from "./adapter.js";
 import { MediaPlaceholder, type MediaResize, type MediaUploadLimits } from "./contract.js";
 import { ascii, checkUpload } from "./media.js";
 import { toArrayBuffer } from "./media-kit.js";
-import { concat, u32be } from "./media-upload/bytes.js";
+import { u32be } from "./media-upload/bytes.js";
 import { type EmbeddedFields } from "./media-upload/types.js";
 import { readEmbedded } from "./media-upload/fields.js";
 import { duplicateKey, stripMetadata } from "./media-upload/strip.js";
@@ -65,7 +65,7 @@ async function pngColor(b: Uint8Array): Promise<string | null> {
   }
   const row = new Uint8Array(
     await new Response(
-      new Blob([toArrayBuffer(concat(idat))])
+      new Blob([toArrayBuffer(concatBytes(...idat))])
         .stream()
         .pipeThrough(new DecompressionStream("deflate")),
     ).arrayBuffer(),
