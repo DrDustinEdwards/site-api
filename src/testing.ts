@@ -15,7 +15,13 @@ import {
   type Stored,
   type StoredMedia,
 } from "./testing/shared.js";
-export { MEMORY_MEDIA_LIMITS, type MemoryAdapterOptions, type ReceivedMention };
+export {
+  MEMORY_MEDIA_LIMITS,
+  type MemoryAdapterOptions,
+  type ReceivedMention,
+  type Stored,
+  type StoredMedia,
+};
 
 export function memoryAdapter(options: MemoryAdapterOptions = {}): SiteAdapter & {
   store: Map<string, Stored>;
