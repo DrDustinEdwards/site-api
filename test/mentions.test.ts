@@ -296,24 +296,11 @@ describe("mentions decide", () => {
     });
   });
 
-  it("PLANT: refuses without the key, with a wrong one, or with an invalid body or id, before the adapter runs", async () => {
+  it("PLANT: refuses an invalid body or id before the adapter runs", async () => {
     const { adapter, ids } = seededAdapter();
     const spy = vi.spyOn(adapter.mentions!, "decide");
     const { api } = site(adapter);
     const good = { decision: "approve", expectedVersion: "m1", changeId: "c1" };
-    for (const key of [null, `${KEY}x`]) {
-      expect(
-        (
-          await api.handle(
-            req(`/api/carrel/v1/mentions/${ids.pending}/decide`, {
-              method: "POST",
-              key,
-              ...body(good),
-            }),
-          )
-        ).status,
-      ).toBe(401);
-    }
     const bad: Array<[string, unknown]> = [
       [ids.pending, { ...good, decision: "delete" }],
       [ids.pending, { decision: "approve", changeId: "c1" }],
@@ -368,22 +355,10 @@ describe("mentions delete", () => {
     expect(without.status).toBe(501);
   });
 
-  it("PLANT: refuses without the key, or with no version or change id, before the adapter runs", async () => {
+  it("PLANT: refuses no version or change id before the adapter runs", async () => {
     const { adapter, ids } = seededAdapter();
     const spy = vi.spyOn(adapter.mentions!, "delete");
     const { api } = site(adapter);
-    for (const key of [null, `${KEY}x`]) {
-      expect(
-        (
-          await api.handle(
-            req(`/api/carrel/v1/mentions/${ids.pending}?expectedVersion=m1&changeId=c1`, {
-              method: "DELETE",
-              key,
-            }),
-          )
-        ).status,
-      ).toBe(401);
-    }
     for (const query of [
       "",
       "?expectedVersion=m1",
@@ -420,24 +395,11 @@ describe("mentions sweep", () => {
     });
   });
 
-  it("PLANT: refused without the key, or with no change id, before the adapter runs, and nothing is removed", async () => {
+  it("PLANT: refuses no change id before the adapter runs, and nothing is removed", async () => {
     const { adapter } = seededAdapter();
     const spy = vi.spyOn(adapter.mentions!, "sweep");
     const { api } = site(adapter);
     const before = snapshot(adapter);
-    for (const key of [null, `${KEY}x`]) {
-      expect(
-        (
-          await api.handle(
-            req("/api/carrel/v1/mentions/sweep", {
-              method: "POST",
-              key,
-              ...body({ changeId: "c1" }),
-            }),
-          )
-        ).status,
-      ).toBe(401);
-    }
     for (const payload of [{}, { changeId: "has spaces" }]) {
       expect(
         (

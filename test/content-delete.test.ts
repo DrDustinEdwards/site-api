@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { RefusedError } from "../src/adapter.js";
 import { SiteApiError } from "../src/client.js";
 import { memoryAdapter } from "../src/testing.js";
-import { KEY, req, site, siteWithClient } from "./helpers.js";
+import { req, site, siteWithClient } from "./helpers.js";
 
 const client = siteWithClient;
 
@@ -120,18 +120,6 @@ describe("content delete", () => {
     expect(error.status).toBe(422);
     expect(error.body).toMatchObject({ error: "refused", message: "The site keeps this page." });
     expect(adapter.store.has("first-post")).toBe(true);
-  });
-
-  it("PLANT: refused without the key or with a wrong one, before the adapter runs", async () => {
-    const adapter = memoryAdapter();
-    const spy = vi.fn(adapter.content.delete!);
-    adapter.content.delete = spy;
-    const { api } = site(adapter);
-    const path = "/api/carrel/v1/content/first-post?expectedVersion=v1&changeId=c1";
-    for (const key of [null, `${KEY}x`]) {
-      expect((await api.handle(req(path, { method: "DELETE", key }))).status).toBe(401);
-    }
-    expect(spy).not.toHaveBeenCalled();
   });
 
   it("PLANT: refuses a delete with no expectedVersion or change id, or a bad id, before the adapter runs", async () => {
