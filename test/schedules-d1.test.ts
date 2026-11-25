@@ -1,7 +1,12 @@
 // The D1 table a site keeps its scheduled updates in, run on SQLite (what D1 is) through a D1-shaped shim.
 
 import { describe, expect, it } from "vitest";
-import { d1ScheduledUpdates, SCHEDULED_UPDATES_SQL, waitingUpdates } from "../src/schedules.js";
+import {
+  d1ScheduledUpdates,
+  SCHEDULED_UPDATES_SQL,
+  utc,
+  waitingUpdates,
+} from "../src/schedules.js";
 import { d1 } from "./d1.js";
 
 describe("d1ScheduledUpdates", () => {
@@ -43,5 +48,11 @@ describe("d1ScheduledUpdates", () => {
     expect(await store.get("a")).toMatchObject({ source: "A3", changeId: "c3" });
     await store.remove("a").run();
     expect(await store.get("a")).toBeNull();
+  });
+});
+
+describe("utc", () => {
+  it("is exported: the sites compare stored times with it", () => {
+    expect(utc("2030-01-01T09:00:00-06:00")).toBe("2030-01-01T15:00:00.000Z");
   });
 });
