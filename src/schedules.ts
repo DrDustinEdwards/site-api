@@ -43,7 +43,7 @@ interface Row {
 }
 
 /** UTC ISO text, so every stored time compares as text and a time written with an offset matches itself. */
-function utc(time: string | Date): string {
+export function utc(time: string | Date): string {
   return new Date(time).toISOString();
 }
 
