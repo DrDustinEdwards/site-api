@@ -4,7 +4,7 @@
 
 import { readFileSync } from "node:fs";
 import { isDeepStrictEqual } from "node:util";
-import { expect } from "vitest";
+import { expect, it } from "vitest";
 import { z } from "zod";
 import * as contract from "../src/contract.js";
 
@@ -96,4 +96,38 @@ export function widened(
 /** The properties `after` has that `before` lacks. */
 export function added(before: JsonSchema, after: JsonSchema): string[] {
   return Object.keys(after.properties ?? {}).filter((p) => !(p in (before.properties ?? {})));
+}
+
+/** Asserts every route of an earlier contract is still served (the upload's answer is named now), and returns the routes it lacks. */
+export function routesKept(old: Contract): string[] {
+  for (const route of old.routes) {
+    const expected =
+      route.method === "POST" && route.path === "/media"
+        ? { ...route, response: "MediaUploadResult" }
+        : route;
+    expect(contract.ROUTES, JSON.stringify(route)).toContainEqual(expected);
+  }
+  return contract.ROUTES.filter(
+    (r) => !old.routes.some((o) => o.method === r.method && o.path === r.path),
+  ).map((r) => `${r.method} ${r.path}`);
+}
+
+/** One test per schema: those `keep` names are identical to the earlier contract's, those in `extended` gain exactly the listed optional properties. */
+export function schemasKept(
+  old: Contract,
+  keep: string[],
+  extended: Array<[string, string[]]>,
+  widen: Parameters<typeof additiveOnly>[3],
+) {
+  for (const name of keep) {
+    it(`keeps ${name} identical`, () => {
+      expect(now(name)).toEqual(old.schemas[name]);
+    });
+  }
+  for (const [name, props] of extended) {
+    it(`extends ${name} by optional properties only: ${props.join(", ") || "none of its own"}`, () => {
+      additiveOnly(old.schemas[name]!, now(name), name, widen);
+      expect(added(old.schemas[name]!, now(name)).sort()).toEqual(props);
+    });
+  }
 }

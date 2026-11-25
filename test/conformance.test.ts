@@ -24,6 +24,15 @@ function metaEdited(
   };
 }
 
+/** The names of the checks that fail when the site stops declaring one capability. */
+async function failingWithout(capability: string) {
+  const silent = metaEdited(site(), (meta) => {
+    const { [capability]: _gone, ...capabilities } = meta.capabilities;
+    return { ...meta, capabilities };
+  });
+  return failing(await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: silent }));
+}
+
 function seedPng(s: ReturnType<typeof site>) {
   return s.adapter.media!.upload({
     bytes: new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
@@ -327,13 +336,7 @@ describe("conformance", () => {
   });
 
   it("PLANT: fails a site that offers mentions but does not say so in its capabilities", async () => {
-    const s = site();
-    const silent = metaEdited(s, (meta) => {
-      const { mentions: _gone, ...capabilities } = meta.capabilities;
-      return { ...meta, capabilities };
-    });
-    const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: silent });
-    expect(failing(report)).toEqual([
+    expect(await failingWithout("mentions")).toEqual([
       "mentions: advertised in capabilities, or answered 501",
       "mention decide of an unknown id: refused, or not implemented where the site has no mentions",
       "mention delete of an unknown id: refused, or not implemented where the site has no mentions",
@@ -373,13 +376,7 @@ describe("conformance", () => {
   });
 
   it("PLANT: fails a site that offers a delete but does not say so in its capabilities", async () => {
-    const s = site();
-    const silent = metaEdited(s, (meta) => {
-      const { contentDelete: _gone, ...capabilities } = meta.capabilities;
-      return { ...meta, capabilities };
-    });
-    const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: silent });
-    expect(failing(report)).toEqual([
+    expect(await failingWithout("contentDelete")).toEqual([
       "content delete of an unknown id: refused, or not implemented where the site has no delete",
     ]);
   });
@@ -455,13 +452,7 @@ describe("conformance", () => {
   });
 
   it("PLANT: fails a site that offers a trash but does not say so in its capabilities", async () => {
-    const s = site();
-    const silent = metaEdited(s, (meta) => {
-      const { mediaTrash: _gone, ...capabilities } = meta.capabilities;
-      return { ...meta, capabilities };
-    });
-    const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: silent });
-    expect(failing(report)).toEqual([
+    expect(await failingWithout("mediaTrash")).toEqual([
       "media trash of an unknown id: refused, or not implemented where the site lacks it",
       "media restore of an unknown id: refused, or not implemented where the site lacks it",
       "media bulk: an unknown id is that file's own not-found, and the request answers 200",
@@ -483,13 +474,7 @@ describe("conformance", () => {
   });
 
   it("PLANT: fails a site that offers media without declaring its limits", async () => {
-    const s = site();
-    const unlimited = metaEdited(s, (meta) => {
-      const { mediaUpload: _gone, ...capabilities } = meta.capabilities;
-      return { ...meta, capabilities };
-    });
-    const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: unlimited });
-    expect(failing(report)).toEqual(["media: upload limits declared"]);
+    expect(await failingWithout("mediaUpload")).toEqual(["media: upload limits declared"]);
   });
 
   it("PLANT: fails a site that ignores expectedVersion", async () => {

@@ -501,8 +501,8 @@ export interface SiteAdapter {
 }
 
 /**
- * Stage 2 implemented content and preview; v0.2.0 adds media for a site whose adapter has it. The
- * other groups answer 501 until their stage. `store` (v0.17.0): the site gave createSiteApi a store.
+ * What the site's adapter offers, for the capabilities answer. A group the adapter lacks answers 501.
+ * `store`: the site gave createSiteApi a store.
  */
 export function capabilitiesOf(
   adapter: SiteAdapter,

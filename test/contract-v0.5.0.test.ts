@@ -5,7 +5,15 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import * as contract from "../src/contract.js";
-import { additiveOnly, added, changedSince, fixture, now, type JsonSchema } from "./additive.js";
+import {
+  added,
+  changedSince,
+  fixture,
+  now,
+  routesKept,
+  schemasKept,
+  type JsonSchema,
+} from "./additive.js";
 import {
   V0170_ROUTES,
   V0170_SCHEMAS,
@@ -98,17 +106,7 @@ describe("the v0.5.0 contract", () => {
   });
 
   it("keeps every v0.5.0 route exactly (the upload's answer named MediaUploadResult from v0.13.0), and adds only the routes later versions name", () => {
-    for (const route of V050.routes) {
-      const expected =
-        route.method === "POST" && route.path === "/media"
-          ? { ...route, response: "MediaUploadResult" }
-          : route;
-      expect(contract.ROUTES, JSON.stringify(route)).toContainEqual(expected);
-    }
-    const fresh = contract.ROUTES.filter(
-      (r) => !V050.routes.some((old) => old.method === r.method && old.path === r.path),
-    );
-    expect(fresh.map((r) => `${r.method} ${r.path}`)).toEqual([
+    expect(routesKept(V050)).toEqual([
       "PUT /content/:id/tags",
       "GET /content/:id/schedule",
       "DELETE /content/:id/schedule",
@@ -129,20 +127,14 @@ describe("the v0.5.0 contract", () => {
     ]);
   });
 
-  for (const name of Object.keys(V050.schemas).filter(
-    (n) => own(n) && !(n in ADDED) && n !== WIDENED && n !== "ErrorCode",
-  )) {
-    it(`keeps ${name} identical`, () => {
-      expect(now(name)).toEqual(V050.schemas[name]);
-    });
-  }
-
-  for (const [name, props] of Object.entries(ADDED).filter(([n]) => own(n))) {
-    it(`extends ${name} by optional properties only: ${props.join(", ") || "none of its own"}`, () => {
-      additiveOnly(V050.schemas[name]!, now(name), name, V0170_WIDEN);
-      expect(added(V050.schemas[name]!, now(name)).sort()).toEqual(props);
-    });
-  }
+  schemasKept(
+    V050,
+    Object.keys(V050.schemas).filter(
+      (n) => own(n) && !(n in ADDED) && n !== WIDENED && n !== "ErrorCode",
+    ),
+    Object.entries(ADDED).filter(([n]) => own(n)),
+    V0170_WIDEN,
+  );
 
   it("widens the mention decision by reset, and nothing else", () => {
     const before = V050.schemas[WIDENED]!;

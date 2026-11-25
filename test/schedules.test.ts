@@ -8,7 +8,7 @@ import { createSiteApi, indexNowHook, type PublishEvent } from "../src/index.js"
 import { d1SiteApiStore, SITE_API_STORE_SQL } from "../src/store.js";
 import { d1 } from "./d1.js";
 import { memoryAdapter } from "../src/testing.js";
-import { KEY, ORIGIN, allow, clientOf } from "./helpers.js";
+import { KEY, ORIGIN, allow, body, clientOf, req } from "./helpers.js";
 
 const LIVE = "---\ntitle: Live\n---\nThe live words.\n";
 const NEXT = "---\ntitle: Live\n---\nThe updated words.\n";
@@ -374,5 +374,40 @@ describe("v0.27.0 runSchedulesOrThrow", () => {
     });
     const error = await api.runSchedulesOrThrow().catch((e: Error) => e);
     expect(isDatabaseDown(error)).toBe(true);
+  });
+});
+
+describe("page changes (v0.9.0)", () => {
+  it("names the page a publish, a live save, an unpublish and a delete change, never a draft's, and waits on nothing", async () => {
+    const { api, client: c, heard, settle } = mounted();
+
+    const draft = await c.saveDraft("a", {
+      source: "# A\n",
+      expectedVersion: null,
+      changeId: "c1",
+    });
+    const live = await c.publish("a", { expectedVersion: draft.version, changeId: "c2" });
+    const edited = await c.saveDraft("a", {
+      source: "# A, edited\n",
+      expectedVersion: live.version,
+      changeId: "c3",
+    });
+    const down = await c.unpublish("a", { expectedVersion: edited.version, changeId: "c4" });
+    const again = await c.publish("a", { expectedVersion: down.version, changeId: "c5" });
+    await c.delete("a", { expectedVersion: again.version, changeId: "c6" });
+    const waited = await settle();
+
+    expect(heard.map((e) => e.path)).toEqual(Array(5).fill("/blog/a"));
+    // The first save, to a draft never published, has no page to tell anyone of, so nothing waits on it.
+    expect(waited).toHaveLength(5);
+
+    // PLANT: a malformed escape in the id is the route's 400 (ASVS 16.5.4), not a URIError thrown by the handler.
+    const bad = await api.handle(
+      req("/api/carrel/v1/content/%E0%A4%A/publish", {
+        method: "POST",
+        ...body({ expectedVersion: "v1", changeId: "c7" }),
+      }),
+    );
+    expect(bad.status).toBe(400);
   });
 });

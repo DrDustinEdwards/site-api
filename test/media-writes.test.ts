@@ -19,7 +19,15 @@ function setup(options: Parameters<typeof memoryAdapter>[0] = {}) {
       alt: "first",
       changeId: `up-${filename.replace(/[^A-Za-z0-9]/g, "")}`,
     });
-  return { ...s, client, add };
+  // Two uploaded files, both moved to the trash.
+  const addTrashedPair = async () => {
+    const a = await add("a.png");
+    const b = await add("b.png");
+    await client.media.trash(a.id, { expectedVersion: a.version!, changeId: "t1" });
+    await client.media.trash(b.id, { expectedVersion: b.version!, changeId: "t2" });
+    return { a, b };
+  };
+  return { ...s, client, add, addTrashedPair };
 }
 
 async function refused(promise: Promise<unknown>) {
@@ -154,12 +162,9 @@ describe("trash, restore and empty", () => {
   });
 
   it("empties the trash for good and leaves the library alone", async () => {
-    const { client, add, adapter } = setup();
+    const { client, add, addTrashedPair, adapter } = setup();
     const keep = await add("keep.png");
-    const a = await add("a.png");
-    const b = await add("b.png");
-    await client.media.trash(a.id, { expectedVersion: a.version!, changeId: "t1" });
-    await client.media.trash(b.id, { expectedVersion: b.version!, changeId: "t2" });
+    const { a, b } = await addTrashedPair();
     const result = await client.media.emptyTrash({ changeId: "empty1" });
     expect(result.changeId).toBe("empty1");
     expect([...result.deleted].sort()).toEqual([a.id, b.id].sort());
@@ -191,11 +196,8 @@ describe("trash, restore and empty", () => {
   });
 
   it("stops at a delete that breaks, and still says what is already gone", async () => {
-    const { client, add, adapter } = setup();
-    const a = await add("a.png");
-    const b = await add("b.png");
-    await client.media.trash(a.id, { expectedVersion: a.version!, changeId: "t1" });
-    await client.media.trash(b.id, { expectedVersion: b.version!, changeId: "t2" });
+    const { client, addTrashedPair, adapter } = setup();
+    await addTrashedPair();
     const media = adapter.media!;
     const real = media.delete.bind(media);
     let calls = 0;
