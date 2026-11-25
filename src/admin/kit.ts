@@ -3,6 +3,7 @@
 import { plural } from "@drdustinedwards/site-helpers/text";
 import { SiteApiError, type SiteClient } from "../client.js";
 import {
+  MediaTag,
   Version,
   type Backlink,
   type ContentList,
@@ -358,3 +359,32 @@ export const NOT_YOURS: Record<keyof Permissions, string> = {
   deleteMedia: "Deleting a file for good is the Owner's step.",
   decideMentions: "Deciding mentions is not yours to do on this site.",
 };
+
+/** A typed list of tags (commas between them) as a tag set: each in the site's spelling, unique, at most 12. */
+export function parseMediaTags(
+  raw: string | string[],
+): { ok: true; tags: string[] } | { ok: false; message: string } {
+  const tags: string[] = [];
+  for (const part of (Array.isArray(raw) ? raw : [raw]).flatMap((r) => r.split(/[,\n]+/))) {
+    if (part.trim() === "") continue;
+    const tag = part
+      .trim()
+      .toLowerCase()
+      .replace(/[\s_]+/g, "-");
+    if (!MediaTag.safeParse(tag).success) {
+      return {
+        ok: false,
+        message: `"${part.trim()}" cannot be a tag. A tag is lower case words and numbers joined by hyphens, up to 32 characters.`,
+      };
+    }
+    if (!tags.includes(tag)) tags.push(tag);
+  }
+  if (tags.length > 12) return { ok: false, message: "A file carries at most 12 tags." };
+  return { ok: true, tags };
+}
+
+export function megabytes(bytes: number): string {
+  return bytes >= 1024 * 1024
+    ? `${(bytes / (1024 * 1024)).toFixed(1).replace(/\.0$/, "")} MB`
+    : `${Math.ceil(bytes / 1024)} KB`;
+}
