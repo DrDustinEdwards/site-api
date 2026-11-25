@@ -33,12 +33,18 @@ export async function readUpload(
   const declared = Number(request.headers.get("content-length") ?? "0");
   if (declared > limits.maxBytes) return { ok: false, refusal: tooLarge };
   if (!request.body)
-    return { ok: false, refusal: { code: "invalid", message: "The upload is empty." } };
+    return {
+      ok: false,
+      refusal: { code: "invalid", message: "The upload is empty." },
+    };
 
   const bytes = await readCappedBytes(request, limits.maxBytes);
   if (bytes === null) return { ok: false, refusal: tooLarge };
   if (bytes.byteLength === 0)
-    return { ok: false, refusal: { code: "invalid", message: "The upload is empty." } };
+    return {
+      ok: false,
+      refusal: { code: "invalid", message: "The upload is empty." },
+    };
   return { ok: true, bytes };
 }
 
@@ -60,6 +66,16 @@ const SIGNATURES: Record<string, (b: Uint8Array) => boolean> = {
   "image/heif": (b) =>
     ascii(b, 4, 4) === "ftyp" && /he(i[cxms]|v[cx])|m[is]f1/.test(ascii(b, 8, 24)),
   "application/pdf": (b) => ascii(b, 0, 5) === "%PDF-",
+  // An MP3 opens with an ID3 tag or an MPEG audio frame (sync bits, then a layer other than the reserved 00).
+  "audio/mpeg": (b) =>
+    ascii(b, 0, 3) === "ID3" || (b[0] === 0xff && (b[1]! & 0xe0) === 0xe0 && (b[1]! & 0x06) !== 0),
+  // Raw AAC is an ADTS stream (sync bits, then layer 00), sometimes behind an ID3 tag.
+  "audio/aac": (b) => ascii(b, 0, 3) === "ID3" || (b[0] === 0xff && (b[1]! & 0xf6) === 0xf0),
+  "audio/mp4": (b) => ascii(b, 4, 4) === "ftyp",
+  "audio/wav": (b) => ascii(b, 0, 4) === "RIFF" && ascii(b, 8, 4) === "WAVE",
+  // Ogg pages carry Vorbis, Opus and FLAC alike.
+  "audio/ogg": (b) => ascii(b, 0, 4) === "OggS",
+  "audio/flac": (b) => ascii(b, 0, 4) === "fLaC" || ascii(b, 0, 3) === "ID3",
   // Text, so no magic number: no NUL byte in the head, and an <svg element near the start.
   "image/svg+xml": (b) => {
     const head = new TextDecoder().decode(b.subarray(0, 4096));
@@ -92,7 +108,10 @@ const ACTIVE: Record<string, (b: Uint8Array) => boolean> = {
   "application/pdf": (b) => /\/(JS|JavaScript)\b/.test(new TextDecoder().decode(b)),
 };
 
-/** Refuses a type the site does not accept, and bytes that are not what the type claims. */
+/**
+ * Refuses a type the site does not accept, and bytes that are not what the type claims. Every signature reads the first
+ * 12 bytes at most, except the ISO media brands (32) and SVG, so a site that streams a large file checks its head alone.
+ */
 export function checkUpload(
   contentType: string,
   bytes: Uint8Array | null,
@@ -266,7 +285,10 @@ export async function fetchImport(
     found = await guardedFetch(
       doFetch,
       raw,
-      { signal: AbortSignal.timeout(IMPORT_TIMEOUT_MS), headers: { accept: "*/*" } },
+      {
+        signal: AbortSignal.timeout(IMPORT_TIMEOUT_MS),
+        headers: { accept: "*/*" },
+      },
       { maxRedirects: IMPORT_REDIRECTS },
     );
   } catch (error) {

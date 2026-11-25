@@ -4,6 +4,7 @@
 
 import { describe, expect, it, vi } from "vitest";
 import { SiteApiError } from "../src/client.js";
+import { checkUpload } from "../src/index.js";
 import { memoryAdapter } from "../src/testing.js";
 import { KEY, ORIGIN, req, site, siteWithClient } from "./helpers.js";
 
@@ -84,7 +85,10 @@ describe("media round trip", () => {
       nextCursor: "1",
     });
 
-    expect(await c.media.get(item.id)).toMatchObject({ id: item.id, usedBy: [] });
+    expect(await c.media.get(item.id)).toMatchObject({
+      id: item.id,
+      usedBy: [],
+    });
     expect(await c.media.delete(item.id, "c3")).toEqual({
       id: item.id,
       deleted: true,
@@ -119,7 +123,14 @@ describe("PLANT: deleting a file a post uses", () => {
     });
 
     expect(await c.media.get(item.id)).toMatchObject({
-      usedBy: [{ type: "post", id: "river-post", title: "The river", detail: "line 6" }],
+      usedBy: [
+        {
+          type: "post",
+          id: "river-post",
+          title: "The river",
+          detail: "line 6",
+        },
+      ],
     });
     const refused = await c.media.delete(item.id, "c3").catch((e: unknown) => e);
     expect(refused).toBeInstanceOf(SiteApiError);
@@ -166,7 +177,9 @@ describe("PLANT: deleting a file a post uses", () => {
 
 describe("PLANT: an upload the site does not accept", () => {
   it("refuses a file over the site's limit, and never hands it to the site", async () => {
-    const { adapter, calls } = spied({ media: { maxBytes: 100, types: ["image/png"] } });
+    const { adapter, calls } = spied({
+      media: { maxBytes: 100, types: ["image/png"] },
+    });
     const { api } = site(adapter);
     const big = new Uint8Array(101);
     big.set(PNG.subarray(0, 8));
@@ -178,7 +191,9 @@ describe("PLANT: an upload the site does not accept", () => {
   });
 
   it("refuses a file that declares a length over the limit, before reading it", async () => {
-    const { adapter, calls } = spied({ media: { maxBytes: 100, types: ["image/png"] } });
+    const { adapter, calls } = spied({
+      media: { maxBytes: 100, types: ["image/png"] },
+    });
     const { api } = site(adapter);
     let pulled = 0;
     const body = new ReadableStream<Uint8Array>(
@@ -212,7 +227,9 @@ describe("PLANT: an upload the site does not accept", () => {
   });
 
   it("refuses a type the site did not declare, and never hands it to the site", async () => {
-    const { adapter, calls } = spied({ media: { maxBytes: 1000, types: ["image/png"] } });
+    const { adapter, calls } = spied({
+      media: { maxBytes: 1000, types: ["image/png"] },
+    });
     const { api } = site(adapter);
     for (const [type, bytes] of [
       ["text/html", new TextEncoder().encode("<script>alert(1)</script>")],
@@ -243,6 +260,29 @@ describe("PLANT: an upload the site does not accept", () => {
       expect((await response.json()).message).toContain("do not match");
     }
     expect(calls).not.toHaveBeenCalled();
+
+    // Audio a site streams is checked by its head alone, through the same table.
+    const head = (...parts: (string | number[])[]) =>
+      Uint8Array.from(
+        parts.flatMap((p) => (typeof p === "string" ? Array.from(new TextEncoder().encode(p)) : p)),
+      );
+    const audio = [
+      ["audio/mpeg", head("ID3", [4, 0, 0, 0, 0, 0, 0])],
+      ["audio/mpeg", head([0xff, 0xfb, 0x90, 0x64])],
+      ["audio/aac", head([0xff, 0xf1, 0x50, 0x80])],
+      ["audio/mp4", head([0, 0, 0, 0x20], "ftypM4A ")],
+      ["audio/wav", head("RIFF", [0, 0, 0, 0], "WAVE")],
+      ["audio/ogg", head("OggS", [0, 2])],
+      ["audio/flac", head("fLaC", [0, 0, 0, 0x22])],
+    ] as const;
+    const limits = { maxBytes: 1024, types: audio.map(([type]) => type) };
+    const page = new TextEncoder().encode("<html><script>alert(1)</script>");
+    for (const [type, bytes] of audio) {
+      expect(checkUpload(type, bytes, limits), type).toBeNull();
+      expect(checkUpload(type, page, limits)?.message, type).toContain("do not match");
+      expect(checkUpload(type, PNG, limits)?.message, type).toContain("do not match");
+    }
+    expect(checkUpload("audio/mpeg", head([0xff, 0xf1, 0x50, 0x80]), limits)).not.toBeNull();
   });
 
   it("refuses an SVG that would run script on the site, and keeps a plain one", async () => {
@@ -316,7 +356,10 @@ describe("PLANT: a site answering outside the media contract", () => {
   it("is reported as a site failure, and its answer is never passed on", async () => {
     const adapter = memoryAdapter();
     adapter.media!.list = async () =>
-      ({ items: [{ id: "../x", url: "javascript:alert(1)" }], nextCursor: null }) as never;
+      ({
+        items: [{ id: "../x", url: "javascript:alert(1)" }],
+        nextCursor: null,
+      }) as never;
     const { api, logs } = site(adapter);
     const response = await api.handle(req("/api/carrel/v1/media"));
     expect(response.status).toBe(500);
