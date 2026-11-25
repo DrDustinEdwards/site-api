@@ -4,7 +4,7 @@ import { type ContentSource, type Permissions } from "../src/admin.js";
 import { localClient, type SiteClient } from "../src/client.js";
 import { memoryAdapter, type MemoryAdapterOptions } from "../src/testing.js";
 
-export const OWNER: Permissions = {
+const OWNER: Permissions = {
   edit: true,
   publish: true,
   deleteContent: true,

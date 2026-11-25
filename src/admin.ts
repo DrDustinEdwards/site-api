@@ -12,24 +12,9 @@
 // the site's own stays behind the contract; the kit adds only "who may" and "what the inverse is".
 
 export type { Permissions, RowNote, ContentSource, IntentResult } from "./admin/kit.js";
-export {
-  liveSaveWarning,
-  loadPosts,
-  loadScheduledUpdate,
-  readPostQuery,
-  type PostQuery,
-  type PostsData,
-  type ScheduledUpdateView,
-} from "./admin/posts.js";
-export { runPostsIntent } from "./admin/posts-intents.js";
-export {
-  loadMedia,
-  loadMediaChanges,
-  readMediaQuery,
-  type MediaChangesData,
-  type MediaData,
-  type MediaQuery,
-} from "./admin/media.js";
-export { runMediaIntent } from "./admin/media-intents.js";
+export * from "./admin/posts.js";
+export * from "./admin/posts-intents.js";
+export * from "./admin/media.js";
+export * from "./admin/media-intents.js";
 export * from "./admin/mentions.js";
 export * from "./admin/summary.js";

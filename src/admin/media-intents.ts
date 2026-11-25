@@ -24,7 +24,7 @@ import {
   Conflict,
   eachItem,
 } from "./kit.js";
-import { mediaOffers } from "./media.js";
+import { mediaOffers } from "./media-offers.js";
 import { decorativeOf, importOne, suggestFor, uploadOne } from "./media-import.js";
 import {
   emptyTrash,

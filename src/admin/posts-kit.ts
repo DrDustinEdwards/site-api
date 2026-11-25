@@ -44,7 +44,7 @@ export function cleanPostTag(raw: string): string | null {
 
 export const sameTag = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 
-export const COPY_TRIES = 50;
+const COPY_TRIES = 50;
 
 export const DONE: Record<PostIntent, string> = {
   "tag-add": "Tagged",
@@ -65,7 +65,7 @@ export const LIVE_POST =
   "Changing a live post is a publish, which is not yours to do here, so this one was left as it was.";
 
 /** The inverse of a posts intent, or null when it has none here. */
-export function undoIntent(
+function undoIntent(
   intent: PostIntent,
   capabilities: Capabilities | null,
   can: Permissions,
