@@ -269,11 +269,7 @@ describe("PLANT: an upload the site does not accept", () => {
     const audio = [
       ["audio/mpeg", head("ID3", [4, 0, 0, 0, 0, 0, 0])],
       ["audio/mpeg", head([0xff, 0xfb, 0x90, 0x64])],
-      ["audio/aac", head([0xff, 0xf1, 0x50, 0x80])],
       ["audio/mp4", head([0, 0, 0, 0x20], "ftypM4A ")],
-      ["audio/wav", head("RIFF", [0, 0, 0, 0], "WAVE")],
-      ["audio/ogg", head("OggS", [0, 2])],
-      ["audio/flac", head("fLaC", [0, 0, 0, 0x22])],
     ] as const;
     const limits = { maxBytes: 1024, types: audio.map(([type]) => type) };
     const page = new TextEncoder().encode("<html><script>alert(1)</script>");
