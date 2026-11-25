@@ -89,11 +89,10 @@ export function readMethods(core: LibraryCore, options: MediaLibraryOptions) {
       if (!record) return null;
       const uses = await usesOf([id]);
       const twins = record.sha256
-        ? (await store.all())
-            .filter((r) => r.sha256 === record.sha256 && r.key !== id)
-            .sort((a, b) => b.uploadedAt.localeCompare(a.uploadedAt) || a.key.localeCompare(b.key))
-            .slice(0, 50)
-            .map((r) => ({ id: r.key, filename: r.filename }))
+        ? (await store.twins(record.sha256, id, 50)).map((r) => ({
+            id: r.key,
+            filename: r.filename,
+          }))
         : [];
       return {
         ...itemOf(record, options.usage ? uses : undefined),

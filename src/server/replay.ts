@@ -53,12 +53,13 @@ export async function claim(
   whole.set(bytes, search.byteLength);
   const requestHash = await sha256Hex(whole);
   const now = Date.now();
+  const at = new Date(now).toISOString();
   let held;
   try {
     held = await store.claimWrite(changeId, {
       route,
       requestHash,
-      at: new Date(now).toISOString(),
+      at,
       staleBefore: new Date(now - STALE_CLAIM_MS).toISOString(),
     });
   } catch (error) {
@@ -101,11 +102,11 @@ export async function claim(
       const kept = response.ok || response.status === 409 || response.status === 422;
       try {
         if (kept)
-          await store.finishWrite(changeId, {
+          await store.finishWrite(changeId, at, {
             status: response.status,
             response: await response.clone().text(),
           });
-        else await store.releaseWrite(changeId);
+        else await store.releaseWrite(changeId, at);
       } catch (error) {
         log({ siteApi: "replay-store-failed", changeId, error: String(error) });
       }

@@ -25,10 +25,14 @@ export interface SiteApiStore {
     changeId: string,
     claim: { route: string; requestHash: string; at: string; staleBefore: string },
   ): Promise<StoredWrite | null>;
-  /** Keeps the answer the write gave, for every retry of it. */
-  finishWrite(changeId: string, answer: { status: number; response: string }): Promise<void>;
-  /** Drops a claim whose write failed, so a retry runs it again. */
-  releaseWrite(changeId: string): Promise<void>;
+  /** Keeps the answer for every retry, only while the row is still the claim made at `claimedAt`. */
+  finishWrite(
+    changeId: string,
+    claimedAt: string,
+    answer: { status: number; response: string },
+  ): Promise<void>;
+  /** Drops a claim whose write failed, so a retry runs it again; only the one made at `claimedAt`. */
+  releaseWrite(changeId: string, claimedAt: string): Promise<void>;
   /** Drops every write claimed before `before`. */
   pruneWrites(before: string): Promise<void>;
   /** Keeps a failed hook's event for a retry at `nextAt`, replacing the row with the same id. */
@@ -303,18 +307,18 @@ export function d1SiteApiStore(db: D1Like): D1SiteApiStore {
 
   return {
     claimWrite,
-    async finishWrite(changeId, answer) {
+    async finishWrite(changeId, claimedAt, answer) {
       await db
         .prepare(
-          "UPDATE site_api_writes SET state = 'done', status = ?, response = ? WHERE change_id = ?",
+          "UPDATE site_api_writes SET state = 'done', status = ?, response = ? WHERE change_id = ? AND state = 'running' AND at = ?",
         )
-        .bind(answer.status, answer.response, changeId)
+        .bind(answer.status, answer.response, changeId, claimedAt)
         .run();
     },
-    async releaseWrite(changeId) {
+    async releaseWrite(changeId, claimedAt) {
       await db
-        .prepare("DELETE FROM site_api_writes WHERE change_id = ? AND state = 'running'")
-        .bind(changeId)
+        .prepare("DELETE FROM site_api_writes WHERE change_id = ? AND state = 'running' AND at = ?")
+        .bind(changeId, claimedAt)
         .run();
     },
     async pruneWrites(before) {

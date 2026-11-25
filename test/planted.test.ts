@@ -249,7 +249,13 @@ describe("rate limit", () => {
     await api.handle(req("/api/carrel/v1/meta", { headers: from }));
     await api.handle(req("/api/carrel/v1/meta", { headers: from, key: "w".repeat(40) }));
     await api.handle(req("/api/carrel/v1/meta", { headers: from, key: null }));
-    expect(keys).toEqual(["site-key", "ip:2a06:98c0:3600::103", "ip:2a06:98c0:3600::103"]);
+    await api.handle(
+      req("/api/carrel/v1/meta", {
+        headers: { "cf-connecting-ip": "2a06:98c0:3600:0:1::7" },
+        key: null,
+      }),
+    );
+    expect(keys).toEqual(["site-key", ...Array(3).fill("ip:2a06-98c0-3600-0/64")]);
   });
 });
 

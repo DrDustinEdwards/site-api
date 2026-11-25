@@ -79,4 +79,23 @@ describe("siteApiStep", () => {
       "carrel PUT /api/carrel/v1/content/preview-links-a/draft",
     ]);
   });
+
+  it("never purges for a rendered preview or a model's suggestions, which store nothing", async () => {
+    const purged: string[] = [];
+    const run = stepRunner(
+      createSiteApi({ adapter: memoryAdapter(), key: KEY, limiter: allow }),
+      purged,
+    );
+    const preview = await run(
+      req("/api/carrel/v1/preview", {
+        method: "POST",
+        ...body({ source: "---\ntitle: A\n---\n\nText\n" }),
+      }),
+    );
+    await run(
+      req("/api/carrel/v1/media/suggestions?url=https://example.com/a.png", { method: "POST" }),
+    );
+    expect(preview?.status).toBe(200);
+    expect(purged).toEqual([]);
+  });
 });

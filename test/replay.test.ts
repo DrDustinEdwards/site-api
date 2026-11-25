@@ -107,4 +107,22 @@ describe("replay", () => {
     await api.runSchedules({ now: new Date(Date.now() + 8 * 24 * 60 * 60 * 1000) });
     expect((await send("/content/a/draft", { method: "PUT", ...save })).status).toBe(409);
   });
+
+  it("lets only the claim that holds the row finish or release it, so a slow first write cannot overwrite the retry", async () => {
+    const { store } = replaying();
+    const claim = (at: string, staleBefore: string) =>
+      store.claimWrite("c1", { route: "PUT /content/a/draft", requestHash: "h", at, staleBefore });
+    const first = "2026-01-01T00:00:00.000Z";
+    const retry = "2026-01-01T00:05:00.000Z";
+    expect(await claim(first, "2025-12-31T00:00:00.000Z")).toBeNull();
+    expect(await claim(retry, "2026-01-01T00:03:00.000Z")).toBeNull();
+    await store.finishWrite("c1", first, { status: 200, response: "first" });
+    await store.releaseWrite("c1", first);
+    expect(await claim(retry, "2025-12-31T00:00:00.000Z")).toMatchObject({ state: "running" });
+    await store.finishWrite("c1", retry, { status: 200, response: "retry" });
+    expect(await claim(retry, "2025-12-31T00:00:00.000Z")).toMatchObject({
+      state: "done",
+      response: "retry",
+    });
+  });
 });
