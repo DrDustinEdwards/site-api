@@ -3,7 +3,6 @@
 import { plural } from "@drdustinedwards/site-helpers/text";
 import { SiteApiError, type SiteClient } from "../client.js";
 import {
-  MediaTag,
   Version,
   type Backlink,
   type ContentList,
@@ -256,6 +255,48 @@ export function result(
   return { ok: outcomes.length > 0 && outcomes.every((o) => o.ok), message, outcomes, ...extra };
 }
 
+/** The result of a run whose first outcome says it; `conflict` and `undo` go on only when set. */
+export function firstResult(
+  outcomes: Outcome[],
+  conflict?: IntentResult["conflict"],
+  undo?: IntentResult["undo"],
+): IntentResult {
+  return result(outcomes, outcomes[0]!.message, {
+    ...(conflict ? { conflict } : {}),
+    ...(undo ? { undo } : {}),
+  });
+}
+
+/** Adds a failed bulk outcome to `all`, and returns the run's conflict: the first stale version, else the one it had. */
+export function addFailure(
+  all: Outcome[],
+  outcome: {
+    id: string;
+    error?: string;
+    message: string;
+    currentVersion?: string | null;
+    usedBy?: MediaUse[];
+  },
+  conflict: IntentResult["conflict"] | undefined,
+): IntentResult["conflict"] | undefined {
+  all.push({
+    id: outcome.id,
+    ok: false,
+    message: failedFileMessage(outcome),
+    ...(outcome.usedBy && outcome.usedBy.length > 0 ? { usedBy: outcome.usedBy } : {}),
+  });
+  return outcome.error === "version-conflict" && !conflict
+    ? { id: outcome.id, currentVersion: outcome.currentVersion ?? null }
+    : conflict;
+}
+
+/** A failed bulk outcome's message: a stale version reads as a file that changed. */
+function failedFileMessage(outcome: { error?: string; message: string }): string {
+  return outcome.error === "version-conflict"
+    ? "This file changed on the site since the page loaded. It was left as it was."
+    : outcome.message;
+}
+
 /** A 404 from the site, as null; anything else is the caller's to handle. */
 export async function orNull<T>(read: Promise<T>): Promise<T | null> {
   try {
@@ -359,50 +400,3 @@ export const NOT_YOURS: Record<keyof Permissions, string> = {
   deleteMedia: "Deleting a file for good is the Owner's step.",
   decideMentions: "Deciding mentions is not yours to do on this site.",
 };
-
-/** A typed list of tags (commas between them) as a tag set: each in the site's spelling, unique, at most 12. */
-export function parseMediaTags(
-  raw: string | string[],
-): { ok: true; tags: string[] } | { ok: false; message: string } {
-  const tags: string[] = [];
-  for (const part of (Array.isArray(raw) ? raw : [raw]).flatMap((r) => r.split(/[,\n]+/))) {
-    if (part.trim() === "") continue;
-    const tag = part
-      .trim()
-      .toLowerCase()
-      .replace(/[\s_]+/g, "-");
-    if (!MediaTag.safeParse(tag).success) {
-      return {
-        ok: false,
-        message: `"${part.trim()}" cannot be a tag. A tag is lower case words and numbers joined by hyphens, up to 32 characters.`,
-      };
-    }
-    if (!tags.includes(tag)) tags.push(tag);
-  }
-  if (tags.length > 12) return { ok: false, message: "A file carries at most 12 tags." };
-  return { ok: true, tags };
-}
-
-export function megabytes(bytes: number): string {
-  return bytes >= 1024 * 1024
-    ? `${(bytes / (1024 * 1024)).toFixed(1).replace(/\.0$/, "")} MB`
-    : `${Math.ceil(bytes / 1024)} KB`;
-}
-
-/** A file the site refused in a bulk answer: a stale version says so in the kit's words, else the site's own. */
-export function failedFile(outcome: {
-  id: string;
-  error: string;
-  message: string;
-  usedBy?: MediaUse[];
-}): Outcome {
-  return {
-    id: outcome.id,
-    ok: false,
-    message:
-      outcome.error === "version-conflict"
-        ? "This file changed on the site since the page loaded. It was left as it was."
-        : outcome.message,
-    ...(outcome.usedBy && outcome.usedBy.length > 0 ? { usedBy: outcome.usedBy } : {}),
-  };
-}

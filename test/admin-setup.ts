@@ -1,5 +1,3 @@
-// The kit tests share this setup: two permission sets, an in-memory site, and helpers to save a post and upload a file.
-
 import { type ContentSource, type Permissions } from "../src/admin.js";
 import { localClient, type SiteClient } from "../src/client.js";
 import { memoryAdapter, type MemoryAdapterOptions } from "../src/testing.js";

@@ -13,8 +13,6 @@
 
 export type { Permissions, RowNote, ContentSource, IntentResult } from "./admin/kit.js";
 export * from "./admin/posts.js";
-export * from "./admin/posts-intents.js";
 export * from "./admin/media.js";
-export * from "./admin/media-intents.js";
 export * from "./admin/mentions.js";
 export * from "./admin/summary.js";

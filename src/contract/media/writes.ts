@@ -1,9 +1,6 @@
-// The media group's writes: uploads, edits, bulk, trash, transforms, history, resize and suggestions.
-
 import { z } from "zod";
-import { Actor, ActorName, ChangeId, Timestamp, Version } from "./base.js";
+import { Actor, ActorName, ChangeId, Timestamp, Version } from "../base.js";
 import {
-  MEDIA_EMBEDDED_FIELDS,
   MediaCaption,
   MediaCredit,
   MediaFocus,
@@ -12,52 +9,9 @@ import {
   MediaLicense,
   MediaSourceUrl,
   MediaTags,
+  MediaUploadQuery,
   MediaUse,
-} from "./media.js";
-
-/**
- * An upload is the file's own bytes as the body, its type as Content-Type, and these as the query:
- * no base64, so a file costs its own size and no more.
- */
-export const MediaUploadQuery = z.object({
-  // A file name may not hold control characters, on purpose.
-  filename: z
-    .string()
-    .min(1)
-    .max(200)
-    // oxlint-disable-next-line no-control-regex
-    .regex(/^[^/\\\u0000-\u001f]+$/, "A file name, with no path"),
-  /**
-   * What the picture shows (optional; with none the picture is stored with no alt and an alt is written afterward, and the site refuses it where it is placed on a page). Sent, it is checked: what the picture shows, at most MAX_ALT_CHARS, never its file name, a bare
-   * "image" or an address.
-   */
-  alt: z.string().max(2000).optional(),
-  /** "yes" says the picture is decorative, so it is stored with alt "" on purpose. Not with an alt. */
-  decorative: z.enum(["yes"]).optional(),
-  changeId: ChangeId,
-  /** "no" keeps this file at its own size on a site that shrinks large pictures at upload (capabilities.mediaResize). */
-  resize: z.enum(["no"]).optional(),
-  actorName: ActorName.optional(),
-});
-
-/**
- * The answer to an upload or an import (a MediaItem plus the extras): the file, and what the site did with it. The
- * extra properties are each absent where they do not apply.
- */
-export const MediaUploadResult = MediaItem.extend({
-  /** The id of the file already holding these exact bytes (capabilities.mediaDuplicates): the answer is that file, and nothing new was stored. */
-  duplicateOf: MediaId.optional(),
-  /** The fields the site filled from the file's own embedded metadata (capabilities.mediaEmbedded). */
-  embedded: z.array(z.enum(MEDIA_EMBEDDED_FIELDS)).optional(),
-  /** The picture's size before the site shrank it (capabilities.mediaResize). */
-  resizedFrom: z
-    .object({
-      width: z.number().int().min(1),
-      height: z.number().int().min(1),
-      bytes: z.number().int().min(0),
-    })
-    .optional(),
-});
+} from "../media.js";
 
 export const MediaDeleteQuery = z.object({
   changeId: ChangeId,
@@ -142,7 +96,7 @@ export const MediaReplaceResult = MediaItem.extend({
   /**
    * True when the site's cache may still serve sizes made from the old bytes, so they need purging (or wait out their
    * cache lifetime). False when none can be stale: the site's image route keys its cache by the file's etag
-   * (site-runtime ./image) or the site purged them in the write. Either way, a browser that already
+   * (site-runtime ./image 0.27.0 and later) or the site purged them in the write. Either way, a browser that already
    * holds the old file under a long cache lifetime keeps it until that runs out.
    */
   sizesNeedPurge: z.boolean(),
@@ -248,8 +202,8 @@ export const MediaImportInput = z.object({
 });
 
 /**
- * The file's credit, license, source and license end, as one write: each is the whole value after it. The
- * copyright notice and the two license addresses are each kept as it was where the write leaves it out.
+ * The file's credit, license, source and license end, as one write: each is the whole value after it. The copyright notice
+ * and the two license addresses are each kept as it was where the write leaves it out.
  */
 export const MediaCreditInput = z.object({
   credit: MediaCredit,
@@ -386,7 +340,6 @@ export const MediaFileSuggestQuery = z.object({
 /** The suggestion an upload form shows in its alt field for the person to keep, change or replace: never stored as it is. */
 export const MediaFileSuggestions = MediaSuggestions.omit({ id: true });
 
-export type MediaUploadQuery = z.infer<typeof MediaUploadQuery>;
 export type MediaDeleteResult = z.infer<typeof MediaDeleteResult>;
 export type MediaAltInput = z.infer<typeof MediaAltInput>;
 export type MediaTagsInput = z.infer<typeof MediaTagsInput>;
@@ -402,7 +355,6 @@ export type MediaBulkOutcome = z.infer<typeof MediaBulkOutcome>;
 export type MediaBulkResult = z.infer<typeof MediaBulkResult>;
 export type MediaTrashEmptyInput = z.infer<typeof MediaTrashEmptyInput>;
 export type MediaTrashEmptyResult = z.infer<typeof MediaTrashEmptyResult>;
-export type MediaUploadResult = z.infer<typeof MediaUploadResult>;
 export type MediaResize = z.infer<typeof MediaResize>;
 export type MediaImportInput = z.infer<typeof MediaImportInput>;
 export type MediaCreditInput = z.infer<typeof MediaCreditInput>;

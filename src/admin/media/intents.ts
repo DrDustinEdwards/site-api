@@ -1,8 +1,6 @@
-// Runs one posted media intent: the checks every intent shares, the bulk path, and the outcome words.
-
 import { plural } from "@drdustinedwards/site-helpers/text";
 
-import { MediaId, type MediaDetail } from "../contract.js";
+import { MediaId, MediaTag, type MediaDetail } from "../../contract.js";
 import {
   type Permissions,
   type ContentSource,
@@ -18,15 +16,21 @@ import {
   recordDone,
   targetsOf,
   checkCount,
-  parseMediaTags,
   summarize,
   result,
   Conflict,
   eachItem,
-  failedFile,
-} from "./kit.js";
-import { mediaOffers } from "./media-offers.js";
-import { decorativeOf, importOne, suggestFor, uploadOne } from "./media-import.js";
+  addFailure,
+} from "../kit.js";
+import { mediaOffers } from "./data.js";
+import {
+  MEDIA_DONE,
+  MEDIA_DONE_ONE,
+  decorativeOf,
+  importOne,
+  suggestFor,
+  uploadOne,
+} from "./uploads.js";
 import {
   emptyTrash,
   focusField,
@@ -39,7 +43,7 @@ import {
   setFileTags,
   setFocus,
   transformFile,
-} from "./media-files.js";
+} from "./edits.js";
 
 const MEDIA_INTENTS = [
   "upload",
@@ -61,7 +65,39 @@ const MEDIA_INTENTS = [
   "resize",
   "suggest",
 ] as const;
-type MediaIntent = (typeof MEDIA_INTENTS)[number];
+export type MediaIntent = (typeof MEDIA_INTENTS)[number];
+
+/** A typed list of tags (commas between them) as a tag set: each in the site's spelling, unique, at most 12. */
+export function parseMediaTags(
+  raw: string | string[],
+): { ok: true; tags: string[] } | { ok: false; message: string } {
+  const tags: string[] = [];
+  for (const part of (Array.isArray(raw) ? raw : [raw]).flatMap((r) => r.split(/[,\n]+/))) {
+    if (part.trim() === "") continue;
+    const tag = part
+      .trim()
+      .toLowerCase()
+      .replace(/[\s_]+/g, "-");
+    if (!MediaTag.safeParse(tag).success) {
+      return {
+        ok: false,
+        message: `"${part.trim()}" cannot be a tag. A tag is lower case words and numbers joined by hyphens, up to 32 characters.`,
+      };
+    }
+    if (!tags.includes(tag)) tags.push(tag);
+  }
+  if (tags.length > 12) return { ok: false, message: "A file carries at most 12 tags." };
+  return { ok: true, tags };
+}
+
+export function megabytes(bytes: number): string {
+  return bytes >= 1024 * 1024
+    ? `${(bytes / (1024 * 1024)).toFixed(1).replace(/\.0$/, "")} MB`
+    : `${Math.ceil(bytes / 1024)} KB`;
+}
+
+/** The most rounds one empty-trash intent sends; each round deletes up to the site's limit. */
+export const EMPTY_ROUNDS = 20;
 
 /**
  * Runs one posted intent on one site's media library. Bulk intents go to the site as one bulk
@@ -284,9 +320,7 @@ export async function runMediaIntent(
             undoTags.add(`${outcome.id}\u0000${g}`);
       }
     } else {
-      if (outcome.error === "version-conflict" && !conflict)
-        conflict = { id: outcome.id, currentVersion: outcome.currentVersion ?? null };
-      all.push(failedFile(outcome));
+      conflict = addFailure(all, outcome, conflict);
     }
   }
   const extra: Partial<IntentResult> = conflict ? { conflict } : {};
@@ -313,50 +347,3 @@ export async function runMediaIntent(
   }
   return result(all, summarize(all, MEDIA_DONE[intent], "file") + tail, extra);
 }
-
-const MEDIA_DONE: Record<MediaIntent, string> = {
-  upload: "Uploaded",
-  alt: "Saved alt text on",
-  tags: "Saved tags on",
-  "tag-add": "Tagged",
-  "tag-remove": "Untagged",
-  trash: "Moved to the trash",
-  restore: "Restored",
-  delete: "Deleted",
-  "empty-trash": "Deleted",
-  focus: "Saved the focal point on",
-  caption: "Saved the caption on",
-  replace: "Replaced",
-  import: "Imported",
-  credit: "Saved the credit on",
-  transform: "Turned",
-  revert: "Reverted",
-  resize: "Shrank",
-  suggest: "Suggested alt text for",
-};
-
-const MEDIA_DONE_ONE: Record<MediaIntent, string> = {
-  upload: "Uploaded.",
-  alt: "Alt text saved.",
-  tags: "Tags saved.",
-  "tag-add": "Tags added.",
-  "tag-remove": "Tags removed.",
-  trash: "Moved to the trash.",
-  restore: "Restored to the library.",
-  delete: "Deleted from the site.",
-  "empty-trash": "Deleted from the site.",
-  focus: "Focal point saved.",
-  caption: "Caption saved.",
-  replace: "Replaced.",
-  import: "Imported.",
-  credit: "Credit saved.",
-  transform: "Turned.",
-  revert: "Reverted.",
-  resize: "Shrunk.",
-  suggest: "Suggested.",
-};
-
-/**
- * Uploads one file. The kit checks the site's own limits first, so a file the site would refuse is
- * not sent at all; the site API checks them again, and the bytes, before the site's code.
- */

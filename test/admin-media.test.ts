@@ -1,4 +1,4 @@
-// The content kit's media: view data and intents, against the in-memory reference site.
+// The content kit's media half, against the in-memory reference site.
 
 import { describe, expect, it } from "vitest";
 import {
@@ -10,7 +10,7 @@ import {
 } from "../src/admin.js";
 import { localClient } from "../src/client.js";
 import { png, withDns } from "./helpers.js";
-import { EDITOR, PNG, post, setup, upload } from "./admin-helpers.js";
+import { EDITOR, PNG, setup, post, upload } from "./admin-setup.js";
 
 describe("media", () => {
   it("loads the library and the trash with absolute addresses, the inspector's uses, and the site's offers", async () => {
@@ -24,6 +24,7 @@ describe("media", () => {
       [a.id, `https://memory.example/media/${a.id}`],
     ]);
     expect(library.detail?.usedBy).toEqual([expect.objectContaining({ id: "uses" })]);
+    expect(library.offers).toMatchObject({ media: true, alt: true, tags: true, trash: true });
     expect((await loadMedia(source, { view: "trash" })).rows.map((r) => r.id)).toEqual([b.id]);
     expect(await loadMedia(setup({ media: false }).source)).toMatchObject({
       rows: [],
@@ -31,7 +32,7 @@ describe("media", () => {
     });
   });
 
-  it("sends a lens and a sort the site answers, drops a lens it does not, and sorts the page itself where the site did not", async () => {
+  it("sends a lens and a sort the site answers (v0.6.0), drops a lens it does not, and sorts the page itself where the site did not", async () => {
     const { adapter, client, source } = setup();
     const small = await upload(client, "b.png");
     await client.media.setAlt(small.id, {
@@ -39,7 +40,7 @@ describe("media", () => {
       expectedVersion: small.version!,
       changeId: "s1",
     });
-    // A file with no alt and no one's choice: the lens names it, and leaves the decorative b.png out.
+    // A file stored before v0.19.0, with no alt and no one's choice: the lens names it, and leaves the decorative b.png out.
     await adapter.media!.upload({
       bytes: PNG,
       contentType: "image/png",
@@ -56,6 +57,13 @@ describe("media", () => {
     const lensed = await loadMedia(source, { lens: "no-alt", sort: "name" });
     expect(lensed.rows.map((r) => r.filename)).toEqual(["a.png"]);
     expect(lensed.page).toEqual({ nextCursor: null, total: 1, changeCursor: expect.any(String) });
+    expect(lensed.offers.lenses).toEqual([
+      "unattached",
+      "no-alt",
+      "large",
+      "license-expired",
+      "oversized",
+    ]);
     expect((await loadMedia(source, { sort: "name" })).rows.map((r) => r.filename)).toEqual([
       "a.png",
       "b.png",
@@ -267,7 +275,7 @@ describe("media", () => {
     expect(records).toEqual([expect.objectContaining({ kind: "media-upload" })]);
   });
 
-  it("replaces a file as the Owner only, and sets and clears its focal point", async () => {
+  it("replaces a file as the Owner only, and sets and clears its focal point (v0.10.0)", async () => {
     const { adapter, client, source, records } = setup();
     const a = await upload(client, "a.png");
     const focused = await runMediaIntent(source, {
@@ -316,9 +324,14 @@ describe("media", () => {
     });
     expect(adapter.mediaStore.get(a.id)!.item).toMatchObject({ focus: null, filename: "a2.png" });
     expect(records.map((r) => r.kind)).toEqual(["media-focus", "media-focus", "media-replace"]);
+    // A site whose replace must keep the picture's size says so (v0.11.0), and the library's offers carry it.
+    expect((await loadMedia(source)).offers.replaceKeepsSize).toBe(false);
+    expect(
+      (await loadMedia(setup({ mediaReplaceKeepsSize: true }).source)).offers.replaceKeepsSize,
+    ).toBe(true);
   });
 
-  it("imports from the web, says when an upload was already in the library, and saves credit and license", async () => {
+  it("imports from the web, says when an upload was already in the library, and saves credit and license (v0.13.0)", async () => {
     const remote = (async () =>
       new Response(png(30, 20) as Uint8Array<ArrayBuffer>, {
         headers: { "content-type": "image/png" },
@@ -326,6 +339,16 @@ describe("media", () => {
     const { adapter, source, records } = setup({
       mediaDuplicates: true,
       mediaImportFetch: withDns(remote),
+    });
+    expect((await loadMedia(source)).offers).toMatchObject({
+      import: true,
+      credit: true,
+      duplicates: true,
+      transform: true,
+      history: true,
+      live: true,
+      resize: { maxEdge: 2048 },
+      resizePass: true,
     });
     const file = () =>
       new File([png(10, 10) as Uint8Array<ArrayBuffer>], "a.png", { type: "image/png" });
@@ -379,7 +402,7 @@ describe("media", () => {
     });
   });
 
-  it("turns a picture as the Owner, and Undo puts its old bytes back; shrinks stored pictures after asking", async () => {
+  it("turns a picture as the Owner, and Undo puts its old bytes back; shrinks stored pictures after asking (v0.13.0)", async () => {
     const { adapter, source } = setup();
     const form = {
       intent: "upload",
@@ -427,7 +450,7 @@ describe("media", () => {
     ).toMatchObject({ ok: true, outcomes: [{ ok: true, message: "Shrunk to 2048x1536." }] });
   });
 
-  it("shows the model's suggestions only when asked, less what the file has, and polls for what others changed", async () => {
+  it("shows the model's suggestions only when asked, less what the file has, and polls for what others changed (v0.13.0)", async () => {
     const { adapter, client, source } = setup();
     const a = await client.media.upload({
       bytes: png(10, 10),
@@ -448,6 +471,7 @@ describe("media", () => {
     ).toEqual({ inspect: a.id, suggest: true, orientation: "square", kind: "image" });
     const plain = await loadMedia(source, { inspect: a.id });
     expect(plain.detail?.suggestions).toBeUndefined();
+    // Rows and the inspected file say which way the picture lies, by the package's orientationOf (v0.13.1).
     expect([plain.rows[0]?.orientation, plain.detail?.orientation]).toEqual(["square", "square"]);
     expect((await loadMedia(source, { inspect: a.id, suggest: true })).detail?.suggestions).toEqual(
       { tags: ["dusk"], alt: "A picture of river dusk.", model: "memory-suggester" },

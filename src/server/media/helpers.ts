@@ -1,7 +1,5 @@
-// The pieces the media routes share: reading and storing bytes, the version checks, and the bulk helpers.
-
 import { mediaType, jsonResponse } from "@dustinedwards/site-runtime/http";
-import type { MediaSuggestion } from "../media-kit.js";
+import type { MediaSuggestion } from "../../media-kit.js";
 
 import {
   MediaInUseError,
@@ -9,10 +7,9 @@ import {
   RefusedError,
   VersionConflictError,
   type MediaAdapter,
-} from "../adapter.js";
+} from "../../adapter.js";
 import {
   MediaBulkInput,
-  MediaId,
   MediaList,
   MediaTag,
   MediaTagsInput,
@@ -21,11 +18,11 @@ import {
   type MediaBulkOutcome,
   type MediaDetail as MediaDetailType,
   type MediaResizeOutcome,
-} from "../contract.js";
-import { altRefusal, checkUpload, fetchImport, readUpload } from "../media.js";
-import { addressRefusal, OutboundRefusal } from "../outbound.js";
-import { duplicateKey } from "../media-upload.js";
-import type { SiteApiStore } from "../store.js";
+} from "../../contract.js";
+import { altRefusal, checkUpload, fetchImport, readUpload } from "../../media.js";
+import { addressRefusal, OutboundRefusal } from "../../outbound.js";
+import { duplicateKey } from "../../media-upload.js";
+import type { SiteApiStore } from "../../store.js";
 import {
   BASE_HEADERS,
   BadRequest,
@@ -33,17 +30,17 @@ import {
   checked,
   describeFailure,
   notImplemented,
-  pathParam,
   type Log,
-} from "./http.js";
+} from "../http.js";
 
-/** How many trashed files one page of the empty-trash gather asks the site for. */
-export const TRASH_PAGE = 200;
+export interface MediaRouteContext extends MediaHelpers {
+  media: MediaAdapter;
+  log: Log;
+  siteStore?: Pick<SiteApiStore, "uploadedMedia" | "putUploadedMedia">;
+  mediaId: (m: RegExpMatchArray) => string;
+}
 
-export const mediaId = (m: RegExpMatchArray) => pathParam(m[1], MediaId, "media id");
-
-/** The byte-handling a media route set closes over: the adapter, the log and the site's own upload store. */
-export function mediaBytes(
+export function mediaHelpers(
   media: MediaAdapter,
   log: Log,
   siteStore?: Pick<SiteApiStore, "uploadedMedia" | "putUploadedMedia">,
@@ -204,9 +201,10 @@ export function mediaBytes(
       BASE_HEADERS,
     );
   }
-
-  return { uploaded, imported, held, store, changesSince };
+  return { uploaded, imported, held, store, sentBefore, changesSince };
 }
+
+type MediaHelpers = ReturnType<typeof mediaHelpers>;
 
 /** Refuses, as 400 before anything is read or stored, an alt the contract does not take (altRefusal); an upload or import may carry none. */
 export function checkAlt(

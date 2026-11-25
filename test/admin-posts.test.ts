@@ -1,6 +1,6 @@
-// The content kit's posts: view data and intents, against the in-memory reference site.
+// The content kit's posts half, and localClient, against the in-memory reference site.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   liveSaveWarning,
   loadPosts,
@@ -9,7 +9,46 @@ import {
   runPostsIntent,
   type RowNote,
 } from "../src/admin.js";
-import { EDITOR, post, setup } from "./admin-helpers.js";
+import { createSiteClient, localClient, SiteApiError } from "../src/client.js";
+import { memoryAdapter } from "../src/testing.js";
+import { KEY, ORIGIN, site } from "./helpers.js";
+import { EDITOR, setup, post } from "./admin-setup.js";
+
+describe("localClient", () => {
+  it("answers as the HTTP client does, through the same handler: meta, reads, and refusals as SiteApiError", async () => {
+    const adapter = memoryAdapter();
+    const local = localClient(adapter);
+    const s = site(adapter);
+    const remote = createSiteClient({ baseUrl: ORIGIN, key: KEY, fetch: s.fetch });
+    await post(local, "one", "title: One");
+    expect(await local.meta()).toEqual(await remote.meta());
+    expect(await local.get("one")).toEqual(await remote.get("one"));
+    const missing = await local.get("nope").catch((e: unknown) => e);
+    expect(missing).toBeInstanceOf(SiteApiError);
+    expect(missing).toMatchObject({ status: 404, body: { error: "not-found" } });
+    const stale = await local
+      .saveDraft("one", { source: "x", expectedVersion: "v0", changeId: "c-x" })
+      .catch((e: unknown) => e);
+    expect(stale).toMatchObject({
+      status: 409,
+      body: { error: "version-conflict", currentVersion: (await local.get("one")).version },
+    });
+  });
+
+  it("runs the package's upload checks: bytes that are not their type are refused before the adapter", async () => {
+    const { adapter, client } = setup();
+    const error = await client.media
+      .upload({
+        bytes: new TextEncoder().encode("not a png"),
+        contentType: "image/png",
+        filename: "a.png",
+        changeId: "u1",
+      })
+      .catch((e: unknown) => e);
+    expect(error).toMatchObject({ status: 400, body: { error: "invalid" } });
+    expect(adapter.mediaStore.size).toBe(0);
+  });
+});
 
 describe("posts", () => {
   it("loads a page as rows: editor and live links, kinds, notes, and the site's delete offer", async () => {
@@ -44,7 +83,7 @@ describe("posts", () => {
     expect((await loadPosts(setup({ contentDelete: false }).source)).offers.delete).toBe(false);
   });
 
-  it("asks the site to sort and count, and counts each status tab for the same search", async () => {
+  it("asks the site to sort and count (v0.6.0), and counts each status tab for the same search", async () => {
     const { client, source } = setup({ contentExtras: false });
     await post(client, "a", "title: Zed", true);
     await post(client, "b", "title: Ant");
@@ -115,12 +154,25 @@ describe("posts", () => {
     expect((await client.get("b")).source).toContain("tags: [x, keep]");
   });
 
-  it("writes tags through the frontmatter on a site with no tags route", async () => {
+  it("writes tags through the site's tags route where it offers one (v0.6.0), and through the frontmatter where it does not", async () => {
+    const routed = setup();
+    await post(routed.client, "a", "title: A\ntags: []");
+    const viaRoute = vi.spyOn(routed.adapter.content, "setTags");
+    const viaSave = vi.spyOn(routed.adapter.content, "saveDraft");
+    expect(
+      (await runPostsIntent(routed.source, { intent: "tag-add", ids: ["a"], tag: "t" })).ok,
+    ).toBe(true);
+    expect(viaRoute).toHaveBeenCalledTimes(1);
+    expect(viaSave).not.toHaveBeenCalled();
+    expect((await routed.client.get("a")).tags).toEqual(["t"]);
+
     const plain = setup({ contentTags: false });
     await post(plain.client, "a", "title: A\ntags: []");
+    const saved = vi.spyOn(plain.adapter.content, "saveDraft");
     expect(
       (await runPostsIntent(plain.source, { intent: "tag-add", ids: ["a"], tag: "t" })).ok,
     ).toBe(true);
+    expect(saved).toHaveBeenCalledTimes(1);
     expect((await plain.client.get("a")).source).toContain("tags: [t]");
   });
 
@@ -359,7 +411,7 @@ describe("posts", () => {
     });
   });
 
-  it("warns with the posts that link to one before a trash or a delete, and names the acting person on the write ", async () => {
+  it("warns with the posts that link to one before a trash or a delete, and names the acting person on the write (v0.22.0)", async () => {
     const { client, source } = setup({}, { actor: { name: "Ada Example" } });
     await post(client, "a", "title: A");
     await client.saveDraft("b", {
@@ -383,7 +435,7 @@ describe("posts", () => {
     });
   });
 
-  it("trashes and restores with Undo, deletes for good only from the Trash, lists and counts the Trash, and renames with Undo", async () => {
+  it("trashes and restores with Undo, deletes for good only from the Trash, lists and counts the Trash, and renames with Undo (v0.17.0)", async () => {
     const { adapter, client, source } = setup();
     await post(client, "a", "title: A", true);
     await post(client, "b", "title: B");

@@ -1,10 +1,8 @@
-// The media intents that bring a file in: upload, import, and the model's alt text for a new file.
-
 import { mediaType } from "@dustinedwards/site-runtime/http";
 
-import { SiteApiError } from "../client.js";
-import { altRefusal } from "../media.js";
-import { type MediaUploadLimits } from "../contract.js";
+import { SiteApiError } from "../../client.js";
+import { altRefusal } from "../../media.js";
+import { type MediaUploadLimits } from "../../contract.js";
 import {
   type ContentSource,
   type IntentInput,
@@ -15,9 +13,55 @@ import {
   changeId,
   recordDone,
   result,
-  megabytes,
-} from "./kit.js";
+} from "../kit.js";
+import { type MediaIntent, megabytes } from "./intents.js";
 
+export const MEDIA_DONE: Record<MediaIntent, string> = {
+  upload: "Uploaded",
+  alt: "Saved alt text on",
+  tags: "Saved tags on",
+  "tag-add": "Tagged",
+  "tag-remove": "Untagged",
+  trash: "Moved to the trash",
+  restore: "Restored",
+  delete: "Deleted",
+  "empty-trash": "Deleted",
+  focus: "Saved the focal point on",
+  caption: "Saved the caption on",
+  replace: "Replaced",
+  import: "Imported",
+  credit: "Saved the credit on",
+  transform: "Turned",
+  revert: "Reverted",
+  resize: "Shrank",
+  suggest: "Suggested alt text for",
+};
+
+export const MEDIA_DONE_ONE: Record<MediaIntent, string> = {
+  upload: "Uploaded.",
+  alt: "Alt text saved.",
+  tags: "Tags saved.",
+  "tag-add": "Tags added.",
+  "tag-remove": "Tags removed.",
+  trash: "Moved to the trash.",
+  restore: "Restored to the library.",
+  delete: "Deleted from the site.",
+  "empty-trash": "Deleted from the site.",
+  focus: "Focal point saved.",
+  caption: "Caption saved.",
+  replace: "Replaced.",
+  import: "Imported.",
+  credit: "Credit saved.",
+  transform: "Turned.",
+  revert: "Reverted.",
+  resize: "Shrunk.",
+  suggest: "Suggested.",
+};
+
+/**
+ * Uploads one file. The kit checks the site's own limits first, so a file the site would refuse is
+ * not sent at all; the site API checks them again, and the bytes, before the site's code.
+ */
 export async function uploadOne(
   source: ContentSource,
   input: IntentInput,

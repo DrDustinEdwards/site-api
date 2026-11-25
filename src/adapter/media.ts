@@ -1,5 +1,3 @@
-// What a site implements for its media library: the upload, the replace and the adapter methods.
-
 import type { MediaSuggestion } from "../media-kit.js";
 import type {
   MediaDetail,
@@ -20,13 +18,13 @@ export interface MediaUpload {
   /** One of the site's declared types, without parameters. */
   contentType: string;
   filename: string;
-  /** What the picture shows: "" only when `decorative` or, now, when none was sent yet; any alt is already checked by altRefusal. */
+  /** What the picture shows: "" only when `decorative` or when none was sent yet; any alt is already checked by altRefusal. */
   alt: string;
   /** True when the person said the picture is decorative, so its alt is "" on purpose. A site that keeps it answers `decorative`. */
   decorative?: boolean;
   changeId: string;
   /**
-   * The upload's duplicates key, lower case hex: duplicateKey's, the SHA-256 of the bytes without
+   * The upload's duplicates key, lower case hex: duplicateKey's SHA-256 of the bytes without
    * their private metadata, which is the stored bytes' hash unless the site converts or shrinks the picture (findByHash,
    * the duplicates lens, twins). The package always sends it; optional only so a site's own code can call upload without it.
    */

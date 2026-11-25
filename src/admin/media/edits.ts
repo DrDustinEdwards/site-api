@@ -1,17 +1,15 @@
-// The media intents that change one file already in the library, and emptying the trash.
-
 import { mediaType } from "@dustinedwards/site-runtime/http";
 import { plural } from "@drdustinedwards/site-helpers/text";
 import { focusOf } from "@dustinedwards/site-runtime/image";
 
-import { altRefusal } from "../media.js";
+import { altRefusal } from "../../media.js";
 import {
   MAX_RESIZE_PASS,
   MediaSourceUrl,
   MediaTransformOp,
   type MediaTransformOp as TransformOp,
   type MediaUploadLimits,
-} from "../contract.js";
+} from "../../contract.js";
 import {
   type ContentSource,
   type IntentInput,
@@ -27,25 +25,11 @@ import {
   result,
   Conflict,
   eachItem,
-  failedFile,
-  megabytes,
-  parseMediaTags,
-} from "./kit.js";
-
-/** The result of an intent on one file: its outcome's words, any conflict, any Undo. */
-function single(
-  outcomes: Outcome[],
-  conflict: IntentResult["conflict"],
-  undo?: IntentResult["undo"],
-): IntentResult {
-  return result(outcomes, outcomes[0]!.message, {
-    ...(conflict ? { conflict } : {}),
-    ...(undo ? { undo } : {}),
-  });
-}
-
-/** The most rounds one empty-trash intent sends; each round deletes up to the site's limit. */
-const EMPTY_ROUNDS = 20;
+  addFailure,
+  firstResult,
+} from "../kit.js";
+import { EMPTY_ROUNDS, megabytes, parseMediaTags } from "./intents.js";
+import { MEDIA_DONE } from "./uploads.js";
 
 /** Saves a file's credit, license, source address and license end, each the whole value after it. */
 export async function setCredit(
@@ -76,7 +60,7 @@ export async function setCredit(
       message: "Credit saved." + (await recordDone(source, "media-credit", id, change)),
     };
   });
-  return single(outcomes, conflict);
+  return firstResult(outcomes, conflict);
 }
 
 const INVERSE: Record<TransformOp, TransformOp> = {
@@ -138,7 +122,7 @@ export async function transformFile(
       message: "Turned. Every page that uses it shows the new picture." + stale + note,
     };
   });
-  return single(outcomes, conflict, undo);
+  return firstResult(outcomes, conflict, undo);
 }
 
 /** Puts a file's earlier bytes back, `to` a revision from the inspector's history. Undo puts back the bytes it had. */
@@ -172,7 +156,7 @@ export async function revertFile(
         (await recordDone(source, "media-revert", id, change)),
     };
   });
-  return single(outcomes, conflict, undo);
+  return firstResult(outcomes, conflict, undo);
 }
 
 /**
@@ -185,7 +169,7 @@ export async function resizeFiles(
   files: Array<{ id: string; version: string | null }>,
   early: Outcome[],
 ): Promise<IntentResult> {
-  if (files.length === 0) return result(early, summarize(early, "Shrank", "file"));
+  if (files.length === 0) return result(early, summarize(early, MEDIA_DONE.resize, "file"));
   const ids = files.map((f) => f.id);
   const ask = askFirst(input, {
     intent: "resize",
@@ -219,13 +203,11 @@ export async function resizeFiles(
             : "Already within the size. Not changed.",
         });
       } else {
-        if (outcome.error === "version-conflict" && !conflict)
-          conflict = { id: outcome.id, currentVersion: outcome.currentVersion ?? null };
-        all.push(failedFile(outcome));
+        conflict = addFailure(all, outcome, conflict);
       }
     }
   }
-  return result(all, summarize(all, "Shrank", "file"), conflict ? { conflict } : {});
+  return result(all, summarize(all, MEDIA_DONE.resize, "file"), conflict ? { conflict } : {});
 }
 
 export async function setAlt(
@@ -251,7 +233,7 @@ export async function setAlt(
       message: "Alt text saved." + (await recordDone(source, "media-alt", id, change)),
     };
   });
-  return single(outcomes, conflict);
+  return firstResult(outcomes, conflict);
 }
 
 /**
@@ -294,7 +276,7 @@ export async function setFocus(
         (await recordDone(source, "media-focus", id, change)),
     };
   });
-  return single(outcomes, conflict);
+  return firstResult(outcomes, conflict);
 }
 
 export async function setCaption(
@@ -316,7 +298,7 @@ export async function setCaption(
       message: "Caption saved." + (await recordDone(source, "media-caption", id, change)),
     };
   });
-  return single(outcomes, conflict);
+  return firstResult(outcomes, conflict);
 }
 
 /**
@@ -364,7 +346,7 @@ export async function replaceFile(
         (await recordDone(source, "media-replace", id, change)),
     };
   });
-  return single(outcomes, conflict);
+  return firstResult(outcomes, conflict);
 }
 
 /** Sets a file's whole tag set. Undo sets back the set it held, at the version this write made. */
@@ -396,7 +378,7 @@ export async function setFileTags(
       message: "Tags saved." + (await recordDone(source, "media-tags", id, change)),
     };
   });
-  return single(outcomes, conflict, undo);
+  return firstResult(outcomes, conflict, undo);
 }
 
 /**

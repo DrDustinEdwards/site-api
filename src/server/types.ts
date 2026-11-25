@@ -1,7 +1,5 @@
-// The configuration a site hands createSiteApi, and the handle it gets back.
-
-import { type DueSchedule, type SiteAdapter } from "../adapter.js";
-import { type PublishHook } from "../hooks.js";
+import type { DueSchedule, SiteAdapter } from "../adapter.js";
+import type { PublishHook } from "../hooks.js";
 import type { SiteApiStore } from "../store.js";
 
 /** The shape of Cloudflare's `ratelimit` binding, so a site passes its binding straight in. */
@@ -81,7 +79,7 @@ export interface SiteApi {
    * and the schedule is listed again next pass. Returns the run when none failed.
    */
   runSchedulesOrThrow(options?: { now?: Date; limit?: number }): Promise<ScheduleRun>;
-  /** True for a GET (or a HEAD) under PREVIEW_LINK_PATH, outside the prefix. Mount `servePreviewLink` where this holds. */
+  /** True for a GET or HEAD under PREVIEW_LINK_PATH, outside the prefix. Mount `servePreviewLink` where this holds. */
   matchesPreviewLink(request: Request): boolean;
   /**
    * Serves a shareable preview link with no key: the item's current source through the site's preview, never

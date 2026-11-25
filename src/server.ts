@@ -7,21 +7,16 @@ import { jsonResponse } from "@dustinedwards/site-runtime/http";
 import { safeEqual } from "@dustinedwards/site-runtime/compare";
 import { isDatabaseDown } from "@dustinedwards/site-runtime/log";
 
-import { hasContentTrash, type DueSchedule } from "./adapter.js";
+import type { DueSchedule } from "./adapter.js";
 import { PREFIX } from "./contract.js";
-import { Timestamp } from "./contract/base.js";
-import type { ContentSummary } from "./contract.js";
-import { hears, runHooks, type PublishEvent, type PublishHook } from "./hooks.js";
+import type { ContentStatus } from "./contract.js";
 import {
-  ACTION,
-  HOOK_BACKOFF_MINUTES,
-  MINUTE,
-  PAGE_WRITE,
-  bearer,
-  keepTombstones,
-  pageEvent,
-  type Page,
-} from "./server/events.js";
+  hears,
+  runHooks,
+  type PublishAction,
+  type PublishEvent,
+  type PublishHook,
+} from "./hooks.js";
 import { contentRoutes } from "./server/content.js";
 import { HookRunList, HookRunsQuery } from "./contract.js";
 import {
@@ -43,9 +38,17 @@ import {
   previewLinkRoutes,
   servePreviewLink,
 } from "./server/preview-links.js";
+import { emptyTrash, HOOK_BACKOFF_MINUTES, MINUTE, retryHooks } from "./server/maintenance.js";
 import { pruneStore } from "./server/prune.js";
 import { claim, REPLAYED } from "./server/replay.js";
 import { siteApiLog } from "./log.js";
+import {
+  SCHEDULE_BATCH_LIMIT,
+  type ScheduleRun,
+  type SiteApi,
+  type SiteApiConfig,
+  type WaitUntil,
+} from "./server/types.js";
 
 export type {
   D1SiteApiStore,
@@ -55,23 +58,20 @@ export type {
   StoredWrite,
 } from "./store.js";
 export { tombstoneResponse, gonePath, tombstoned } from "./store.js";
+export { HOOK_BACKOFF_MINUTES } from "./server/maintenance.js";
 export { PREVIEW_LINK_PATH } from "./server/preview-links.js";
 
-import {
-  SCHEDULE_BATCH_LIMIT,
-  TRASH_DAYS,
-  type ScheduleRun,
-  type SiteApi,
-  type SiteApiConfig,
-  type WaitUntil,
-} from "./server/config.js";
-
-export * from "./server/config.js";
-export { HOOK_BACKOFF_MINUTES } from "./server/events.js";
+export type {
+  RateLimiter,
+  SiteApiSecrets,
+  SiteApiConfig,
+  ScheduleRun,
+  WaitUntil,
+  SiteApi,
+} from "./server/types.js";
+export { TRASH_DAYS, SCHEDULE_BATCH_LIMIT } from "./server/types.js";
 
 export const MIN_KEY_LENGTH = 32;
-
-const DAY = 24 * 60 * 60 * 1000;
 
 /** True for a request the site API or a preview link answers (or refuses): the only ones that need it built. */
 export function isSiteApiRequest(url: URL): boolean {
@@ -80,6 +80,28 @@ export function isSiteApiRequest(url: URL): boolean {
 
 export function insidePrefix(pathname: string): boolean {
   return pathname === PREFIX || pathname.startsWith(`${PREFIX}/`);
+}
+
+// The content writes the publish hooks hear, and the action each is, by method and route.
+const PAGE_WRITE =
+  /^\/content\/([^/]+)(?:\/(draft|publish|unpublish|tags|trash|restore|rename|schedule))?$/;
+const ACTION: Record<string, PublishAction> = {
+  "PUT draft": "update",
+  "PUT tags": "update",
+  "POST publish": "publish",
+  "POST unpublish": "unpublish",
+  "DELETE ": "delete",
+  "POST trash": "trash",
+  "POST restore": "restore",
+  "POST rename": "rename",
+  "POST schedule": "schedule",
+  "DELETE schedule": "unschedule",
+};
+
+function bearer(request: Request): string | null {
+  const header = request.headers.get("authorization");
+  const match = header?.match(/^Bearer[ ]+(\S+)\s*$/i);
+  return match ? match[1]! : null;
 }
 
 export function createSiteApi(config: SiteApiConfig): SiteApi {
@@ -134,10 +156,72 @@ export function createSiteApi(config: SiteApiConfig): SiteApi {
     `^/(${[...(media ? [] : ["media"]), ...(mentions ? [] : ["mentions"]), ...(insight ? [] : ["insight"]), ...(store ? [] : ["preview-links"]), ...(hookRuns.length ? [] : ["hooks"]), "inbox", "publications"].join("|")})(/|$)`,
   );
 
+  type Page = { path: string | null; status: ContentStatus | null };
+
   // The item's public path and status, read before a write and after it. A draft that was never published has no page.
   async function pageOf(id: string): Promise<Page> {
     const doc = await adapter.content.get(id).catch(() => null);
     return { path: doc?.path ?? null, status: doc?.status ?? null };
+  }
+
+  // The event for one content write, from the page before it and after it. A draft that was never published has no page,
+  // so its writes tell no one, except a schedule or an unschedule, which a hook naming them hears with no path.
+  function pageEvent(
+    id: string,
+    action: PublishAction,
+    before: Page,
+    after: Page | null,
+    written: { changeId?: string },
+    request: Request,
+  ): PublishEvent | null {
+    const path = after?.path ?? before.path;
+    if (!path && action !== "schedule" && action !== "unschedule") return null;
+    const moved =
+      action === "rename" && before.path && path && before.path !== path ? before.path : null;
+    return {
+      action,
+      id,
+      path,
+      url: path ? new URL(path, adapter.site.origin).href : null,
+      trigger: "request",
+      changeId: written.changeId ?? null,
+      request,
+      ...(before.status ? { previousStatus: before.status } : {}),
+      ...(after?.status ? { status: after.status } : {}),
+      ...(moved
+        ? { previousPath: moved, previousUrl: new URL(moved, adapter.site.origin).href }
+        : {}),
+    };
+  }
+
+  /**
+   * The tombstones. A delete or a trash of a live item leaves its path answering 410; a publish there, or a
+   * rename onto it, takes the tombstone away. The trash emptying itself keeps it. A store that cannot keep one is logged,
+   * and the write stands.
+   */
+  async function keepTombstones(
+    action: PublishAction,
+    before: Page,
+    after: Page | null,
+  ): Promise<void> {
+    if (!store?.markGone || !store.clearGone) return;
+    try {
+      const at = new Date().toISOString();
+      if (
+        (action === "delete" || action === "trash") &&
+        before.status === "published" &&
+        before.path
+      )
+        await store.markGone(before.path, at);
+      if (
+        (action === "publish" || action === "rename") &&
+        after?.status === "published" &&
+        after.path
+      )
+        await store.clearGone(after.path);
+    } catch (error) {
+      log({ siteApi: "tombstone-failed", action, error: String(error) });
+    }
   }
 
   // A hook that fails is kept for the cron to try again, where the site has a store.
@@ -171,91 +255,6 @@ export function createSiteApi(config: SiteApiConfig): SiteApi {
       },
     );
 
-  // Each kept failure is run again when due, on its own hook only, until it works or has been tried after every backoff.
-  async function retryHooks(now: Date, limit: number): Promise<number> {
-    if (!store) return 0;
-    let retried = 0;
-    try {
-      for (const retry of await store.dueHookRetries(now.toISOString(), limit)) {
-        retried++;
-        const hook = hooks.find((h) => h.name === retry.hook);
-        let error: string | null = hook ? null : "the site no longer has this hook";
-        if (hook) {
-          try {
-            if ((await hook.run(JSON.parse(retry.event) as PublishEvent)) === false)
-              error = "the hook reported a failure";
-          } catch (thrown) {
-            error = thrown instanceof Error ? thrown.message : String(thrown);
-          }
-        }
-        const wait = HOOK_BACKOFF_MINUTES[retry.attempts];
-        if (error === null || wait === undefined || !hook) {
-          if (error !== null)
-            log({ siteApi: "hook-gave-up", hook: retry.hook, attempts: retry.attempts, error });
-          await store.dropHookRetry(retry.id);
-        } else {
-          await store.putHookRetry({
-            ...retry,
-            attempts: retry.attempts + 1,
-            nextAt: new Date(now.getTime() + wait * MINUTE).toISOString(),
-            lastError: error,
-          });
-        }
-      }
-    } catch (error) {
-      log({ siteApi: "hook-retry-failed", error: String(error) });
-    }
-    return retried;
-  }
-
-  // The content trash's own end: items trashed more than TRASH_DAYS ago go for good, through the adapter's
-  // delete with the version listed, so one changed since is refused and left. Each on its own, like a schedule.
-  async function emptyTrash(now: Date, limit: number): Promise<number> {
-    const { content } = adapter;
-    if (!hasContentTrash(adapter)) return 0;
-    const before = now.getTime() - TRASH_DAYS * DAY;
-    let emptied = 0;
-    try {
-      // Gathered before any delete: a cursor into a list that is shrinking would skip items.
-      const expired: ContentSummary[] = [];
-      let cursor: string | undefined;
-      do {
-        const page = await content.list({
-          trashed: true,
-          limit: 200,
-          ...(cursor ? { cursor } : {}),
-        });
-        for (const item of page.items) {
-          // Only a contract timestamp past 30 days deletes: Date.parse reads "1 Oct" as 2001, so it is never asked alone.
-          if (Timestamp.safeParse(item.trashedAt).success && Date.parse(item.trashedAt!) <= before)
-            expired.push(item);
-        }
-        cursor = page.nextCursor ?? undefined;
-      } while (cursor);
-      for (const item of expired) {
-        if (emptied >= limit) return emptied;
-        if (!item.version) {
-          log({ siteApi: "trash-empty-skipped", id: item.id, reason: "the list gives no version" });
-          continue;
-        }
-        const changeId = `trash-expired-${item.id}`.replace(/[^A-Za-z0-9_-]/g, "-").slice(0, 128);
-        try {
-          await content.delete!(item.id, { expectedVersion: item.version, changeId });
-          emptied++;
-        } catch (error) {
-          log({
-            siteApi: "trash-empty-failed",
-            id: item.id,
-            error: error instanceof Error ? error.message : String(error),
-          });
-        }
-      }
-    } catch (error) {
-      log({ siteApi: "trash-empty-failed", error: String(error) });
-    }
-    return emptied;
-  }
-
   // What each run's failed schedules threw, so runSchedulesOrThrow can tell a database that was down from a real fault.
   const failures = new WeakMap<ScheduleRun, unknown[]>();
 
@@ -272,8 +271,8 @@ export function createSiteApi(config: SiteApiConfig): SiteApi {
     const now = options.now ?? new Date();
     if (store) await pruneStore(store, now, log);
     const limit = options.limit ?? SCHEDULE_BATCH_LIMIT;
-    run.emptied = await emptyTrash(now, limit);
-    run.retried = await retryHooks(now, limit);
+    run.emptied = await emptyTrash({ adapter, log }, now, limit);
+    run.retried = await retryHooks({ store, hooks, log }, now, limit);
     const { schedules } = adapter;
     if (!schedules) return run;
     let due: DueSchedule[];
@@ -296,7 +295,7 @@ export function createSiteApi(config: SiteApiConfig): SiteApi {
         run.applied.push({ ...item, version: written.version });
         const page = await pageOf(item.id);
         if (item.kind === "publish")
-          await keepTombstones(store, log, "publish", { path: null, status: "scheduled" }, page);
+          await keepTombstones("publish", { path: null, status: "scheduled" }, page);
         if (page.path && page.status === "published") {
           const url = new URL(page.path, adapter.site.origin).href;
           const previousStatus = item.kind === "publish" ? "scheduled" : "published";
@@ -425,8 +424,8 @@ export function createSiteApi(config: SiteApiConfig): SiteApi {
         const now = written.id ?? id;
         const after = action === "delete" ? null : await pageOf(now);
         // The tombstone is part of the write, so a 404 handler asked the moment it answers already says 410.
-        await keepTombstones(store, log, action, before, after);
-        const event = pageEvent(adapter.site.origin, now, action, before, after, written, request);
+        await keepTombstones(action, before, after);
+        const event = pageEvent(now, action, before, after, written, request);
         if (event && hooks.length > 0) {
           const told = tell(event).catch((error) =>
             log({ siteApi: "page-change-failed", error: String(error) }),

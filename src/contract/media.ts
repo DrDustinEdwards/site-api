@@ -1,9 +1,9 @@
-// The media group: uploads and their limits, lenses, metadata, focal point, caption, replace and the media library's ideas.
+// The media group.
 
 import { SLUG_PATTERN } from "@drdustinedwards/site-helpers/slug";
 import { focusOf } from "@dustinedwards/site-runtime/image";
 import { z } from "zod";
-import { Limit, SortDir, Timestamp, Version } from "./base.js";
+import { ActorName, ChangeId, Limit, SortDir, Timestamp, Version } from "./base.js";
 
 /** The largest upload any site may declare: well under a Worker's request body limit. */
 export const MAX_MEDIA_BYTES = 25 * 1024 * 1024;
@@ -252,6 +252,50 @@ export const MediaList = z.object({
   moreChanges: z.boolean().optional(),
 });
 
+/**
+ * An upload is the file's own bytes as the body, its type as Content-Type, and these as the query:
+ * no base64, so a file costs its own size and no more.
+ */
+export const MediaUploadQuery = z.object({
+  // A file name may not hold control characters, on purpose.
+  filename: z
+    .string()
+    .min(1)
+    .max(200)
+    // oxlint-disable-next-line no-control-regex
+    .regex(/^[^/\\\u0000-\u001f]+$/, "A file name, with no path"),
+  /**
+   * What the picture shows (optional; with none the picture is stored with no alt and an alt is written afterward, and the site refuses it where it is placed on a page). Sent, it is checked: what the picture shows, at most MAX_ALT_CHARS, never its file name, a bare
+   * "image" or an address.
+   */
+  alt: z.string().max(2000).optional(),
+  /** "yes" says the picture is decorative, so it is stored with alt "" on purpose. Not with an alt. */
+  decorative: z.enum(["yes"]).optional(),
+  changeId: ChangeId,
+  /** "no" keeps this file at its own size on a site that shrinks large pictures at upload (capabilities.mediaResize). */
+  resize: z.enum(["no"]).optional(),
+  actorName: ActorName.optional(),
+});
+
+/**
+ * The answer to an upload or an import (a MediaItem with the extras below): the file, and what the site did with it. The
+ * extra properties are each absent where they do not apply.
+ */
+export const MediaUploadResult = MediaItem.extend({
+  /** The id of the file already holding these exact bytes (capabilities.mediaDuplicates): the answer is that file, and nothing new was stored. */
+  duplicateOf: MediaId.optional(),
+  /** The fields the site filled from the file's own embedded metadata (capabilities.mediaEmbedded). */
+  embedded: z.array(z.enum(MEDIA_EMBEDDED_FIELDS)).optional(),
+  /** The picture's size before the site shrank it (capabilities.mediaResize). */
+  resizedFrom: z
+    .object({
+      width: z.number().int().min(1),
+      height: z.number().int().min(1),
+      bytes: z.number().int().min(0),
+    })
+    .optional(),
+});
+
 export type MediaUploadLimits = z.infer<typeof MediaUploadLimits>;
 export type MediaUse = z.infer<typeof MediaUse>;
 export type MediaItem = z.infer<typeof MediaItem>;
@@ -260,8 +304,10 @@ export type MediaListQuery = z.infer<typeof MediaListQuery>;
 export type MediaLens = z.infer<typeof MediaLens>;
 export type MediaSort = (typeof MEDIA_SORTS)[number];
 export type MediaList = z.infer<typeof MediaList>;
+export type MediaUploadQuery = z.infer<typeof MediaUploadQuery>;
 export type MediaTags = z.infer<typeof MediaTags>;
 export type MediaKind = z.infer<typeof MediaKind>;
 export type MediaOrientation = z.infer<typeof MediaOrientation>;
 export type MediaEmbeddedField = (typeof MEDIA_EMBEDDED_FIELDS)[number];
 export type MediaTwin = z.infer<typeof MediaTwin>;
+export type MediaUploadResult = z.infer<typeof MediaUploadResult>;

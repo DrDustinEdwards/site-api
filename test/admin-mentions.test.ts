@@ -1,49 +1,8 @@
-// The content kit (./admin) and localClient, against the in-memory reference site. A site's own
-// admin drives the kit through localClient; Carrel drives it through createSiteClient, which one test
-// below runs too, so both hosts meet the same code.
+// The content kit's mentions half and its summary, against the in-memory reference site.
 
 import { describe, expect, it } from "vitest";
 import { loadMentions, runMentionsIntent, summary } from "../src/admin.js";
-import { createSiteClient, localClient, SiteApiError } from "../src/client.js";
-import { memoryAdapter } from "../src/testing.js";
-import { KEY, ORIGIN, site } from "./helpers.js";
-import { EDITOR, PNG, post, setup, upload } from "./admin-helpers.js";
-
-describe("localClient", () => {
-  it("answers as the HTTP client does, through the same handler: meta, reads, and refusals as SiteApiError", async () => {
-    const adapter = memoryAdapter();
-    const local = localClient(adapter);
-    const s = site(adapter);
-    const remote = createSiteClient({ baseUrl: ORIGIN, key: KEY, fetch: s.fetch });
-    await post(local, "one", "title: One");
-    expect(await local.meta()).toEqual(await remote.meta());
-    expect(await local.get("one")).toEqual(await remote.get("one"));
-    const missing = await local.get("nope").catch((e: unknown) => e);
-    expect(missing).toBeInstanceOf(SiteApiError);
-    expect(missing).toMatchObject({ status: 404, body: { error: "not-found" } });
-    const stale = await local
-      .saveDraft("one", { source: "x", expectedVersion: "v0", changeId: "c-x" })
-      .catch((e: unknown) => e);
-    expect(stale).toMatchObject({
-      status: 409,
-      body: { error: "version-conflict", currentVersion: (await local.get("one")).version },
-    });
-  });
-
-  it("runs the package's upload checks: bytes that are not their type are refused before the adapter", async () => {
-    const { adapter, client } = setup();
-    const error = await client.media
-      .upload({
-        bytes: new TextEncoder().encode("not a png"),
-        contentType: "image/png",
-        filename: "a.png",
-        changeId: "u1",
-      })
-      .catch((e: unknown) => e);
-    expect(error).toMatchObject({ status: 400, body: { error: "invalid" } });
-    expect(adapter.mediaStore.size).toBe(0);
-  });
-});
+import { EDITOR, PNG, setup, upload } from "./admin-setup.js";
 
 describe("mentions", () => {
   it("opens on pending, or on all when nothing waits, with the counts of the whole queue and each post's editor link", async () => {
@@ -67,7 +26,7 @@ describe("mentions", () => {
     expect((await loadMentions(setup({ mentions: false }).source)).offers.mentions).toBe(false);
   });
 
-  it("Undo is the opposite decision between approved and rejected; on a site without reset a decision on a waiting mention has none", async () => {
+  it("Undo is the opposite decision between approved and rejected; on a v0.5.0 site a decision on a waiting mention has none", async () => {
     const { adapter, source } = setup({ mentionReset: false });
     const done = adapter.receiveMention({
       sourceUrl: "https://a.example/1",
@@ -96,7 +55,7 @@ describe("mentions", () => {
     ).toEqual({ ok: false, message: "This site does not take a mention decision back." });
   });
 
-  it("searches and narrows to one post through the site, and filters the page itself where the site did not", async () => {
+  it("searches and narrows to one post through the site (v0.6.0), and filters the page itself where the site did not", async () => {
     for (const [options, onPage] of [
       [{}, undefined],
       [{ mentionFilters: false }, true],
@@ -126,7 +85,7 @@ describe("mentions", () => {
     }
   });
 
-  it("with reset, Undo takes a decision on a waiting mention back to waiting, and Undo of that decides again", async () => {
+  it("with reset (v0.6.0), Undo takes a decision on a waiting mention back to waiting, and Undo of that decides again", async () => {
     const { adapter, source } = setup();
     const waiting = adapter.receiveMention({ sourceUrl: "https://a.example/1", targetId: "p" });
     const v = (id: string) => adapter.mentionStore.get(id)!.version;
@@ -237,7 +196,7 @@ describe("summary", () => {
   it("counts what waits on one site, and null for what it cannot say", async () => {
     const { adapter, client, source } = setup({}, { waiting: async () => 3 });
     adapter.receiveMention({ sourceUrl: "https://a.example/1", targetId: "p" });
-    // A file stored with no alt and no decorative choice counts; a decorative one does not.
+    // A file stored before v0.19.0 with no alt counts; a decorative one does not.
     await adapter.media!.upload({
       bytes: PNG,
       contentType: "image/png",

@@ -1,27 +1,281 @@
 // The posts half of the content kit: PostsList's view data and its intents.
 
-import { createTwoFilesPatch } from "diff";
 import { Timestamp } from "../contract/base.js";
-import {
-  type ContentFilter,
-  type ContentStatus,
-  type ContentSummary,
-  type ListQuery,
-  type ScheduledUpdateSummary,
-  type SortDir,
-} from "../contract.js";
-import { hasTrash, sameTag, scheduleLabel } from "./posts-kit.js";
+import { ContentId, ContentTag, type Capabilities, type ContentDoc } from "../contract.js";
+import { plural } from "@drdustinedwards/site-helpers/text";
 import {
   type Permissions,
   type ContentSource,
-  type RowNote,
-  PER_PAGE,
+  type IntentInput,
+  type Outcome,
+  type IntentResult,
+  NOT_YOURS,
+  text,
+  refused,
+  askFirst,
+  texts,
+  targetsOf,
+  checkCount,
+  summarize,
+  result,
   orNull,
-  absolute,
+  Conflict,
+  eachItem,
+  actingClient,
 } from "./kit.js";
+import type { ContentFilter, ContentStatus, SortDir } from "../contract.js";
+import type { PostRow, PostSort } from "./posts/data.js";
+import { POST_INTENTS, hasTrash, type PostIntent } from "./posts/data.js";
+import { applyPostIntent, type PostRun } from "./posts/items.js";
 
-type PostSort = "updated" | "published" | "title";
-const POST_SORTS: readonly PostSort[] = ["updated", "published", "title"];
+/** A tag as a post's frontmatter list can hold it: one short piece of text with nothing that would break the list. */
+function cleanPostTag(raw: string): string | null {
+  const tag = raw.trim();
+  return ContentTag.safeParse(tag).success ? tag : null;
+}
+
+/**
+ * Runs one posted intent on one site's posts, each post its own write, in order. The person's
+ * permission is checked once before the site is asked anything; a post whose own state needs more
+ * (a live post, for someone who may not publish) is refused alone and the rest go on.
+ */
+export async function runPostsIntent(
+  source: ContentSource,
+  input: IntentInput,
+): Promise<IntentResult> {
+  const intent = text(input, "intent") as PostIntent;
+  if (!POST_INTENTS.includes(intent))
+    return refused("That is not something the posts list can do.");
+  const need: keyof Permissions =
+    intent === "delete"
+      ? "deleteContent"
+      : intent === "unpublish" ||
+          intent === "republish" ||
+          intent === "reschedule" ||
+          intent === "cancel-schedule" ||
+          // A preview link shows the post to anyone who has it, so it sends the post out: a publish.
+          intent === "preview-link"
+        ? "publish"
+        : "edit";
+  if (!source.can[need]) return refused(NOT_YOURS[need]);
+  // Rename and a preview link name one post, and a rename one new id for it.
+  if ((intent === "rename" || intent === "preview-link") && texts(input, "ids").length !== 1)
+    return refused("Choose one post.");
+  const newId = intent === "rename" ? text(input, "newId").trim() : "";
+  if (intent === "rename" && !ContentId.safeParse(newId).success) {
+    return refused(
+      "A new id is letters, digits, dots, underscores and hyphens, and starts with a letter or digit.",
+    );
+  }
+
+  const { targets, invalid } = targetsOf(input, ContentId);
+  const tooMany = checkCount(targets.length + invalid.length, "post");
+  if (tooMany) return tooMany;
+  const early: Outcome[] = invalid.map((id) => ({
+    id,
+    ok: false,
+    message: "That is not a post id, so it was not sent to the site.",
+  }));
+
+  let tag: string | null = null;
+  if (intent === "tag-add" || intent === "tag-remove") {
+    tag = cleanPostTag(text(input, "tag"));
+    if (tag === null)
+      return refused(
+        "A tag is one short piece of text, with no commas, brackets, quotes or colons.",
+      );
+  }
+  // A reschedule names one new time for every post, or (its Undo) one time per post in the order of `ids`.
+  const times = texts(input, "publishAts");
+  const time = text(input, "publishAt");
+  if (
+    intent === "reschedule" &&
+    !(times.length > 0
+      ? times.every((t) => Timestamp.safeParse(t).success)
+      : Timestamp.safeParse(time).success)
+  ) {
+    return refused("Choose the new time, with its time zone.");
+  }
+  const newTime = (id: string) =>
+    (times.length > 0 ? times[texts(input, "ids").indexOf(id)] : time) ?? time;
+  const undoTimes: string[] = [];
+  let capabilities: Capabilities | null = null;
+  if (intent !== "unpublish" && intent !== "republish")
+    capabilities = (await source.client.meta()).capabilities;
+  if (intent === "delete" && capabilities?.contentDelete !== true)
+    return refused("This site does not delete posts through the site API.");
+  if ((intent === "trash" || intent === "restore") && !hasTrash(capabilities))
+    return refused("This site has no trash for posts.");
+  if (intent === "rename" && capabilities?.contentRename !== true)
+    return refused("This site does not rename posts through the site API.");
+  if (intent === "preview-link" && capabilities?.previewLinks !== true)
+    return refused("This site does not make preview links.");
+  // Where the site lists backlinks, the posts that link to each one about to go, for the confirm to warn with.
+  const linked = async () => {
+    if (capabilities?.backlinks !== true || text(input, "confirm") !== "") return [];
+    const found = await Promise.all(
+      targets.map(async (t) => ({
+        id: t.id,
+        linkedFrom: (await orNull(source.client.backlinks(t.id)))?.items ?? [],
+      })),
+    );
+    return found.filter((b) => b.linkedFrom.length > 0);
+  };
+  const warning = (backlinks: Array<{ linkedFrom: unknown[] }>) => {
+    const linking = backlinks.reduce((n, b) => n + b.linkedFrom.length, 0);
+    return linking > 0
+      ? ` ${plural(linking, "link")} from other posts will break: the list is below.`
+      : "";
+  };
+  if (intent === "delete" && targets.length > 0) {
+    const backlinks = await linked();
+    const ask = askFirst(input, {
+      intent,
+      title: `Delete ${plural(targets.length, "post")} for good?`,
+      lead: "Each post leaves the site, and nothing here can bring it back." + warning(backlinks),
+      action: "Delete for good",
+      items: targets.map((t) => t.id),
+      fields: { ids: targets.map((t) => t.id), versions: targets.map((t) => t.version ?? "") },
+    });
+    if (ask)
+      return backlinks.length > 0 ? { ...ask, confirm: { ...ask.confirm!, backlinks } } : ask;
+  }
+  // A trash can be undone, so it asks only when other posts link to one of them.
+  if (intent === "trash" && targets.length > 0) {
+    const backlinks = await linked();
+    if (backlinks.length > 0) {
+      const ask = askFirst(input, {
+        intent,
+        title: `Move ${plural(targets.length, "post")} to the Trash?`,
+        lead: `A live post leaves the site.${warning(backlinks)}`,
+        action: "Move to the Trash",
+        items: targets.map((t) => t.id),
+        fields: { ids: targets.map((t) => t.id), versions: targets.map((t) => t.version ?? "") },
+      });
+      if (ask) return { ...ask, confirm: { ...ask.confirm!, backlinks } };
+    }
+  }
+
+  const client = actingClient(source.client, source.actor);
+  const read = async (id: string, version: string | null): Promise<ContentDoc> => {
+    const doc = await client.get(id);
+    if (version !== null && doc.version !== version) throw new Conflict(doc.version);
+    return doc;
+  };
+  const held = async (id: string): Promise<string | null> =>
+    source.hold ? source.hold(intent, id) : null;
+  const run: PostRun = {
+    intent,
+    source,
+    input,
+    capabilities,
+    client,
+    read,
+    held,
+    tag,
+    newId,
+    newTime,
+    undoIds: [],
+    undoVersions: [],
+    undoTimes,
+    renamed: {},
+    notUndoable: 0,
+    previewLink: undefined,
+  };
+  const { undoIds, undoVersions, renamed } = run;
+
+  const { outcomes, conflict } = await eachItem(source, targets, "post", (item) =>
+    applyPostIntent(run, item),
+  );
+
+  const all = [...early, ...outcomes];
+  const extra: Partial<IntentResult> = {
+    ...(conflict ? { conflict } : {}),
+    ...(run.previewLink ? { previewLink: run.previewLink } : {}),
+  };
+  let tail = "";
+  if (undoIds.length > 0) {
+    const inverse = undoIntent(intent, capabilities, source.can);
+    if (inverse) {
+      extra.undo = {
+        intent: inverse,
+        fields: {
+          ids: undoIds,
+          versions: undoVersions,
+          ...(tag ? { tag } : {}),
+          ...(undoTimes.length ? { publishAts: undoTimes } : {}),
+          ...(renamed.from ? { newId: renamed.from } : {}),
+          ...(inverse === "delete" ? { confirm: String(undoIds.length) } : {}),
+        },
+      };
+    } else if (intent === "duplicate") {
+      tail =
+        capabilities?.contentDelete === true
+          ? " Deleting a post is the Owner's step, so ask the Owner to remove a copy you do not want."
+          : " This site does not delete posts through the site API, so remove a copy you do not want in the site's own admin.";
+    }
+  }
+  if (run.notUndoable > 0) {
+    tail +=
+      intent === "cancel-schedule"
+        ? " A canceled schedule has no Undo; schedule it again from the editor."
+        : " A post that was only scheduled has no Undo; schedule it again from the editor.";
+  }
+  return result(all, summarize(all, DONE[intent], "post") + tail, extra);
+}
+
+const DONE: Record<PostIntent, string> = {
+  "tag-add": "Tagged",
+  "tag-remove": "Untagged",
+  duplicate: "Copied",
+  unpublish: "Unpublished",
+  republish: "Republished",
+  delete: "Deleted",
+  reschedule: "Rescheduled",
+  "cancel-schedule": "Canceled the schedule of",
+  trash: "Moved to the Trash",
+  restore: "Restored",
+  rename: "Renamed",
+  "preview-link": "Made a preview link for",
+};
+
+/** The inverse of a posts intent, or null when it has none here. */
+function undoIntent(
+  intent: PostIntent,
+  capabilities: Capabilities | null,
+  can: Permissions,
+): string | null {
+  switch (intent) {
+    case "tag-add":
+      return "tag-remove";
+    case "tag-remove":
+      return "tag-add";
+    case "unpublish":
+      return "republish";
+    case "republish":
+      return "unpublish";
+    case "duplicate":
+      // Undo trashes the copy where the site has a trash; else deletes it, at the version the duplicate made, where the site deletes and the person may.
+      if (hasTrash(capabilities)) return "trash";
+      return capabilities?.contentDelete === true && can.deleteContent ? "delete" : null;
+    case "trash":
+      return "restore";
+    case "restore":
+      return "trash";
+    case "rename":
+      // Back to the old id; the redirect the first rename left stays, which is harmless.
+      return "rename";
+    case "reschedule":
+      // Back to the times they had, one per post.
+      return "reschedule";
+    case "delete":
+    case "cancel-schedule":
+    case "preview-link":
+      return null;
+  }
+}
+
+export { liveSaveWarning, loadPosts, loadScheduledUpdate, readPostQuery } from "./posts/data.js";
 
 export interface PostQuery {
   q?: string;
@@ -37,33 +291,6 @@ export interface PostQuery {
   sort?: PostSort;
   dir?: SortDir;
   cursor?: string;
-}
-
-interface PostRow {
-  id: string;
-  title: string;
-  kind: string;
-  status: ContentStatus;
-  path: string | null;
-  href: string;
-  liveHref: string | null;
-  publishAt: string | null;
-  publishedAt: string | null;
-  updatedAt: string | null;
-  /**
-   * The update scheduled to replace a live post: when it goes live, and where its source is shown
-   * (`ContentSource.scheduleHref`, else the editor). Absent when nothing waits.
-   */
-  scheduledUpdate?: { publishAt: string; href: string };
-  /** Present when the site's list carries it. */
-  version?: string;
-  tags?: string[];
-  /** Where the site keeps them: everyone credited, the primary first, and the excerpt. */
-  authors?: string[];
-  excerpt?: string;
-  /** On a trashed post: when it went to the trash. */
-  trashedAt?: string | null;
-  notes?: RowNote[];
 }
 
 export interface PostsData {
@@ -100,191 +327,6 @@ export interface PostsData {
   can: Permissions;
 }
 
-/** A posts query from the address: anything the kit does not know is dropped, never sent. */
-export function readPostQuery(search: URLSearchParams): PostQuery {
-  const q = search.get("q")?.trim().slice(0, 200);
-  const status = search.get("status");
-  const kind = search.get("kind")?.trim().slice(0, 64);
-  const tag = search.get("tag")?.trim().slice(0, 40);
-  const sort = search.get("sort");
-  const dir = search.get("dir");
-  const cursor = search.get("cursor")?.slice(0, 500);
-  const author = search.get("author")?.trim().slice(0, 200);
-  const day = (name: string) => {
-    const value = search.get(name)?.trim();
-    return value &&
-      /^\d{4}-\d{2}-\d{2}$/.test(value) &&
-      Timestamp.safeParse(`${value}T00:00:00Z`).success
-      ? value
-      : undefined;
-  };
-  const [from, to] = [day("from"), day("to")];
-  return {
-    ...(dir === "asc" || dir === "desc" ? { dir } : {}),
-    ...(q ? { q } : {}),
-    ...(status && (["draft", "scheduled", "published"] as const).includes(status as ContentStatus)
-      ? { status: status as ContentStatus }
-      : {}),
-    ...(kind ? { kind } : {}),
-    ...(tag ? { tag } : {}),
-    ...(author ? { author } : {}),
-    ...(from ? { from } : {}),
-    ...(to ? { to } : {}),
-    ...(search.get("trashed") === "1" ? { trashed: "1" as const } : {}),
-    ...(sort && POST_SORTS.includes(sort as PostSort) ? { sort: sort as PostSort } : {}),
-    ...(cursor ? { cursor } : {}),
-  };
-}
-
-function postRow(
-  source: ContentSource,
-  item: ContentSummary & { version?: string; tags?: string[] },
-): PostRow {
-  return {
-    id: item.id,
-    title: item.title || item.id,
-    kind: item.kind,
-    status: item.status,
-    path: item.path,
-    href: source.editorHref(item.id),
-    liveHref:
-      item.status === "published" && item.path ? absolute(source.site.origin, item.path) : null,
-    publishAt: item.publishAt,
-    publishedAt: item.publishedAt,
-    updatedAt: item.updatedAt,
-    ...(item.scheduledUpdate
-      ? {
-          scheduledUpdate: {
-            publishAt: item.scheduledUpdate.publishAt,
-            href: source.scheduleHref ? source.scheduleHref(item.id) : source.editorHref(item.id),
-          },
-        }
-      : {}),
-    ...(item.version ? { version: item.version } : {}),
-    ...(item.tags ? { tags: item.tags } : {}),
-    ...(item.authors ? { authors: item.authors } : {}),
-    ...(item.excerpt ? { excerpt: item.excerpt } : {}),
-    ...(item.trashedAt !== undefined ? { trashedAt: item.trashedAt } : {}),
-  };
-}
-
-const BY: Record<PostSort, (a: PostRow, b: PostRow) => number> = {
-  updated: (a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""),
-  published: (a, b) =>
-    (b.publishedAt ?? b.publishAt ?? "").localeCompare(a.publishedAt ?? a.publishAt ?? ""),
-  title: (a, b) => a.title.localeCompare(b.title),
-};
-
-/** One page of one site's posts, as PostsList renders it. */
-export async function loadPosts(source: ContentSource, query: PostQuery = {}): Promise<PostsData> {
-  const meta = await source.client.meta();
-  const filters = meta.capabilities.contentFilters ?? [];
-  const trash = hasTrash(meta.capabilities);
-  // The filters the site applies go to it; kind and tag on a site without them still work on the page it sent.
-  const onSite: Partial<ListQuery> = {
-    ...(query.kind && filters.includes("kind") ? { kind: query.kind } : {}),
-    ...(query.tag && filters.includes("tag") ? { tag: query.tag } : {}),
-    ...(query.author && filters.includes("author") ? { author: query.author } : {}),
-    ...(query.from && filters.includes("published")
-      ? { publishedAfter: `${query.from}T00:00:00.000Z` }
-      : {}),
-    ...(query.to && filters.includes("published")
-      ? { publishedBefore: `${query.to}T23:59:59.999Z` }
-      : {}),
-    ...(query.trashed && trash ? { trashed: true } : {}),
-  };
-  // A host's own index answers only the plain list; a filtered one comes from the site, which says what it applied.
-  const lister =
-    Object.keys(onSite).length > 0 ? source.client : (source.postIndex ?? source.client);
-  const base = {
-    ...(query.q ? { q: query.q } : {}),
-    ...(query.sort ? { sort: query.sort, ...(query.dir ? { dir: query.dir } : {}) } : {}),
-  };
-  const list = await lister.list({
-    limit: PER_PAGE,
-    ...base,
-    ...onSite,
-    ...(query.status ? { status: query.status } : {}),
-    ...(query.cursor ? { cursor: query.cursor } : {}),
-  });
-  let rows = list.items.map((item) => postRow(source, item));
-  const kinds = [...new Set(rows.map((r) => r.kind))].sort();
-  const authors = [...new Set(rows.flatMap((r) => r.authors ?? []))].sort();
-  if (query.kind && !onSite.kind) rows = rows.filter((r) => r.kind === query.kind);
-  if (query.tag && !onSite.tag)
-    rows = rows.filter((r) => (r.tags ?? []).some((t) => sameTag(t, query.tag!)));
-  // A site that sorted says so; otherwise the kit sorts the page it has and says that.
-  const sortedOnPage = query.sort !== undefined && list.sorted === undefined;
-  if (sortedOnPage) {
-    const dir = query.dir ?? (query.sort === "title" ? "asc" : "desc");
-    rows = [...rows].sort(
-      (a, b) =>
-        (dir === (query.sort === "title" ? "asc" : "desc") ? 1 : -1) * BY[query.sort!](a, b),
-    );
-  }
-  // Where the site counts, each status tab gets its count for the same search, and the Trash its own.
-  let counts: PostsData["counts"];
-  if (list.total !== undefined) {
-    const statuses = ["draft", "scheduled", "published"] as const;
-    const search = query.q ? { q: query.q } : {};
-    const [totals, binned] = await Promise.all([
-      Promise.all(statuses.map((status) => lister.list({ limit: 1, ...search, status }))),
-      trash ? source.client.list({ limit: 1, ...search, trashed: true }) : null,
-    ]);
-    counts = {
-      all:
-        query.status || query.trashed ? totals.reduce((n, t) => n + (t.total ?? 0), 0) : list.total,
-    };
-    statuses.forEach((status, i) => (counts![status] = totals[i]!.total ?? 0));
-    if (binned?.total !== undefined) counts.trash = binned.total;
-  }
-  if (source.notes && rows.length > 0) {
-    const notes = await source.notes(rows.map((r) => r.id));
-    rows = rows.map((r) => (notes[r.id]?.length ? { ...r, notes: notes[r.id] } : r));
-  }
-  const capabilities = meta.capabilities;
-  return {
-    site: { id: source.site.id, name: source.site.name },
-    query,
-    rows,
-    page: {
-      nextCursor: list.nextCursor,
-      ...(list.total !== undefined ? { total: list.total } : {}),
-      ...(sortedOnPage ? { sortedOnPage } : {}),
-    },
-    ...(counts ? { counts } : {}),
-    kinds,
-    offers: {
-      delete: capabilities.contentDelete === true,
-      schedule: true,
-      tags: true,
-      duplicate: true,
-      scheduledUpdates: capabilities.scheduledUpdates === true,
-      trash,
-      rename: capabilities.contentRename === true,
-      previewLinks: capabilities.previewLinks === true,
-      backlinks: capabilities.backlinks === true,
-      filters,
-      authors,
-    },
-    can: source.can,
-  };
-}
-
-/**
- * The warning before a save to a live post that has an update waiting: the save changes the live post now,
- * and the update still replaces the whole post at its time. null when there is nothing to warn about. The editor
- * shows it before saving; the kit adds it to a tag change's outcome. `label` says the time; an admin that writes times its
- * own way elsewhere passes its formatter, so the page says one time one way.
- */
-export function liveSaveWarning(
-  doc: { status: ContentStatus; scheduledUpdate?: ScheduledUpdateSummary | null },
-  label: (publishAt: string) => string = scheduleLabel,
-): string | null {
-  if (doc.status !== "published" || !doc.scheduledUpdate) return null;
-  return `An update is scheduled for ${label(doc.scheduledUpdate.publishAt)}. Saving changes the live post now, and the scheduled update will still replace it then, without this change. Edit the scheduled update too, or cancel it.`;
-}
-
 /** The update waiting on a live post, with what it changes, for the page that shows its source. */
 export interface ScheduledUpdateView {
   id: string;
@@ -300,31 +342,4 @@ export interface ScheduledUpdateView {
   patch: string;
   editorHref: string;
   can: Permissions;
-}
-
-/** The update waiting on one post, or null when nothing waits (or the site keeps no scheduled updates). */
-export async function loadScheduledUpdate(
-  source: ContentSource,
-  id: string,
-): Promise<ScheduledUpdateView | null> {
-  const doc = await orNull(source.client.get(id));
-  if (!doc?.scheduledUpdate) return null;
-  const update = await orNull(source.client.scheduledUpdate(id));
-  if (!update) return null;
-  return {
-    id,
-    title: doc.title || id,
-    publishAt: update.publishAt,
-    when: scheduleLabel(update.publishAt),
-    scheduledAt: update.scheduledAt,
-    source: update.source,
-    live: {
-      source: doc.source,
-      version: doc.version,
-      href: doc.path ? absolute(source.site.origin, doc.path) : null,
-    },
-    patch: createTwoFilesPatch(`${id} (live)`, `${id} (scheduled)`, doc.source, update.source),
-    editorHref: source.editorHref(id),
-    can: source.can,
-  };
 }
