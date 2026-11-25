@@ -1,5 +1,12 @@
 # @dustinedwards/site-api
 
+## 0.49.2
+
+### Patch Changes
+
+- `Stored` and `StoredMedia` are exported from `./testing`. `memoryAdapter` returns them, and a project with a composite tsconfig failed to typecheck (TS2883) when it kept the result.
+- `utc` is exported from `./schedules` again. 0.49.1 made it private by mistake, and sites import it.
+
 ## 0.49.1
 
 ### Patch Changes
