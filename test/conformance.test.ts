@@ -6,7 +6,7 @@ import { runConformance } from "../src/conformance.js";
 import { memoryAdapter } from "../src/testing.js";
 import { d1SiteApiStore, tombstoneResponse, SITE_API_STORE_SQL } from "../src/store.js";
 import { d1 } from "./d1.js";
-import { KEY, ORIGIN, allow, site } from "./helpers.js";
+import { KEY, ORIGIN, allow, site, mountedFetch } from "./helpers.js";
 
 function failing(report: Awaited<ReturnType<typeof runConformance>>) {
   return report.checks.filter((c) => !c.ok).map((c) => c.name);
@@ -538,10 +538,7 @@ describe("conformance", () => {
       store,
       hooks: [{ name: "probe-hook", run: () => true }],
     });
-    const fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-      const request = new Request(input, init);
-      if (api.matchesPreviewLink(request)) return api.servePreviewLink(request);
-      if (api.matches(request)) return api.handle(request);
+    const fetch = mountedFetch(api, async (request) => {
       const { pathname } = new URL(request.url);
       const moved = adapter.redirects.get(pathname);
       if (moved) return new Response(null, { status: 301, headers: { location: moved } });
@@ -554,7 +551,7 @@ describe("conformance", () => {
       if (options.tombstones !== false && (await store.isGone(pathname)))
         return tombstoneResponse(request);
       return new Response("Not found", { status: 404 });
-    }) as typeof globalThis.fetch;
+    });
     return { adapter, fetch };
   }
 

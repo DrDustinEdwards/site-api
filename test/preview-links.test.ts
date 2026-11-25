@@ -8,7 +8,7 @@ import { MEDIA_LIBRARY_SQL } from "../src/media-store.js";
 import { d1SiteApiStore, SITE_API_STORE_SQL } from "../src/store.js";
 import { memoryAdapter } from "../src/testing.js";
 import { d1 } from "./d1.js";
-import { KEY, ORIGIN, allow } from "./helpers.js";
+import { KEY, ORIGIN, allow, mountedFetch } from "./helpers.js";
 
 function mounted(withStore = true) {
   const adapter = memoryAdapter({ site: { id: "memory", name: "Memory site", origin: ORIGIN } });
@@ -19,11 +19,7 @@ function mounted(withStore = true) {
     log: () => {},
     ...(withStore ? { store: d1SiteApiStore(d1(SITE_API_STORE_SQL)) } : {}),
   });
-  const fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const request = new Request(input, init);
-    if (api.matchesPreviewLink(request)) return api.servePreviewLink(request);
-    return api.handle(request);
-  }) as typeof globalThis.fetch;
+  const fetch = mountedFetch(api);
   return { fetch, c: createSiteClient({ baseUrl: ORIGIN, key: KEY, fetch }) };
 }
 

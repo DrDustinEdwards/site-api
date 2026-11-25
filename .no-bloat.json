@@ -1,15 +1,15 @@
 {
   "baseline": {
-    "measured_at": "139f6c6",
+    "measured_at": "83f6664",
     "knip": {
       "files": 1,
       "exports": 2,
       "types": 1
     },
     "jscpd": {
-      "clones": 7,
-      "lines": 255,
-      "percentage": 0.86,
+      "clones": 6,
+      "lines": 250,
+      "percentage": 0.84,
       "unread": 0
     },
     "shared copies": {
@@ -17,20 +17,15 @@
       "lines": 0
     },
     "legacy": {},
-    "size": {
-      "src/adapter.ts": 674,
-      "src/contract.ts": 697,
-      "src/contract/media.ts": 672,
-      "src/server.ts": 653
-    },
+    "size": {},
     "tests": {
       "files": 35,
       "cases": 287
     },
     "comments": {
-      "lines": 2496,
-      "code": 23101,
-      "percentage": 9.75
+      "lines": 2497,
+      "code": 23173,
+      "percentage": 9.73
     }
   }
 }

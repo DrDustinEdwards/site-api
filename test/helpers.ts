@@ -8,6 +8,19 @@ export const ORIGIN = "https://site.example";
 
 export const allow: RateLimiter = { limit: async () => ({ success: true }) };
 
+/** A fetch over the package: a preview link to `servePreviewLink`, the API to `handle`, and any other path to `rest`. */
+export function mountedFetch(
+  api: ReturnType<typeof createSiteApi>,
+  rest: (request: Request) => Response | Promise<Response> = (request) => api.handle(request),
+): typeof globalThis.fetch {
+  return (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const request = new Request(input, init);
+    if (api.matchesPreviewLink(request)) return api.servePreviewLink(request);
+    if (api.matches(request)) return api.handle(request);
+    return rest(request);
+  }) as typeof globalThis.fetch;
+}
+
 /** A site: the package mounted at its prefix, with every other path answered as the site's own 200 page. */
 export function site<A extends SiteAdapter = ReturnType<typeof memoryAdapter>>(
   adapter: A = memoryAdapter() as SiteAdapter as A,
