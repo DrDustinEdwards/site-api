@@ -9,8 +9,10 @@ Each site mounts one handler at `/api/carrel/v1` and implements an adapter over 
 Installed by git tag, never from a registry:
 
 ```sh
-npm install github:DrDustinEdwards/site-api#v0.20.0
+npm install github:DrDustinEdwards/site-api#vX.Y.Z
 ```
+
+Use the newest release tag (the releases page lists it). A site also installs `@dustinedwards/site-runtime` and `@drdustinedwards/site-helpers` (Prelum) beside it: they are not peer dependencies, because neither is on the npm registry and npm cannot resolve a peer range for them (Changes in 0.42.1, CHANGELOG.md).
 
 npm builds `dist/` on install through the `prepare` script.
 

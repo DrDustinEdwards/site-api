@@ -240,6 +240,16 @@ export function d1MediaStore(
       return results.map(recordOf);
     },
 
+    async twins(sha256, exceptKey, limit) {
+      const { results } = await db
+        .prepare(
+          "SELECT * FROM media WHERE sha256 = ? AND key != ? ORDER BY uploaded_at DESC, key ASC LIMIT ?",
+        )
+        .bind(sha256, exceptKey, limit)
+        .all<Row>();
+      return results.map(recordOf);
+    },
+
     async byHash(sha256) {
       const current = await db
         .prepare("SELECT * FROM media WHERE sha256 = ? ORDER BY uploaded_at ASC, key ASC LIMIT 1")

@@ -96,10 +96,12 @@ export function siteApiStep<E>(
   };
 }
 
+const READS_BY_POST = new Set([`${PREFIX}/preview`, `${PREFIX}/media/suggestions`]);
+
 /**
- * A write that cannot change a stored page: a preview link, and a draft saved on an item that is not live (the answer
- * says `draft`, never `published`; an always-live item such as a page answers `published` and still purges). Purging on
- * these wiped every stored page at every autosave and every conformance probe.
+ * A write that cannot change a stored page: a preview link, a preview and suggestions (POSTs that store nothing), and a
+ * draft saved on an item that is not live (the answer says `draft`, never `published`; an always-live item such as a
+ * page answers `published` and still purges). Purging on these wiped every stored page at every autosave and preview.
  */
 async function changesNothingPublic(
   request: Request,
@@ -108,6 +110,7 @@ async function changesNothingPublic(
 ): Promise<boolean> {
   const links = `${PREFIX}/preview-links`;
   if (url.pathname === links || url.pathname.startsWith(`${links}/`)) return true;
+  if (request.method === "POST" && READS_BY_POST.has(url.pathname)) return true;
   if (
     request.method !== "PUT" ||
     !/\/content\/[^/]+\/draft$/.test(url.pathname) ||

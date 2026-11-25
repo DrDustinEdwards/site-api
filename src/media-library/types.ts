@@ -78,8 +78,9 @@ export interface MediaLibraryStore {
   record(key: string): Promise<MediaRecord | null>;
   /** Several files at once (at most 90 keys a call), in any order; keys that are not library files are left out. */
   records(keys: string[]): Promise<MediaRecord[]>;
-  /** Every library file, trashed included. Lists filter and sort in the Worker: a site's library is small. */
+  /** Every library file, trashed included. Lists filter and sort in the Worker: lenses read the site's own usage. */
   all(): Promise<MediaRecord[]>;
+  twins(sha256: string, exceptKey: string, limit: number): Promise<MediaRecord[]>;
   /**
    * The file holding these bytes, trashed or not: one whose current bytes have this hash, the first uploaded; else one
    * that was uploaded or imported with it (an `upload` or `import` revision) before a shrink changed them, the earliest.

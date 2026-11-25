@@ -3,7 +3,7 @@
 // Order is the guard: prefix, then rate limit, then key, then route. A request outside the prefix
 // is never served, whatever key it carries; a request without the key learns nothing about routes.
 
-import { jsonResponse } from "@dustinedwards/site-runtime/http";
+import { clientIp, jsonResponse } from "@dustinedwards/site-runtime/http";
 import { safeEqual } from "@dustinedwards/site-runtime/compare";
 import { isDatabaseDown } from "@dustinedwards/site-runtime/log";
 
@@ -343,9 +343,7 @@ export function createSiteApi(config: SiteApiConfig): SiteApi {
       presented !== null &&
       (await safeEqual(presented, expected));
     try {
-      const key = holdsKey
-        ? "site-key"
-        : `ip:${request.headers.get("cf-connecting-ip") ?? "unknown"}`;
+      const key = holdsKey ? "site-key" : `ip:${clientIp(request)}`;
       if (!(await limiter.limit({ key })).success) {
         log({ siteApi: "refused", reason: "rate-limited" });
         return fail("rate-limited", "Too many requests.");
@@ -448,8 +446,7 @@ export function createSiteApi(config: SiteApiConfig): SiteApi {
 
   async function servePreview(request: Request): Promise<Response> {
     try {
-      const ip = request.headers.get("cf-connecting-ip") ?? "unknown";
-      if (!(await limiter.limit({ key: `ip:${ip}` })).success)
+      if (!(await limiter.limit({ key: `ip:${clientIp(request)}` })).success)
         return page(429, "Too many requests.");
       const answer = await servePreviewLink(adapter, store, new URL(request.url).pathname);
       return request.method === "HEAD"

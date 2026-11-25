@@ -125,7 +125,7 @@ const PRIVATE = {
 };
 
 export function page(status: number, message: string): Response {
-  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="robots" content="noindex, nofollow"><title>${message}</title></head><body><p>${message}</p></body></html>`;
+  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="robots" content="noindex, nofollow"><title>${message}</title></head><body><h1>${message}</h1></body></html>`;
   return new Response(html, {
     status,
     headers: { ...PRIVATE, "content-type": "text/html; charset=utf-8" },
