@@ -7,17 +7,21 @@ import { jsonResponse } from "@dustinedwards/site-runtime/http";
 import { safeEqual } from "@dustinedwards/site-runtime/compare";
 import { isDatabaseDown } from "@dustinedwards/site-runtime/log";
 
-import { hasContentTrash, type DueSchedule, type SiteAdapter } from "./adapter.js";
+import { hasContentTrash, type DueSchedule } from "./adapter.js";
 import { PREFIX } from "./contract.js";
 import { Timestamp } from "./contract/base.js";
-import type { ContentStatus, ContentSummary } from "./contract.js";
+import type { ContentSummary } from "./contract.js";
+import { hears, runHooks, type PublishEvent, type PublishHook } from "./hooks.js";
 import {
-  hears,
-  runHooks,
-  type PublishAction,
-  type PublishEvent,
-  type PublishHook,
-} from "./hooks.js";
+  ACTION,
+  HOOK_BACKOFF_MINUTES,
+  MINUTE,
+  PAGE_WRITE,
+  bearer,
+  keepTombstones,
+  pageEvent,
+  type Page,
+} from "./server/events.js";
 import { contentRoutes } from "./server/content.js";
 import { HookRunList, HookRunsQuery } from "./contract.js";
 import {
@@ -42,7 +46,6 @@ import {
 import { pruneStore } from "./server/prune.js";
 import { claim, REPLAYED } from "./server/replay.js";
 import { siteApiLog } from "./log.js";
-import type { SiteApiStore } from "./store.js";
 
 export type {
   D1SiteApiStore,
@@ -54,92 +57,17 @@ export type {
 export { tombstoneResponse, gonePath, tombstoned } from "./store.js";
 export { PREVIEW_LINK_PATH } from "./server/preview-links.js";
 
-/** The shape of Cloudflare's `ratelimit` binding, so a site passes its binding straight in. */
-export interface RateLimiter {
-  limit(options: { key: string }): Promise<{ success: boolean }>;
-}
+import {
+  SCHEDULE_BATCH_LIMIT,
+  TRASH_DAYS,
+  type ScheduleRun,
+  type SiteApi,
+  type SiteApiConfig,
+  type WaitUntil,
+} from "./server/config.js";
 
-/**
- * The secrets a site holds for the API (v0.14.0), for its Env: `CARREL_SITE_KEY`, set with `wrangler secret put
- * CARREL_SITE_KEY` and passed to `createSiteApi` as `key`.
- */
-export interface SiteApiSecrets {
-  CARREL_SITE_KEY: string;
-}
-
-export interface SiteApiConfig {
-  adapter: SiteAdapter;
-  /** The site's Carrel key, from its secrets. Shorter than 32 characters refuses every request. */
-  key: string | undefined;
-  limiter: RateLimiter;
-  /** Where refusals and adapter failures are logged. Defaults to `siteApiLog`: site-runtime's scrubbed logger, a refused request named in the OWASP vocabulary. */
-  log?: (entry: Record<string, unknown>) => void;
-  /**
-   * Run when a public page changes (v0.10.0): a publish, an unpublish, a delete of a live item, a save or tag change to
-   * a live item, and each schedule `runSchedules` applies. The first is `indexNowHook`, over Prelum's `submitIndexNow`.
-   * After a request they run under its `waitUntil` when `handle` is given one, so Carrel's answer never waits on them;
-   * a hook that fails is logged, never answered, and the write stands. v0.17.0: a hook may name the actions it hears
-   * (`on`), and with a `store` a failed one is kept and `runSchedules` runs it again (HOOK_BACKOFF_MINUTES).
-   */
-  hooks?: PublishHook[];
-  /**
-   * Where the package keeps what it needs between requests (v0.17.0): on D1, `d1SiteApiStore(env.DB)` from
-   * `@dustinedwards/site-api/store`, with `SITE_API_STORE_SQL` as a migration. With it, every write is safe to retry
-   * under its change id (capabilities.replay). Absent: nothing is kept between requests.
-   */
-  store?: SiteApiStore;
-}
-
-/** What one `runSchedules` pass did. */
-export interface ScheduleRun {
-  applied: Array<DueSchedule & { version: string }>;
-  /** Due when listed, but canceled, rescheduled or unpublished before it ran: left as the site holds it. */
-  skipped: number;
-  /** Threw: logged, and listed again on the next pass. */
-  failed: number;
-  /** The pass hit its limit, so more may be due now. */
-  more: boolean;
-  /** v0.17.0: items deleted for good from the content trash, TRASH_DAYS after they went there. */
-  emptied: number;
-  /** v0.17.0: failed publish hooks run again, where the site has a store. */
-  retried: number;
-}
-
-/** How long an item stays in the content trash (v0.17.0) before `runSchedules` deletes it for good. */
-export const TRASH_DAYS = 30;
-
-/** How many schedules one pass applies at most, so a backlog drains over several passes within a Worker's limits. */
-export const SCHEDULE_BATCH_LIMIT = 50;
-
-/** The part of a Worker's ExecutionContext the handler uses. */
-export interface WaitUntil {
-  waitUntil(promise: Promise<unknown>): void;
-}
-
-export interface SiteApi {
-  /** True when the request's path is inside the prefix. Mount the handler only where this holds. */
-  matches(request: Request): boolean;
-  handle(request: Request, ctx?: WaitUntil): Promise<Response>;
-  /**
-   * Applies every schedule due at `now` (v0.10.0) and runs the hooks for each: call it from the site's cron
-   * (`scheduled()`, under `ctx.waitUntil`). Safe to run as often as wanted: an applied schedule is gone, so a second
-   * pass finds nothing. A site whose adapter has no `schedules` applies nothing.
-   */
-  runSchedules(options?: { now?: Date; limit?: number }): Promise<ScheduleRun>;
-  /**
-   * `runSchedules` for a cron's job: the same pass, and it throws when a schedule failed, so the job is reported as failed
-   * and the schedule is listed again next pass. Returns the run when none failed.
-   */
-  runSchedulesOrThrow(options?: { now?: Date; limit?: number }): Promise<ScheduleRun>;
-  /** v0.17.0: true for a GET (v0.22.0: or a HEAD) under PREVIEW_LINK_PATH, outside the prefix. Mount `servePreviewLink` where this holds. */
-  matchesPreviewLink(request: Request): boolean;
-  /**
-   * Serves a shareable preview link with no key (v0.17.0): the item's current source through the site's preview, never
-   * indexed, cached or sent on as a referrer. An expired link answers 410; a revoked one (v0.22.0) and any other 404, and a
-   * site with no store answers every link 404. A HEAD gets the GET's status and headers, no body. Rate limited like the API.
-   */
-  servePreviewLink(request: Request): Promise<Response>;
-}
+export * from "./server/config.js";
+export { HOOK_BACKOFF_MINUTES } from "./server/events.js";
 
 export const MIN_KEY_LENGTH = 32;
 
@@ -152,33 +80,6 @@ export function isSiteApiRequest(url: URL): boolean {
 
 export function insidePrefix(pathname: string): boolean {
   return pathname === PREFIX || pathname.startsWith(`${PREFIX}/`);
-}
-
-// The content writes the publish hooks hear, and the action each is, by method and route.
-const PAGE_WRITE =
-  /^\/content\/([^/]+)(?:\/(draft|publish|unpublish|tags|trash|restore|rename|schedule))?$/;
-const ACTION: Record<string, PublishAction> = {
-  "PUT draft": "update",
-  "PUT tags": "update",
-  "POST publish": "publish",
-  "POST unpublish": "unpublish",
-  "DELETE ": "delete",
-  "POST trash": "trash",
-  "POST restore": "restore",
-  "POST rename": "rename",
-  "POST schedule": "schedule",
-  "DELETE schedule": "unschedule",
-};
-
-/** How long a failed hook waits before each retry (v0.17.0), in minutes; after the last it is given up and logged. */
-export const HOOK_BACKOFF_MINUTES = [1, 5, 30, 120, 720] as const;
-
-const MINUTE = 60 * 1000;
-
-function bearer(request: Request): string | null {
-  const header = request.headers.get("authorization");
-  const match = header?.match(/^Bearer[ ]+(\S+)\s*$/i);
-  return match ? match[1]! : null;
 }
 
 export function createSiteApi(config: SiteApiConfig): SiteApi {
@@ -233,72 +134,10 @@ export function createSiteApi(config: SiteApiConfig): SiteApi {
     `^/(${[...(media ? [] : ["media"]), ...(mentions ? [] : ["mentions"]), ...(insight ? [] : ["insight"]), ...(store ? [] : ["preview-links"]), ...(hookRuns.length ? [] : ["hooks"]), "inbox", "publications"].join("|")})(/|$)`,
   );
 
-  type Page = { path: string | null; status: ContentStatus | null };
-
   // The item's public path and status, read before a write and after it. A draft that was never published has no page.
   async function pageOf(id: string): Promise<Page> {
     const doc = await adapter.content.get(id).catch(() => null);
     return { path: doc?.path ?? null, status: doc?.status ?? null };
-  }
-
-  // The event for one content write, from the page before it and after it. A draft that was never published has no page,
-  // so its writes tell no one, except a schedule or an unschedule (v0.22.0), which a hook naming them hears with no path.
-  function pageEvent(
-    id: string,
-    action: PublishAction,
-    before: Page,
-    after: Page | null,
-    written: { changeId?: string },
-    request: Request,
-  ): PublishEvent | null {
-    const path = after?.path ?? before.path;
-    if (!path && action !== "schedule" && action !== "unschedule") return null;
-    const moved =
-      action === "rename" && before.path && path && before.path !== path ? before.path : null;
-    return {
-      action,
-      id,
-      path,
-      url: path ? new URL(path, adapter.site.origin).href : null,
-      trigger: "request",
-      changeId: written.changeId ?? null,
-      request,
-      ...(before.status ? { previousStatus: before.status } : {}),
-      ...(after?.status ? { status: after.status } : {}),
-      ...(moved
-        ? { previousPath: moved, previousUrl: new URL(moved, adapter.site.origin).href }
-        : {}),
-    };
-  }
-
-  /**
-   * v0.22.0 (F5): the tombstones. A delete or a trash of a live item leaves its path answering 410; a publish there, or a
-   * rename onto it, takes the tombstone away. The trash emptying itself keeps it. A store that cannot keep one is logged,
-   * and the write stands.
-   */
-  async function keepTombstones(
-    action: PublishAction,
-    before: Page,
-    after: Page | null,
-  ): Promise<void> {
-    if (!store?.markGone || !store.clearGone) return;
-    try {
-      const at = new Date().toISOString();
-      if (
-        (action === "delete" || action === "trash") &&
-        before.status === "published" &&
-        before.path
-      )
-        await store.markGone(before.path, at);
-      if (
-        (action === "publish" || action === "rename") &&
-        after?.status === "published" &&
-        after.path
-      )
-        await store.clearGone(after.path);
-    } catch (error) {
-      log({ siteApi: "tombstone-failed", action, error: String(error) });
-    }
   }
 
   // v0.17.0: a hook that fails is kept for the cron to try again, where the site has a store.
@@ -457,7 +296,7 @@ export function createSiteApi(config: SiteApiConfig): SiteApi {
         run.applied.push({ ...item, version: written.version });
         const page = await pageOf(item.id);
         if (item.kind === "publish")
-          await keepTombstones("publish", { path: null, status: "scheduled" }, page);
+          await keepTombstones(store, log, "publish", { path: null, status: "scheduled" }, page);
         if (page.path && page.status === "published") {
           const url = new URL(page.path, adapter.site.origin).href;
           const previousStatus = item.kind === "publish" ? "scheduled" : "published";
@@ -586,8 +425,8 @@ export function createSiteApi(config: SiteApiConfig): SiteApi {
         const now = written.id ?? id;
         const after = action === "delete" ? null : await pageOf(now);
         // The tombstone is part of the write, so a 404 handler asked the moment it answers already says 410.
-        await keepTombstones(action, before, after);
-        const event = pageEvent(now, action, before, after, written, request);
+        await keepTombstones(store, log, action, before, after);
+        const event = pageEvent(adapter.site.origin, now, action, before, after, written, request);
         if (event && hooks.length > 0) {
           const told = tell(event).catch((error) =>
             log({ siteApi: "page-change-failed", error: String(error) }),
