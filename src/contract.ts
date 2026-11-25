@@ -17,8 +17,10 @@ export {
   SortDir,
   Version,
 } from "./contract/base.js";
+export { ROUTES } from "./contract/routes.js";
 export * from "./contract/content.js";
 export * from "./contract/media.js";
+export * from "./contract/media/writes.js";
 export * from "./contract/mentions.js";
 export * from "./contract/insight.js";
 import { SiteInfo, Version } from "./contract/base.js";
@@ -61,6 +63,17 @@ import {
   WriteResult,
 } from "./contract/content.js";
 import {
+  MediaDetail,
+  MediaItem,
+  MediaLens,
+  MediaList,
+  MediaListQuery,
+  MediaUploadLimits,
+  MediaUploadQuery,
+  MediaUploadResult,
+  MediaUse,
+} from "./contract/media.js";
+import {
   MediaAltInput,
   MediaBulkInput,
   MediaBulkResult,
@@ -68,14 +81,9 @@ import {
   MediaCreditInput,
   MediaDeleteQuery,
   MediaDeleteResult,
-  MediaDetail,
   MediaFocusInput,
   MediaHistory,
   MediaImportInput,
-  MediaItem,
-  MediaLens,
-  MediaList,
-  MediaListQuery,
   MediaReplaceQuery,
   MediaReplaceResult,
   MediaResize,
@@ -91,12 +99,8 @@ import {
   MediaTrashEmptyInput,
   MediaTrashEmptyResult,
   MediaTrashInput,
-  MediaUploadLimits,
-  MediaUploadQuery,
-  MediaUploadResult,
-  MediaUse,
   MediaWriteResult,
-} from "./contract/media.js";
+} from "./contract/media/writes.js";
 import {
   MentionDecideInput,
   MentionDeleteQuery,
@@ -280,331 +284,6 @@ export type Capabilities = z.infer<typeof Capabilities>;
 export type Meta = z.infer<typeof Meta>;
 export type ErrorCode = z.infer<typeof ErrorCode>;
 export type ErrorBody = z.infer<typeof ErrorBody>;
-
-/**
- * Every route, relative to PREFIX. Groups declared for later stages answer 501 until a site
- * implements them, so a route's existence is part of the contract even before its body is. The
- * media group arrived in v0.2.0; a site whose adapter has no `media` still answers it 501. v0.3.0
- * adds the source at a revision and an optional content delete (501 when the adapter has none).
- * v0.4.0 adds media writes, each optional per site (501 when the adapter lacks the method): alt
- * text, tags, trash, restore and empty-trash, and one bulk route that applies any of them to many files.
- * v0.5.0 adds the mentions group: list, decide, delete and sweep, answering 501 for a site whose
- * adapter has no `mentions`. v0.10.0 adds reading and canceling a schedule, 501 for a site whose adapter
- * has no `schedules`, and a file's focal point, caption and replace, each 501 where the adapter lacks it. v0.13.0 adds
- * import, credit, transform, history, revert, suggestions and the resize pass, each 501 where the adapter lacks it, and
- * the upload answers MediaUploadResult, a MediaItem with three optional properties more. v0.16.0 adds the insight group's
- * first route, the 404 report, 501 for a site whose adapter has no `insight`. v0.17.0 adds rename, trash and restore of
- * content and the preview links, each 501 where the adapter or the store is absent. v0.19.0 adds the model's suggestions for
- * a file before it is stored, 501 where the adapter lacks it, and an upload or import with neither alt nor `decorative`
- * answers 400.
- */
-export const ROUTES = [
-  { group: "meta", method: "GET", path: "/meta", response: "Meta" },
-  {
-    group: "content",
-    method: "GET",
-    path: "/content",
-    query: "ListQuery",
-    response: "ContentList",
-  },
-  { group: "content", method: "GET", path: "/content/:id", response: "ContentDoc" },
-  {
-    group: "content",
-    method: "PUT",
-    path: "/content/:id/draft",
-    request: "SaveDraftInput",
-    response: "WriteResult",
-  },
-  {
-    group: "content",
-    method: "POST",
-    path: "/content/:id/publish",
-    request: "PublishInput",
-    response: "WriteResult",
-  },
-  {
-    group: "content",
-    method: "POST",
-    path: "/content/:id/schedule",
-    request: "ScheduleInput",
-    response: "WriteResult",
-  },
-  {
-    group: "content",
-    method: "POST",
-    path: "/content/:id/unpublish",
-    request: "UnpublishInput",
-    response: "WriteResult",
-  },
-  { group: "content", method: "GET", path: "/content/:id/revisions", response: "RevisionList" },
-  {
-    group: "content",
-    method: "GET",
-    path: "/content/:id/diff",
-    query: "DiffQuery",
-    response: "Diff",
-  },
-  {
-    group: "content",
-    method: "GET",
-    path: "/content/:id/revisions/:version",
-    response: "RevisionSource",
-  },
-  {
-    group: "content",
-    method: "DELETE",
-    path: "/content/:id",
-    query: "ContentDeleteQuery",
-    response: "ContentDeleteResult",
-  },
-  {
-    group: "content",
-    method: "PUT",
-    path: "/content/:id/tags",
-    request: "ContentTagsInput",
-    response: "WriteResult",
-  },
-  { group: "content", method: "GET", path: "/content/:id/schedule", response: "ScheduledUpdate" },
-  {
-    group: "content",
-    method: "DELETE",
-    path: "/content/:id/schedule",
-    query: "ScheduleCancelQuery",
-    response: "WriteResult",
-  },
-  {
-    group: "preview",
-    method: "POST",
-    path: "/preview",
-    request: "PreviewInput",
-    response: "text/html",
-  },
-  { group: "media", method: "GET", path: "/media", query: "MediaListQuery", response: "MediaList" },
-  {
-    group: "media",
-    method: "POST",
-    path: "/media",
-    query: "MediaUploadQuery",
-    request: "the file's bytes",
-    response: "MediaUploadResult",
-  },
-  {
-    group: "media",
-    method: "POST",
-    path: "/media/import",
-    request: "MediaImportInput",
-    response: "MediaUploadResult",
-  },
-  { group: "media", method: "GET", path: "/media/:id", response: "MediaDetail" },
-  {
-    group: "media",
-    method: "DELETE",
-    path: "/media/:id",
-    query: "MediaDeleteQuery",
-    response: "MediaDeleteResult",
-  },
-  {
-    group: "media",
-    method: "PUT",
-    path: "/media/:id/alt",
-    request: "MediaAltInput",
-    response: "MediaWriteResult",
-  },
-  {
-    group: "media",
-    method: "PUT",
-    path: "/media/:id/tags",
-    request: "MediaTagsInput",
-    response: "MediaWriteResult",
-  },
-  {
-    group: "media",
-    method: "PUT",
-    path: "/media/:id/focus",
-    request: "MediaFocusInput",
-    response: "MediaWriteResult",
-  },
-  {
-    group: "media",
-    method: "PUT",
-    path: "/media/:id/caption",
-    request: "MediaCaptionInput",
-    response: "MediaWriteResult",
-  },
-  {
-    group: "media",
-    method: "PUT",
-    path: "/media/:id/file",
-    query: "MediaReplaceQuery",
-    request: "the file's bytes",
-    response: "MediaReplaceResult",
-  },
-  {
-    group: "media",
-    method: "PUT",
-    path: "/media/:id/credit",
-    request: "MediaCreditInput",
-    response: "MediaWriteResult",
-  },
-  {
-    group: "media",
-    method: "POST",
-    path: "/media/:id/transform",
-    request: "MediaTransformInput",
-    response: "MediaTransformResult",
-  },
-  { group: "media", method: "GET", path: "/media/:id/history", response: "MediaHistory" },
-  {
-    group: "media",
-    method: "POST",
-    path: "/media/:id/revert",
-    request: "MediaRevertInput",
-    response: "MediaTransformResult",
-  },
-  { group: "media", method: "GET", path: "/media/:id/suggestions", response: "MediaSuggestions" },
-  {
-    group: "media",
-    method: "POST",
-    path: "/media/:id/trash",
-    request: "MediaTrashInput",
-    response: "MediaWriteResult",
-  },
-  {
-    group: "media",
-    method: "POST",
-    path: "/media/:id/restore",
-    request: "MediaTrashInput",
-    response: "MediaWriteResult",
-  },
-  {
-    group: "media",
-    method: "POST",
-    path: "/media/trash/empty",
-    request: "MediaTrashEmptyInput",
-    response: "MediaTrashEmptyResult",
-  },
-  {
-    group: "media",
-    method: "POST",
-    path: "/media/bulk",
-    request: "MediaBulkInput",
-    response: "MediaBulkResult",
-  },
-  {
-    group: "media",
-    method: "POST",
-    path: "/media/resize-pass",
-    request: "MediaResizePassInput",
-    response: "MediaResizePassResult",
-  },
-  {
-    group: "mentions",
-    method: "GET",
-    path: "/mentions",
-    query: "MentionListQuery",
-    response: "MentionList",
-  },
-  {
-    group: "mentions",
-    method: "POST",
-    path: "/mentions/sweep",
-    request: "MentionSweepInput",
-    response: "MentionSweepResult",
-  },
-  {
-    group: "mentions",
-    method: "POST",
-    path: "/mentions/:id/decide",
-    request: "MentionDecideInput",
-    response: "MentionWriteResult",
-  },
-  {
-    group: "mentions",
-    method: "DELETE",
-    path: "/mentions/:id",
-    query: "MentionDeleteQuery",
-    response: "MentionDeleteResult",
-  },
-  // v0.17.0, each 501 where the adapter lacks it.
-  {
-    group: "content",
-    method: "POST",
-    path: "/content/:id/rename",
-    request: "RenameInput",
-    response: "RenameResult",
-  },
-  {
-    group: "content",
-    method: "POST",
-    path: "/content/:id/trash",
-    request: "ContentTrashInput",
-    response: "WriteResult",
-  },
-  {
-    group: "content",
-    method: "POST",
-    path: "/content/:id/restore",
-    request: "ContentTrashInput",
-    response: "WriteResult",
-  },
-  {
-    group: "preview",
-    method: "POST",
-    path: "/preview-links",
-    request: "PreviewLinkInput",
-    response: "PreviewLink",
-  },
-  {
-    group: "preview",
-    method: "GET",
-    path: "/preview-links",
-    query: "PreviewLinkListQuery",
-    response: "PreviewLinkList",
-  },
-  {
-    group: "preview",
-    method: "DELETE",
-    path: "/preview-links/:linkId",
-    query: "PreviewLinkRevokeQuery",
-    response: "PreviewLinkRevokeResult",
-  },
-  {
-    group: "insight",
-    method: "GET",
-    path: "/insight/not-found",
-    query: "NotFoundQuery",
-    response: "NotFoundReport",
-  },
-  // v0.19.0, 501 where the adapter lacks it.
-  {
-    group: "media",
-    method: "POST",
-    path: "/media/suggestions",
-    query: "MediaFileSuggestQuery",
-    request: "the file's bytes, or none with url",
-    response: "MediaFileSuggestions",
-  },
-  // v0.22.0: backlinks, 501 where the adapter lacks them, and the hook runs a store keeps, 501 without a store.
-  { group: "content", method: "GET", path: "/content/:id/backlinks", response: "BacklinkList" },
-  {
-    group: "hooks",
-    method: "GET",
-    path: "/hooks/recent",
-    query: "HookRunsQuery",
-    response: "HookRunList",
-  },
-  // v0.36.0: an item's transcript, 501 where the adapter lacks it.
-  {
-    group: "content",
-    method: "PUT",
-    path: "/content/:id/transcript",
-    request: "TranscriptInput",
-    response: "TranscriptWriteResult",
-  },
-  { group: "inbox", method: "*", path: "/inbox/*", response: "not-implemented" },
-  { group: "insight", method: "*", path: "/insight/*", response: "not-implemented" },
-  { group: "publications", method: "*", path: "/publications/*", response: "not-implemented" },
-] as const;
 
 export const HASHED = {
   Meta,
