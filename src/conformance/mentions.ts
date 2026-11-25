@@ -4,8 +4,18 @@ import { STALE_VERSION, MENTION_PROBE_ID } from "./context.js";
 
 // The mentions group, checked on every site, since a site without it must say 501.
 export async function mentionChecks(ctx: ConformanceContext): Promise<void> {
-  const { config, doFetch, origin, auth, capabilities, check, probe, errorCode, expectStatus } =
-    ctx;
+  const {
+    config,
+    doFetch,
+    origin,
+    auth,
+    capabilities,
+    check,
+    probe,
+    errorCode,
+    expectStatus,
+    expectUnknownId,
+  } = ctx;
 
   const hasMentions = capabilities?.mentions === true;
   const mentionPath = `${origin}${PREFIX}/mentions`;
@@ -66,16 +76,12 @@ export async function mentionChecks(ctx: ConformanceContext): Promise<void> {
           expectedVersion: STALE_VERSION,
           changeId: probe(),
         });
-        expectStatus(
+        return expectUnknownId(
           response,
-          hasMentions ? 404 : 501,
-          hasMentions ? "unknown mention decide" : "mention decide on a site without mentions",
+          hasMentions,
+          "unknown mention decide",
+          "mention decide on a site without mentions",
         );
-        const expected = hasMentions ? "not-found" : "not-implemented";
-        const code = await errorCode(response);
-        if (code !== expected)
-          throw new Error(`error code ${code ?? "missing"}, expected ${expected}`);
-        return hasMentions ? "404 not-found" : "501 not-implemented";
       },
     );
 
@@ -86,16 +92,12 @@ export async function mentionChecks(ctx: ConformanceContext): Promise<void> {
           `${mentionPath}/${MENTION_PROBE_ID}?expectedVersion=${STALE_VERSION}&changeId=${probe()}`,
           { method: "DELETE", headers: auth },
         );
-        expectStatus(
+        return expectUnknownId(
           response,
-          hasMentions ? 404 : 501,
-          hasMentions ? "unknown mention delete" : "mention delete on a site without mentions",
+          hasMentions,
+          "unknown mention delete",
+          "mention delete on a site without mentions",
         );
-        const expected = hasMentions ? "not-found" : "not-implemented";
-        const code = await errorCode(response);
-        if (code !== expected)
-          throw new Error(`error code ${code ?? "missing"}, expected ${expected}`);
-        return hasMentions ? "404 not-found" : "501 not-implemented";
       },
     );
 
@@ -108,16 +110,12 @@ export async function mentionChecks(ctx: ConformanceContext): Promise<void> {
           expectedVersion: STALE_VERSION,
           changeId: probe(),
         });
-        expectStatus(
+        return expectUnknownId(
           response,
-          offered ? 404 : 501,
-          offered ? "unknown mention reset" : "mention reset on a site without it",
+          offered,
+          "unknown mention reset",
+          "mention reset on a site without it",
         );
-        const expected = offered ? "not-found" : "not-implemented";
-        const code = await errorCode(response);
-        if (code !== expected)
-          throw new Error(`error code ${code ?? "missing"}, expected ${expected}`);
-        return offered ? "404 not-found" : "501 not-implemented";
       },
     );
 

@@ -16,7 +16,15 @@ export interface ConformanceContext {
   /** A fresh change id for a probe write. */
   probe(): string;
   errorCode(response: Response): Promise<string | null>;
+  /** A JSON write to a route under the prefix, with the key. */
+  send(method: string, path: string, body: unknown): Promise<Response>;
   expectStatus(response: Response, status: number, what: string): void;
+  expectUnknownId(
+    response: Response,
+    offered: boolean,
+    whenOffered: string,
+    whenNot: string,
+  ): Promise<string>;
 }
 
 /** An id no site should hold, so the refused write names nothing real. */

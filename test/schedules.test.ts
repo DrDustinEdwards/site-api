@@ -13,6 +13,23 @@ import { KEY, ORIGIN, allow, body, clientOf, req } from "./helpers.js";
 const LIVE = "---\ntitle: Live\n---\nThe live words.\n";
 const NEXT = "---\ntitle: Live\n---\nThe updated words.\n";
 
+function siteWithHooks(
+  hooks: NonNullable<Parameters<typeof createSiteApi>[0]["hooks"]>,
+  extra: { store?: ReturnType<typeof d1SiteApiStore> } = {},
+) {
+  const logs: Array<Record<string, unknown>> = [];
+  const adapter = memoryAdapter({ site: { id: "memory", name: "Memory site", origin: ORIGIN } });
+  const api = createSiteApi({
+    adapter,
+    key: KEY,
+    limiter: allow,
+    log: (entry) => logs.push(entry),
+    hooks,
+    ...extra,
+  });
+  return { api, adapter, logs };
+}
+
 function mounted(adapter = memoryAdapter()) {
   const heard: PublishEvent[] = [];
   const logs: Array<Record<string, unknown>> = [];
@@ -208,25 +225,17 @@ describe("scheduled updates (v0.10.0)", () => {
 describe("publish hooks (v0.10.0)", () => {
   it("logs a hook that fails and never fails the write; the IndexNow hook sends the page through the site's submit", async () => {
     const sent: Array<{ urls: string[]; from?: string }> = [];
-    const logs: Array<Record<string, unknown>> = [];
-    const adapter = memoryAdapter({ site: { id: "memory", name: "Memory site", origin: ORIGIN } });
-    const api = createSiteApi({
-      adapter,
-      key: KEY,
-      limiter: allow,
-      log: (entry) => logs.push(entry),
-      hooks: [
-        { name: "broken", run: () => Promise.reject(new Error("boom")) },
-        indexNowHook({
-          origin: ORIGIN,
-          key: "indexnow-key",
-          submit: async (input) => {
-            sent.push(input);
-            return true;
-          },
-        }),
-      ],
-    });
+    const { api, logs } = siteWithHooks([
+      { name: "broken", run: () => Promise.reject(new Error("boom")) },
+      indexNowHook({
+        origin: ORIGIN,
+        key: "indexnow-key",
+        submit: async (input) => {
+          sent.push(input);
+          return true;
+        },
+      }),
+    ]);
     const client = clientOf(api);
     const preview = clientOf(api, "https://preview.workers.dev");
 
@@ -283,16 +292,9 @@ describe("publish hooks (v0.17.0)", () => {
   it("hears what a hook names, sends both addresses of a rename, and retries a failed hook from the store until it gives up", async () => {
     const heard: string[] = [];
     const sent: string[][] = [];
-    const logs: Array<Record<string, unknown>> = [];
     let failing = true;
-    const adapter = memoryAdapter({ site: { id: "memory", name: "Memory site", origin: ORIGIN } });
-    const api = createSiteApi({
-      adapter,
-      key: KEY,
-      limiter: allow,
-      log: (entry) => logs.push(entry),
-      store: d1SiteApiStore(d1(SITE_API_STORE_SQL)),
-      hooks: [
+    const { api, logs } = siteWithHooks(
+      [
         {
           name: "all",
           on: ["schedule", "trash", "restore", "rename"],
@@ -304,7 +306,8 @@ describe("publish hooks (v0.17.0)", () => {
           submit: async (input) => (sent.push(input.urls), !failing),
         }),
       ],
-    });
+      { store: d1SiteApiStore(d1(SITE_API_STORE_SQL)) },
+    );
     const client = clientOf(api);
 
     const draft = await client.saveDraft("a", {

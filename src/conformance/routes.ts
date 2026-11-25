@@ -14,7 +14,9 @@ export async function routeChecks(ctx: ConformanceContext): Promise<void> {
     skip,
     probe,
     errorCode,
+    send,
     expectStatus,
+    expectUnknownId,
   } = ctx;
 
   const hasNotFound = capabilities?.insightNotFound === true;
@@ -76,13 +78,6 @@ export async function routeChecks(ctx: ConformanceContext): Promise<void> {
 
   if (config.probeWrites !== false) {
     const caps = capabilities ?? ({} as Partial<MetaType["capabilities"]>);
-    const send = (method: string, path: string, body: unknown) =>
-      doFetch(`${origin}${PREFIX}${path}`, {
-        method,
-        headers: { ...auth, "content-type": "application/json" },
-        body: JSON.stringify(body),
-      });
-
     async function expectCode(
       response: Response,
       allowed: Array<[number, string]>,
@@ -225,15 +220,11 @@ export async function routeChecks(ctx: ConformanceContext): Promise<void> {
     await check(
       "unknown body field: refused with unknown-field before anything is written",
       async () => {
-        const response = await doFetch(`${origin}${PREFIX}/content/${PROBE_ID}/draft`, {
-          method: "PUT",
-          headers: { ...auth, "content-type": "application/json" },
-          body: JSON.stringify({
-            source: "# Conformance probe\n",
-            expectedVersion: STALE_VERSION,
-            changeId: probe(),
-            carrelConformanceProbe: true,
-          }),
+        const response = await send("PUT", `/content/${PROBE_ID}/draft`, {
+          source: "# Conformance probe\n",
+          expectedVersion: STALE_VERSION,
+          changeId: probe(),
+          carrelConformanceProbe: true,
         });
         return expectUnknownField(response, "carrelConformanceProbe");
       },
@@ -251,11 +242,7 @@ export async function routeChecks(ctx: ConformanceContext): Promise<void> {
         headers: auth,
       });
       const offered = capabilities?.backlinks === true;
-      expectStatus(response, offered ? 404 : 501, "backlinks");
-      const code = await errorCode(response);
-      if (code !== (offered ? "not-found" : "not-implemented"))
-        throw new Error(`error code ${code ?? "missing"}`);
-      return offered ? "404 not-found" : "501 not-implemented";
+      return expectUnknownId(response, offered, "backlinks", "backlinks");
     },
   );
 }

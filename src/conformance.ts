@@ -113,6 +113,35 @@ export async function runConformance(config: ConformanceConfig): Promise<Conform
       throw new Error(`${what}: expected ${status}, got ${response.status}`);
   }
 
+  const send = (method: string, path: string, body: unknown) =>
+    doFetch(`${origin}${PREFIX}${path}`, {
+      method,
+      headers: { ...auth, "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+  /** The first item of the content list, or undefined on a site with none. */
+  async function firstItem() {
+    const list = ContentList.parse(
+      await (await doFetch(`${origin}${PREFIX}/content?limit=1`, { headers: auth })).json(),
+    );
+    return list.items[0];
+  }
+
+  /** An unknown id answers 404 not-found where the site offers the route, and 501 not-implemented where it does not. */
+  async function expectUnknownId(
+    response: Response,
+    offered: boolean,
+    whenOffered: string,
+    whenNot: string,
+  ): Promise<string> {
+    expectStatus(response, offered ? 404 : 501, offered ? whenOffered : whenNot);
+    const code = await errorCode(response);
+    const expected = offered ? "not-found" : "not-implemented";
+    if (code !== expected) throw new Error(`error code ${code ?? "missing"}, expected ${expected}`);
+    return offered ? "404 not-found" : "501 not-implemented";
+  }
+
   let meta: MetaType | null = null;
 
   await check("meta: answers with this contract's schema hash", async () => {
@@ -169,14 +198,10 @@ export async function runConformance(config: ConformanceConfig): Promise<Conform
 
   if (config.probeWrites !== false) {
     await check("stale expectedVersion: refused", async () => {
-      const response = await doFetch(`${origin}${PREFIX}/content/${PROBE_ID}/draft`, {
-        method: "PUT",
-        headers: { ...auth, "content-type": "application/json" },
-        body: JSON.stringify({
-          source: "# Conformance probe\n\nA conforming site refuses this write.\n",
-          expectedVersion: STALE_VERSION,
-          changeId: probe(),
-        }),
+      const response = await send("PUT", `/content/${PROBE_ID}/draft`, {
+        source: "# Conformance probe\n\nA conforming site refuses this write.\n",
+        expectedVersion: STALE_VERSION,
+        changeId: probe(),
       });
       expectStatus(response, 409, "stale write");
       const code = await errorCode(response);
@@ -201,10 +226,7 @@ export async function runConformance(config: ConformanceConfig): Promise<Conform
   });
 
   await check("revision source: the newest revision of the first item opens", async () => {
-    const list = ContentList.parse(
-      await (await doFetch(`${origin}${PREFIX}/content?limit=1`, { headers: auth })).json(),
-    );
-    const first = list.items[0];
+    const first = await firstItem();
     if (!first) return "no items to read a revision of";
     const revisions = RevisionList.parse(
       await (
@@ -229,10 +251,7 @@ export async function runConformance(config: ConformanceConfig): Promise<Conform
   // The newest revision is the item as it stands: a site that lists only the states before each edit leaves the live
   // version out of Carrel's history (and the name of the client that published it) until the next edit.
   await check("revisions: the newest is the item's current version", async () => {
-    const list = ContentList.parse(
-      await (await doFetch(`${origin}${PREFIX}/content?limit=1`, { headers: auth })).json(),
-    );
-    const first = list.items[0];
+    const first = await firstItem();
     if (!first) return "no items to read a revision of";
     const id = encodeURIComponent(first.id);
     const doc = ContentDoc.parse(
@@ -269,16 +288,12 @@ export async function runConformance(config: ConformanceConfig): Promise<Conform
       async () => {
         const response = await doFetch(deleteUrl, { method: "DELETE", headers: auth });
         const offered = (meta as MetaType | null)?.capabilities.contentDelete === true;
-        expectStatus(
+        return expectUnknownId(
           response,
-          offered ? 404 : 501,
-          offered ? "unknown content delete" : "content delete on a site without it",
+          offered,
+          "unknown content delete",
+          "content delete on a site without it",
         );
-        const code = await errorCode(response);
-        const expected = offered ? "not-found" : "not-implemented";
-        if (code !== expected)
-          throw new Error(`error code ${code ?? "missing"}, expected ${expected}`);
-        return offered ? "404 not-found" : "501 not-implemented";
       },
     );
     await check(
@@ -294,16 +309,12 @@ export async function runConformance(config: ConformanceConfig): Promise<Conform
           }),
         });
         const offered = (meta as MetaType | null)?.capabilities.contentTags === true;
-        expectStatus(
+        return expectUnknownId(
           response,
-          offered ? 404 : 501,
-          offered ? "unknown content tags" : "content tags on a site without them",
+          offered,
+          "unknown content tags",
+          "content tags on a site without them",
         );
-        const code = await errorCode(response);
-        const expected = offered ? "not-found" : "not-implemented";
-        if (code !== expected)
-          throw new Error(`error code ${code ?? "missing"}, expected ${expected}`);
-        return offered ? "404 not-found" : "501 not-implemented";
       },
     );
     await check(
@@ -319,16 +330,12 @@ export async function runConformance(config: ConformanceConfig): Promise<Conform
           }),
         });
         const offered = (meta as MetaType | null)?.capabilities.contentTranscript === true;
-        expectStatus(
+        return expectUnknownId(
           response,
-          offered ? 404 : 501,
-          offered ? "unknown content transcript" : "content transcript on a site without it",
+          offered,
+          "unknown content transcript",
+          "content transcript on a site without it",
         );
-        const code = await errorCode(response);
-        const expected = offered ? "not-found" : "not-implemented";
-        if (code !== expected)
-          throw new Error(`error code ${code ?? "missing"}, expected ${expected}`);
-        return offered ? "404 not-found" : "501 not-implemented";
       },
     );
     await check(
@@ -336,24 +343,21 @@ export async function runConformance(config: ConformanceConfig): Promise<Conform
       async () => {
         const path = `${origin}${PREFIX}/content/${PROBE_ID}/schedule`;
         const offered = (meta as MetaType | null)?.capabilities.scheduledUpdates === true;
-        const expected = offered ? "not-found" : "not-implemented";
+        let answer = "";
         for (const response of [
           await doFetch(path, { headers: auth }),
           await doFetch(`${path}?expectedVersion=${STALE_VERSION}&changeId=${probe()}`, {
             method: "DELETE",
             headers: auth,
           }),
-        ]) {
-          expectStatus(
+        ])
+          answer = await expectUnknownId(
             response,
-            offered ? 404 : 501,
-            offered ? "unknown schedule" : "schedule on a site without scheduled updates",
+            offered,
+            "unknown schedule",
+            "schedule on a site without scheduled updates",
           );
-          const code = await errorCode(response);
-          if (code !== expected)
-            throw new Error(`error code ${code ?? "missing"}, expected ${expected}`);
-        }
-        return offered ? "404 not-found" : "501 not-implemented";
+        return answer;
       },
     );
   }
@@ -371,6 +375,8 @@ export async function runConformance(config: ConformanceConfig): Promise<Conform
     probe,
     errorCode,
     expectStatus,
+    expectUnknownId,
+    send,
   };
   await mediaChecks(ctx);
   await mentionChecks(ctx);

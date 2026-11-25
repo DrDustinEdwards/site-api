@@ -12,8 +12,18 @@ import { MEDIA_PROBE_ID, PROBE_TYPE, PROBE_PNG, STALE_VERSION } from "./context.
 
 // The media group: only for a site that offers it.
 export async function mediaChecks(ctx: ConformanceContext): Promise<void> {
-  const { config, doFetch, origin, auth, capabilities, check, probe, errorCode, expectStatus } =
-    ctx;
+  const {
+    config,
+    doFetch,
+    origin,
+    auth,
+    capabilities,
+    check,
+    probe,
+    errorCode,
+    send,
+    expectStatus,
+  } = ctx;
 
   if (capabilities?.media) {
     await check("media: upload limits declared", async () => {
@@ -81,12 +91,6 @@ export async function mediaChecks(ctx: ConformanceContext): Promise<void> {
       // v0.4.0 writes. Each is optional: where the site declares the capability, the probe is refused as
       // a real error; where it does not, the same request must answer 501. Nothing here can change a file.
       const probeId = encodeURIComponent(MEDIA_PROBE_ID);
-      const send = (method: string, path: string, body: unknown) =>
-        doFetch(`${origin}${PREFIX}${path}`, {
-          method,
-          headers: { ...auth, "content-type": "application/json" },
-          body: JSON.stringify(body),
-        });
       const stale = { expectedVersion: STALE_VERSION, changeId: probe() };
 
       async function refusedOrAbsent(
