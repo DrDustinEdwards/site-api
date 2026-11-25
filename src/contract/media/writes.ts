@@ -24,11 +24,11 @@ export const MediaDeleteResult = z.object({
   changeId: ChangeId,
 });
 
-// ---------- media writes (v0.4.0)
+// ---------- media writes
 
 /** Every media metadata write names the version the caller last saw and Carrel's change id. */
 export const MediaAltInput = z.object({
-  /** v0.19.0: as an upload's, and "" only with `decorative: true`. */
+  /** As an upload's, and "" only with `decorative: true`. */
   alt: z.string().max(2000),
   decorative: z.literal(true).optional(),
   expectedVersion: Version,
@@ -58,7 +58,7 @@ export const MediaWriteResult = z.object({
   changeId: ChangeId,
 });
 
-// ---------- focal point, caption and replace (v0.10.0)
+// ---------- focal point, caption and replace
 
 /** Sets or clears (null) the point a file's crops are cut around. */
 export const MediaFocusInput = z.object({
@@ -174,7 +174,7 @@ export const MediaTrashEmptyResult = z.object({
   more: z.boolean(),
 });
 
-// ---------- the media library's ideas (v0.13.0), each optional per site
+// ---------- the media library's ideas, each optional per site
 
 /** What a site does to large pictures at upload: the longest edge it keeps, and the quality it encodes them at. */
 export const MediaResize = z.object({
@@ -193,7 +193,7 @@ export const MediaImportInput = z.object({
     // oxlint-disable-next-line no-control-regex
     .regex(/^[^/\\\u0000-\u001f]+$/, "A file name, with no path")
     .optional(),
-  /** An upload's: optional since v0.30.0, and checked when sent. */
+  /** An upload's: optional, and checked when sent. */
   alt: z.string().max(2000).optional(),
   decorative: z.literal(true).optional(),
   resize: z.enum(["no"]).optional(),
@@ -202,8 +202,8 @@ export const MediaImportInput = z.object({
 });
 
 /**
- * The file's credit, license, source and license end, as one write: each is the whole value after it. v0.19.0 adds the
- * copyright notice and the two license addresses, each kept as it was where the write leaves it out.
+ * The file's credit, license, source and license end, as one write: each is the whole value after it. The copyright notice
+ * and the two license addresses are each kept as it was where the write leaves it out.
  */
 export const MediaCreditInput = z.object({
   credit: MediaCredit,
@@ -315,7 +315,7 @@ export const MediaSuggestions = z.object({
   /** The model that made them, as the site names it. */
   model: z.string().min(1).max(200),
   /**
-   * v0.34.0: the tokens the suggestion spent, as Anthropic reported them, so a caller that pays for the call (Carrel's monthly
+   * The tokens the suggestion spent, as Anthropic reported them, so a caller that pays for the call (Carrel's monthly
    * cap) counts what was spent. Absent: the site's adapter did not report them.
    */
   usage: z
@@ -329,7 +329,7 @@ export const MediaSuggestions = z.object({
 });
 
 /**
- * What the site's model suggests for a file before it is stored (v0.19.0, capabilities.mediaUploadSuggestions): the body
+ * What the site's model suggests for a file before it is stored (capabilities.mediaUploadSuggestions): the body
  * is the file's bytes, typed by Content-Type, as an upload's; or, for an import, no body and the address as `url`, fetched
  * and checked as an import is. Nothing is stored.
  */

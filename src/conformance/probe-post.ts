@@ -20,7 +20,7 @@ import {
 } from "../frontmatter.js";
 import type { ConformanceContext } from "./context.js";
 
-// The probe post (M1): one post of the run's own, each step a probe, and the post deleted at the end whatever failed.
+// The probe post: one post of the run's own, each step a probe, and the post deleted at the end whatever failed.
 export async function probePost(ctx: ConformanceContext): Promise<void> {
   const { run, config, doFetch, origin, auth, capabilities, check, skip, probe, expectStatus } =
     ctx;

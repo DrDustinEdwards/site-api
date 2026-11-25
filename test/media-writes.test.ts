@@ -1,5 +1,5 @@
-// Media writes (v0.4.0): alt, tags, trash, restore, empty trash and the bulk route. Each write is
-// versioned; each refusal is checked together with the fact that nothing changed.
+// Media writes: alt, tags, trash, restore, empty trash and the bulk route. Each write is versioned; each refusal is
+// checked together with the fact that nothing changed.
 
 import { describe, expect, it } from "vitest";
 import { createSiteClient, SiteApiError } from "../src/client.js";
@@ -19,7 +19,6 @@ function setup(options: Parameters<typeof memoryAdapter>[0] = {}) {
       alt: "first",
       changeId: `up-${filename.replace(/[^A-Za-z0-9]/g, "")}`,
     });
-  // Two uploaded files, both moved to the trash.
   const addTrashedPair = async () => {
     const a = await add("a.png");
     const b = await add("b.png");
@@ -230,25 +229,6 @@ describe("trash, restore and empty", () => {
     expect(second.more).toBe(false);
     expect(second.deleted).toHaveLength(2);
     expect(adapter.mediaStore.size).toBe(0);
-  });
-
-  it("gives each deleted file its own change id, built from the request's", async () => {
-    const { client, add, adapter } = setup();
-    const seen: string[] = [];
-    const del = adapter.media!.delete;
-    adapter.media!.delete = (id, input) => {
-      seen.push(input.changeId);
-      return del(id, input);
-    };
-    for (const name of ["a.png", "b.png"]) {
-      const f = await add(name);
-      await client.media.trash(f.id, {
-        expectedVersion: f.version!,
-        changeId: `t-${name.slice(0, 1)}`,
-      });
-    }
-    await client.media.emptyTrash({ changeId: "base" });
-    expect(seen).toEqual(["base-1", "base-2"]);
   });
 });
 

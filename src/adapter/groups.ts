@@ -9,7 +9,7 @@ import type {
 } from "../contract.js";
 
 /**
- * The mentions group (v0.5.0), optional per site. Every write throws VersionConflictError when
+ * The mentions group, optional per site. Every write throws VersionConflictError when
  * expectedVersion is not what the site holds, NotFoundError for a missing id and RefusedError when
  * the site's own rules refuse. The write and the cache purge it needs are one unit, run together in
  * the method, and the method reports whether the purge worked.
@@ -23,7 +23,7 @@ export interface MentionsAdapter {
     input: { decision: "approve" | "reject"; expectedVersion: string; changeId: string },
   ): Promise<{ status: MentionStatus; version: string; purged: boolean | null }>;
   /**
-   * Optional (v0.6.0): takes an approved or rejected mention back to pending, as it was before the
+   * Optional: takes an approved or rejected mention back to pending, as it was before the
    * decision, so a decision can be undone. Refuse (RefusedError) any other status. Absent: a reset answers 501.
    */
   reset?(
@@ -39,7 +39,7 @@ export interface MentionsAdapter {
   sweep(input: { changeId: string }): Promise<{ failed: number; rejected: number }>;
 }
 
-/** One schedule whose time has come (v0.10.0): a scheduled item to publish, or a live item's update to apply. */
+/** One schedule whose time has come: a scheduled item to publish, or a live item's update to apply. */
 export interface DueSchedule {
   id: string;
   /** publish: a scheduled item that was not live goes live. update: a live item's scheduled update replaces it. */
@@ -50,7 +50,7 @@ export interface DueSchedule {
 }
 
 /**
- * Scheduled updates (v0.10.0), optional per site: a live item carries one waiting update with its own source and time.
+ * Scheduled updates, optional per site: a live item carries one waiting update with its own source and time.
  * The live version stays served until then, and at that time the update replaces it. The site stores the update beside
  * the live item (D1 sites: `d1ScheduledUpdates` from `@dustinedwards/site-api/schedules`). With this group, the site's
  * cron calls `api.runSchedules()`, which publishes scheduled items as well, and the publish hooks run for each.
@@ -94,21 +94,21 @@ export interface SchedulesAdapter {
    * otherwise it changes nothing and returns null, since a cancel, a reschedule or an unpublish got there first. A
    * scheduled item's first publication records `publishAt` as its `publishedAt`, not the time the cron ran.
    *
-   * v0.17.0: a site whose scheduled item goes live by time alone, with no write (its pages compare `publishAt` with the
+   * A site whose scheduled item goes live by time alone, with no write (its pages compare `publishAt` with the
    * clock), still lists it in `due` as kind "publish", and `apply` answers its WriteResult without writing anything, so
    * the publish hooks hear it go live. Once applied it must leave `due`, or the hooks would hear it on every pass.
    */
   apply(id: string, input: DueSchedule & { now: Date }): Promise<WriteResult | null>;
 }
 
-/** What a 404 report is asked for (v0.16.0): site-runtime's `notFoundReport` options, checked and filled in. */
+/** What a 404 report is asked for: site-runtime's `notFoundReport` options, checked and filled in. */
 export interface NotFoundOptions {
   days: number;
   limit: number;
   includeProbes: boolean;
 }
 
-/** The insight group (v0.16.0), optional per site: what the site counted about its own pages. Read only. */
+/** The insight group, optional per site: what the site counted about its own pages. Read only. */
 export interface InsightAdapter {
   /**
    * The most-hit missing paths of the last `days` UTC days, at most `limit`, probes only with `includeProbes`. A site

@@ -126,7 +126,7 @@ const freshXmp = (blocks: Blocks) =>
   blocks.xmp !== null || blocks.iptc !== null ? xmpPacket(factsOf(blocks)) : null;
 
 /**
- * The picture without its private metadata (v0.19.0; v0.15.0's stripLocation took out only the location): no GPS, camera
+ * The picture without its private metadata (more than the location): no GPS, camera
  * or lens serial number, owner's name, MakerNote, dates, thumbnail, IPTC, editing history or vendor block. Kept: the
  * orientation, the color profile (ICC, sRGB, gamma, CICP, the color space), the resolution, a JPEG's Adobe color transform,
  * a WebP's or PNG's animation, and who made it and its terms (EXIF artist and copyright, and a fresh XMP of the IPTC
@@ -156,7 +156,7 @@ export function stripMetadata(bytes: Uint8Array, contentType: string): Uint8Arra
 }
 
 /**
- * The key every site finds duplicates by (v0.21.0): the SHA-256, as lower case hex, of the bytes as sent with their
+ * The key every site finds duplicates by: the SHA-256, as lower case hex, of the bytes as sent with their
  * private metadata taken out (stripMetadata). The same file sent twice has the same key, and so does a copy that differs
  * only in what stripMetadata takes out (a location, a serial number, a date), since the site would store the same bytes
  * for both. The package's route asks findByHash about it and sends it as `MediaUpload.sha256`; prepareUpload answers it

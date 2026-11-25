@@ -18,7 +18,7 @@ import type {
 export interface Stored {
   doc: ContentDoc;
   history: Array<{ revision: Revision; source: string }>;
-  /** The update waiting on a live item (v0.10.0), kept beside it as a site's own table would. */
+  /** The update waiting on a live item, kept beside it as a site's own table would. */
   pending?: ScheduledUpdate;
   /** The change that scheduled a scheduled item, which its publish is recorded under. */
   scheduleChangeId?: string;
@@ -27,47 +27,47 @@ export interface Stored {
 export interface MemoryAdapterOptions {
   site?: SiteInfo;
   now?: () => Date;
-  /** The media group's limits, or false for a site with no media manager (a v0.1.0 site). */
+  /** The media group's limits, or false for a site with no media manager. */
   media?: MediaUploadLimits | false;
   /** false for a site whose adapter has no content delete (its route then answers 501). On by default. */
   contentDelete?: boolean;
   /** true for a site that deletes only from the trash, refusing a delete of a post that is not in it (germomics). Off by default. */
   deleteFromTrashOnly?: boolean;
-  /** false for a site that keeps no post tags through the API (a v0.5.0 site): the tags route then answers 501. On by default. */
+  /** false for a site that keeps no post tags through the API: the tags route then answers 501. On by default. */
   contentTags?: boolean;
-  /** false for a site whose transcripts are read only (before v0.36.0): the transcript route then answers 501. On by default. */
+  /** false for a site whose transcripts are read only (no transcript writes): the transcript route then answers 501. On by default. */
   contentTranscript?: boolean;
-  /** false for a v0.14.0 content group (v0.17.0): no settable publish date, rename, trash, list filters or post fields. On by default. */
+  /** false for a content group without them: no settable publish date, rename, trash, list filters or post fields. On by default. */
   contentExtras?: boolean;
-  /** false for a media manager with no alt, tag, trash, focal point, caption or replace writes (a v0.2.0 site): those routes then answer 501. On by default. */
+  /** false for a media manager with no alt, tag, trash, focal point, caption or replace writes: those routes then answer 501. On by default. */
   mediaWrites?: boolean;
-  /** false for a media manager with no lenses and no sort (a v0.5.0 site): a lens then answers 501. On by default. */
+  /** false for a media manager with no lenses and no sort: a lens then answers 501. On by default. */
   mediaLenses?: boolean;
-  /** true for a site whose replace refuses a picture of another size, as some sites do (v0.11.0). Off by default. */
+  /** true for a site whose replace refuses a picture of another size, as some sites do. Off by default. */
   mediaReplaceKeepsSize?: boolean;
   /**
-   * false for a v0.12.0 media manager (v0.13.0): no duplicates, usage counts, filters, credit, transforms, history, changes,
+   * false for a media manager without the media library ideas: no duplicates, usage counts, filters, credit, transforms, history, changes,
    * embedded metadata, suggestions or new lenses. On by default, with `mediaWrites`.
    */
   mediaExtras?: boolean;
   /**
-   * true for a site that answers an upload of bytes it holds with that file (v0.13.0), and the duplicates lens. Off by
+   * true for a site that answers an upload of bytes it holds with that file, and the duplicates lens. Off by
    * default, since tests upload the same few bytes again and again.
    */
   mediaDuplicates?: boolean;
-  /** What uploads shrink to (v0.13.0), or false for none. { maxEdge: 2048, quality: 82 } by default, with `mediaExtras`. */
+  /** What uploads shrink to, or false for none. { maxEdge: 2048, quality: 82 } by default, with `mediaExtras`. */
   mediaResize?: MediaResize | false;
-  /** The fetch imports use (v0.13.0). Absent: the site does not import, so no test ever reaches the network. */
+  /** The fetch imports use. Absent: the site does not import, so no test ever reaches the network. */
   mediaImportFetch?: typeof fetch;
-  /** false for a mentions group that ignores q and targetId (a v0.5.0 site) and so echoes no `filtered`. On by default. */
+  /** false for a mentions group that ignores q and targetId and so echoes no `filtered`. On by default. */
   mentionFilters?: boolean;
   /** false for a site that does not receive webmentions (its routes then answer 501). On by default. */
   mentions?: boolean;
-  /** false for a mentions group with no reset (a v0.5.0 site): a reset then answers 501. On by default. */
+  /** false for a mentions group with no reset: a reset then answers 501. On by default. */
   mentionReset?: boolean;
-  /** false for a site with no scheduled updates (a v0.9.0 site): reading and canceling a schedule answer 501. On by default. */
+  /** false for a site with no scheduled updates: reading and canceling a schedule answer 501. On by default. */
   schedules?: boolean;
-  /** The site's counted 404s (v0.16.0), as report rows most hits first. Absent: the site reports none, and the route answers 501. */
+  /** The site's counted 404s, as report rows most hits first. Absent: the site reports none, and the route answers 501. */
   notFound?: NotFoundRow[];
 }
 
@@ -105,9 +105,9 @@ export const EXTENSIONS: Record<string, string> = {
 export interface StoredMedia {
   item: MediaItem;
   bytes: Uint8Array;
-  /** v0.13.0: the content hash the package sent, for duplicates. */
+  /** The content hash the package sent, for duplicates. */
   sha256?: string;
-  /** v0.13.0: every set of bytes the file has had, oldest first; the last is current. */
+  /** Every set of bytes the file has had, oldest first; the last is current. */
   revisions?: Array<Omit<MediaRevision, "current"> & { data: Uint8Array }>;
 }
 
@@ -142,7 +142,7 @@ export function pngText(bytes: Uint8Array): Record<string, string> {
   return found;
 }
 
-/** The item with its tags (v0.6.0), where its frontmatter can hold them, and its authors and excerpt where it has them (v0.17.0). */
+/** The item with its tags, where its frontmatter can hold them, and its authors and excerpt where it has them. */
 export function withTags(doc: ContentDoc): ContentDoc {
   const front = splitSource(doc.source).front;
   if (front === null) return doc;

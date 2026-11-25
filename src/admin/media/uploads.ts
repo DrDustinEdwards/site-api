@@ -112,11 +112,11 @@ const EMBEDDED_WORDS: Record<string, string> = {
   acquireLicenseUrl: "licensing page",
 };
 
-/** A form's "decorative" box (v0.19.0), checked. */
+/** A form's "decorative" box, checked. */
 export const decorativeOf = (input: IntentInput) =>
   ["yes", "on", "1", "true"].includes(text(input, "decorative"));
 
-/** The alt an upload or an import sends, or decorative (v0.19.0), or neither (v0.30.0): checked as the site checks it. */
+/** The alt an upload or an import sends, or decorative, or neither: checked as the site checks it. */
 function altOf(
   input: IntentInput,
   filename: string | null,
@@ -130,7 +130,7 @@ function altOf(
 }
 
 /**
- * The site's model's alt text and tags for a file the form holds, or an address to import (v0.19.0): what the upload form
+ * The site's model's alt text and tags for a file the form holds, or an address to import: what the upload form
  * puts in its alt field, marked as a suggestion, for the person to keep, change or replace. Nothing is stored.
  */
 export async function suggestFor(source: ContentSource, input: IntentInput): Promise<IntentResult> {
@@ -197,7 +197,7 @@ async function stored(
   );
 }
 
-/** Has the site fetch a file from the web into its own storage (v0.13.0): `url`, and optional `filename` and `alt`. */
+/** Has the site fetch a file from the web into its own storage: `url`, and optional `filename` and `alt`. */
 export async function importOne(source: ContentSource, input: IntentInput): Promise<IntentResult> {
   const url = text(input, "url").trim();
   if (!/^https:\/\//i.test(url)) return refused("Give the file's https address.");

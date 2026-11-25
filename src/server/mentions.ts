@@ -1,4 +1,4 @@
-// The mentions routes (v0.5.0), mounted only when the site's adapter has mentions.
+// The mentions routes, mounted only when the site's adapter has mentions.
 
 import { jsonResponse } from "@dustinedwards/site-runtime/http";
 import type { MentionsAdapter } from "../adapter.js";

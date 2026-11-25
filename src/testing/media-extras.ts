@@ -6,7 +6,7 @@ import { type StoredMedia } from "./shared.js";
 
 import type { MediaExtrasContext } from "./media.js";
 
-/** The v0.13.0 methods, as a site that offers every one of them would write them. */
+/** The media library's methods, as a site that offers every one of them would write them. */
 export function extraMedia(ctx: MediaExtrasContext): Partial<MediaAdapter> {
   const {
     now,

@@ -45,7 +45,7 @@ export function bulkRoutes(ctx: MediaRouteContext): Route[] {
         // One at a time, like bulk: image work is slow, and one file's refusal is that file's outcome alone.
         for (const { id, expectedVersion, changeId } of input.items) {
           try {
-            // v0.22.0: where a replace keeps the size, pages hold each picture's width and height, so a shrink may only make
+            // Where a replace keeps the size, pages hold each picture's width and height, so a shrink may only make
             // the picture smaller in the same proportions (the boxes those pages drew still fit it). A site whose addresses
             // carry the size leaves `shrink` out altogether.
             const before = media.replaceKeepsSize
@@ -128,7 +128,7 @@ export function bulkRoutes(ctx: MediaRouteContext): Route[] {
           } catch (error) {
             const failure = describeFailure(error, log);
             if (failure.code !== "refused" && failure.code !== "not-found") {
-              // Nothing gone yet: fail as before. Otherwise stop here and say what is already gone, so a retry
+              // Nothing gone yet: fail. Otherwise stop here and say what is already gone, so a retry
               // knows where it stands.
               if (deleted.length === 0) throw error;
               refused.push({ id, message: failure.message });

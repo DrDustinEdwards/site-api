@@ -111,7 +111,7 @@ export async function runMediaIntent(
   if (!MEDIA_INTENTS.includes(intent))
     return refused("That is not something the media library can do.");
   // A replace changes every live page that uses the file and the old bytes are gone, so it is the Owner's, like a delete.
-  // A transform, a revert and a resize change every live page that uses the file too (v0.13.0), so they are the Owner's.
+  // A transform, a revert and a resize change every live page that uses the file too, so they are the Owner's.
   const bytes =
     intent === "replace" || intent === "transform" || intent === "revert" || intent === "resize";
   const need: keyof Permissions =
@@ -193,8 +193,8 @@ export async function runMediaIntent(
   ) {
     if (sendable.length !== 1 || targets.length !== 1) return result(early, "Choose one file.");
     const file = { id: sendable[0]!.id, version: sendable[0]!.version! };
-    // The words on a file a page uses show on that page, so changing them there is a publish (Carrel's publishing review,
-    // finding 7): someone who may not publish changes them only on a file nothing uses yet.
+    // The words on a file a page uses show on that page, so changing them there is a publish:
+    // someone who may not publish changes them only on a file nothing uses yet.
     if (
       (intent === "alt" || intent === "caption" || intent === "credit") &&
       !source.can.publish &&

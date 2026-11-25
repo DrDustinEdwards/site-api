@@ -1,5 +1,4 @@
-// The media routes (v0.2.0, writes v0.4.0, focal point, caption and replace v0.10.0, the media library's ideas
-// v0.13.0), mounted only when the site's adapter has media.
+// The media routes, mounted only when the site's adapter has media.
 
 import { type MediaAdapter } from "../adapter.js";
 import { MediaId } from "../contract.js";

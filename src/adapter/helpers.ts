@@ -68,7 +68,7 @@ export function capabilitiesOf(
   };
 }
 
-/** Trash and restore, and the delete that empties the trash (v0.17.0). */
+/** Trash and restore, and the delete that empties the trash. */
 export function hasContentTrash(adapter: SiteAdapter): boolean {
   const { content } = adapter;
   return (
@@ -76,7 +76,7 @@ export function hasContentTrash(adapter: SiteAdapter): boolean {
   );
 }
 
-/** The list filters the site applies (v0.17.0), in the contract's order. */
+/** The list filters the site applies, in the contract's order. */
 export function contentFiltersOf(adapter: SiteAdapter): ContentFilter[] {
   const offered = new Set<ContentFilter>(adapter.content.filters ?? []);
   if (hasContentTrash(adapter)) offered.add("trashed");
@@ -93,7 +93,7 @@ export async function contentVersion(parts: readonly unknown[]): Promise<string>
 }
 
 /**
- * A transcript's version (v0.36.0): contentVersion of its text, so the site and Carrel name the same one without a
+ * A transcript's version: contentVersion of its text, so the site and Carrel name the same one without a
  * column. The package puts it on every read that carries a transcript; an adapter checks a transcript write against it.
  */
 export function transcriptVersion(transcript: string): Promise<string> {

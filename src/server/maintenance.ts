@@ -10,7 +10,7 @@ type Log = (entry: Record<string, unknown>) => void;
 const DAY = 24 * 60 * 60 * 1000;
 export const MINUTE = 60 * 1000;
 
-/** How long a failed hook waits before each retry (v0.17.0), in minutes; after the last it is given up and logged. */
+/** How long a failed hook waits before each retry, in minutes; after the last it is given up and logged. */
 export const HOOK_BACKOFF_MINUTES = [1, 5, 30, 120, 720] as const;
 
 // Each kept failure is run again when due, on its own hook only, until it works or has been tried after every backoff.
@@ -54,7 +54,7 @@ export async function retryHooks(
   return retried;
 }
 
-// The content trash's own end (v0.17.0): items trashed more than TRASH_DAYS ago go for good, through the adapter's
+// The content trash's own end: items trashed more than TRASH_DAYS ago go for good, through the adapter's
 // delete with the version listed, so one changed since is refused and left. Each on its own, like a schedule.
 export async function emptyTrash(
   { adapter, log }: { adapter: SiteAdapter; log: Log },

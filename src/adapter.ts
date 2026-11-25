@@ -31,22 +31,22 @@ import {
 
 export interface ContentAdapter {
   /**
-   * Optional (v0.17.0): true when `publish` takes `publishedAt` and publishes under that date, a first publish backdated
+   * Optional: true when `publish` takes `publishedAt` and publishes under that date, a first publish backdated
    * or a live item re-dated (capabilities.contentPublishedAt). Absent: a publish carrying it answers 501.
    */
   publishedAtSettable?: boolean;
   /**
-   * Optional (v0.22.0): true when items carry `hasDraft` (live, with a saved draft not yet published) and `list` treats
+   * Optional: true when items carry `hasDraft` (live, with a saved draft not yet published) and `list` treats
    * such an item as published, a `status: "draft"` filter matching it too (capabilities.contentHasDraft).
    */
   hasDraft?: boolean;
   /**
-   * Optional (v0.17.0): the search and post fields the site renders from a post's frontmatter (capabilities.searchFields,
+   * Optional: the search and post fields the site renders from a post's frontmatter (capabilities.searchFields,
    * capabilities.postFields), each under its shared name in `@dustinedwards/site-api/frontmatter`. Absent: none.
    */
   searchFields?: readonly SearchField[];
   /**
-   * Optional (v0.17.0): the list filters `list` applies (capabilities.contentFilters): `kind`, `tag`, `author` (one of
+   * Optional: the list filters `list` applies (capabilities.contentFilters): `kind`, `tag`, `author` (one of
    * the item's authors), `published` (publishedAfter and publishedBefore, either or both). The package answers any other
    * with 501. `trashed` is offered with the trash, not here.
    */
@@ -60,7 +60,7 @@ export interface ContentAdapter {
    * expectedVersion is not what the site holds, including a non-null version for a missing id.
    */
   saveDraft(id: string, input: SaveDraftInput): Promise<WriteResult>;
-  /** A first publish from Carrel's key is allowed (design decision 2): Carrel decides who triggers it. */
+  /** A first publish from Carrel's key is allowed: Carrel decides who triggers it. */
   publish(id: string, input: PublishInput): Promise<WriteResult>;
   schedule(id: string, input: ScheduleInput): Promise<WriteResult>;
   /** Unpublish returns the item to draft. A delete is the separate, optional `delete` below. */
@@ -70,7 +70,7 @@ export interface ContentAdapter {
   /** The source as it was at a version; null when the id or the version does not exist. */
   revisionSource(id: string, version: string): Promise<string | null>;
   /**
-   * Optional (v0.3.0): deletes the item. Throws VersionConflictError when expectedVersion is not
+   * Optional: deletes the item. Throws VersionConflictError when expectedVersion is not
    * what the site holds, NotFoundError for a missing id, and RefusedError when the site's own rules
    * refuse. A site without it answers `DELETE /content/:id` with 501. The write and whatever the
    * site must do afterward (its cache purge, say) are one unit, so the site runs them together here.
@@ -80,7 +80,7 @@ export interface ContentAdapter {
     input: { expectedVersion: string; changeId: string; actor?: Actor },
   ): Promise<void>;
   /**
-   * Optional (v0.6.0): sets the item's whole tag set, already unique, and returns the write like a
+   * Optional: sets the item's whole tag set, already unique, and returns the write like a
    * save does. Throws VersionConflictError, NotFoundError (checked first, for a missing id) or
    * RefusedError like the writes. A site without it answers `PUT /content/:id/tags` with 501.
    */
@@ -89,14 +89,14 @@ export interface ContentAdapter {
     input: { tags: string[]; expectedVersion: string; changeId: string; actor?: Actor },
   ): Promise<WriteResult>;
   /**
-   * Optional (v0.17.0): moves the item to `newId`, its history with it, and, when it was ever published, keeps a permanent
+   * Optional: moves the item to `newId`, its history with it, and, when it was ever published, keeps a permanent
    * (301) redirect from its old path to the new one; answers that old path as `previousPath` (null when never published).
    * Throws NotFoundError (checked first), VersionConflictError, or RefusedError for a `newId` already taken. The move and
    * the redirect are one unit. A site without it answers `POST /content/:id/rename` with 501.
    */
   rename?(id: string, input: RenameInput): Promise<RenameResult>;
   /**
-   * Optional (v0.17.0), both or neither, and only beside `delete` (capabilities.contentTrash): `trash` sets `trashedAt`
+   * Optional, both or neither, and only beside `delete` (capabilities.contentTrash): `trash` sets `trashedAt`
    * and takes a live item off the site first, as one unit; `restore` clears it and always answers a draft, never a live
    * item. Each throws like the writes. `list` then never lists a trashed item unless `trashed` is true, and then only
    * those. The package's `runSchedules` deletes items trashed more than TRASH_DAYS ago, through `delete`.
@@ -110,12 +110,12 @@ export interface ContentAdapter {
     input: { expectedVersion: string; changeId: string; actor?: Actor },
   ): Promise<WriteResult>;
   /**
-   * Optional (v0.22.0, capabilities.backlinks): every other post that links to this one, so a delete or a trash warns with
+   * Optional (capabilities.backlinks): every other post that links to this one, so a delete or a trash warns with
    * the list first. The package checks the id exists before it asks. Absent: `GET /content/:id/backlinks` answers 501.
    */
   backlinks?(id: string): Promise<Backlink[]>;
   /**
-   * Optional (v0.36.0, capabilities.contentTranscript): replaces the item's transcript, live at once, keeping the one it
+   * Optional (capabilities.contentTranscript): replaces the item's transcript, live at once, keeping the one it
    * replaces in the site's own history. Throws NotFoundError (checked first), VersionConflictError with the
    * transcriptVersion the site holds (null when it has none) when `expectedTranscriptVersion` is not it, or RefusedError
    * when the site's rules refuse (a kind that has no transcript). The item's `version` stays as it was; `get` then
@@ -131,20 +131,20 @@ export interface PreviewAdapter {
 
 export interface SiteAdapter {
   site: SiteInfo;
-  /** Optional (v0.17.0): the Prelum `RENDER_VERSION` the site's stored HTML was rendered with (capabilities.render). */
+  /** Optional: the Prelum `RENDER_VERSION` the site's stored HTML was rendered with (capabilities.render). */
   renderVersion?: string;
   content: ContentAdapter;
   preview: PreviewAdapter;
-  /** Absent on a site with no media manager: the media routes then answer 501, as in v0.1.0. */
+  /** Absent on a site with no media manager: the media routes then answer 501. */
   media?: MediaAdapter;
   /** Absent on a site that does not receive webmentions: the mentions routes then answer 501. */
   mentions?: MentionsAdapter;
   /**
-   * Absent on a site with no scheduled updates (v0.10.0): reading and canceling a schedule answer 501, and a schedule on
+   * Absent on a site with no scheduled updates: reading and canceling a schedule answer 501, and a schedule on
    * a live item is refused, since the site's own schedule would take it off the site until the time.
    */
   schedules?: SchedulesAdapter;
-  /** Absent on a site that reports nothing about its pages (v0.16.0): the insight routes then answer 501. */
+  /** Absent on a site that reports nothing about its pages: the insight routes then answer 501. */
   insight?: InsightAdapter;
 }
 

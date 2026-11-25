@@ -43,9 +43,9 @@ const MENTION_FILTERS: readonly MentionFilter[] = [
 export interface MentionsQuery {
   /** Absent: open on pending, or on all when nothing is pending. */
   status?: MentionFilter;
-  /** v0.6.0: words in the source, the author or the excerpt. */
+  /** Words in the source, the author or the excerpt. */
   q?: string;
-  /** v0.6.0: only the mentions of this post. */
+  /** Only the mentions of this post. */
   targetId?: string;
   cursor?: string;
 }
@@ -127,7 +127,7 @@ export async function loadMentions(
     filter = "all";
     list = await page("all");
   }
-  // A site that filtered echoes it (v0.6.0); otherwise the kit filters the page it has and says that.
+  // A site that filtered echoes it; otherwise the kit filters the page it has and says that.
   let items = list.items;
   const filteredOnPage =
     (query.q !== undefined || query.targetId !== undefined) && list.filtered === undefined;
@@ -160,7 +160,7 @@ const PURGE_FAILED =
   " The site could not clear its cache, so the post's page may show the old mentions until its cache expires.";
 
 /**
- * Approves, rejects, resets (v0.6.0) or deletes each mention, in order, each with its own change id and record, or
+ * Approves, rejects, resets or deletes each mention, in order, each with its own change id and record, or
  * sweeps the queue. Each write carries the version the person saw, so a mention the site changed since
  * is refused as stale and stays.
  */
@@ -258,7 +258,7 @@ export async function runMentionsIntent(
     if (ask) return ask;
   }
 
-  // Each done mention's inverse: the opposite decision between approved and rejected, a reset (v0.6.0)
+  // Each done mention's inverse: the opposite decision between approved and rejected, a reset
   // for a decision on a waiting mention, and the decision that was taken back for a reset.
   const inverses: Array<{
     id: string;

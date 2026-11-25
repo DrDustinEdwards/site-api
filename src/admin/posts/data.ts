@@ -26,17 +26,17 @@ export interface PostRow {
   publishedAt: string | null;
   updatedAt: string | null;
   /**
-   * The update scheduled to replace a live post (v0.10.0): when it goes live, and where its source is shown
+   * The update scheduled to replace a live post: when it goes live, and where its source is shown
    * (`ContentSource.scheduleHref`, else the editor). Absent when nothing waits.
    */
   scheduledUpdate?: { publishAt: string; href: string };
   /** Present when the site's list carries it. */
   version?: string;
   tags?: string[];
-  /** v0.17.0, where the site keeps them: everyone credited, the primary first, and the excerpt. */
+  /** Where the site keeps them: everyone credited, the primary first, and the excerpt. */
   authors?: string[];
   excerpt?: string;
-  /** v0.17.0, on a trashed post: when it went to the trash. */
+  /** On a trashed post: when it went to the trash. */
   trashedAt?: string | null;
   notes?: RowNote[];
 }
@@ -121,7 +121,7 @@ export async function loadPosts(source: ContentSource, query: PostQuery = {}): P
   const meta = await source.client.meta();
   const filters = meta.capabilities.contentFilters ?? [];
   const trash = hasTrash(meta.capabilities);
-  // The filters the site applies (v0.17.0) go to it; kind and tag on a site without them still work on the page it sent.
+  // The filters the site applies go to it; kind and tag on a site without them still work on the page it sent.
   const onSite: Partial<ListQuery> = {
     ...(query.kind && filters.includes("kind") ? { kind: query.kind } : {}),
     ...(query.tag && filters.includes("tag") ? { tag: query.tag } : {}),
@@ -154,7 +154,7 @@ export async function loadPosts(source: ContentSource, query: PostQuery = {}): P
   if (query.kind && !onSite.kind) rows = rows.filter((r) => r.kind === query.kind);
   if (query.tag && !onSite.tag)
     rows = rows.filter((r) => (r.tags ?? []).some((t) => sameTag(t, query.tag!)));
-  // A site that sorted says so (v0.6.0); otherwise the kit sorts the page it has and says that.
+  // A site that sorted says so; otherwise the kit sorts the page it has and says that.
   const sortedOnPage = query.sort !== undefined && list.sorted === undefined;
   if (sortedOnPage) {
     const dir = query.dir ?? (query.sort === "title" ? "asc" : "desc");
@@ -163,7 +163,7 @@ export async function loadPosts(source: ContentSource, query: PostQuery = {}): P
         (dir === (query.sort === "title" ? "asc" : "desc") ? 1 : -1) * BY[query.sort!](a, b),
     );
   }
-  // Where the site counts (v0.6.0), each status tab gets its count for the same search, and the Trash its own.
+  // Where the site counts, each status tab gets its count for the same search, and the Trash its own.
   let counts: PostsData["counts"];
   if (list.total !== undefined) {
     const statuses = ["draft", "scheduled", "published"] as const;
@@ -212,7 +212,7 @@ export async function loadPosts(source: ContentSource, query: PostQuery = {}): P
   };
 }
 
-/** True where the site has the content trash (v0.17.0): trash and restore, and delete for good from it. */
+/** True where the site has the content trash: trash and restore, and delete for good from it. */
 export const hasTrash = (capabilities: Capabilities | null) => capabilities?.contentTrash === true;
 
 /** A time as the kit's messages say it: "2030-01-01 15:00 UTC", the same wherever the host runs. */
@@ -221,7 +221,7 @@ export function scheduleLabel(publishAt: string): string {
 }
 
 /**
- * The warning before a save to a live post that has an update waiting (v0.10.0): the save changes the live post now,
+ * The warning before a save to a live post that has an update waiting: the save changes the live post now,
  * and the update still replaces the whole post at its time. null when there is nothing to warn about. The editor
  * shows it before saving; the kit adds it to a tag change's outcome. `label` says the time; an admin that writes times its
  * own way elsewhere passes its formatter, so the page says one time one way.

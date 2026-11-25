@@ -56,7 +56,7 @@ export function fileRoutes(ctx: MediaRouteContext): Route[] {
         const wrongBytes = checkUpload(contentType, read.bytes, media.limits);
         if (wrongBytes) throw new BadRequest(wrongBytes.code, wrongBytes.message);
         const { item, sizesNeedPurge } = await media.replace(id, {
-          // A replacement's private metadata goes before the site sees it, as an upload's does in prepareUpload (v0.19.0).
+          // A replacement's private metadata goes before the site sees it, as an upload's does in prepareUpload.
           bytes: stripMetadata(read.bytes, contentType),
           contentType,
           filename: query.filename,
@@ -79,7 +79,7 @@ export function fileRoutes(ctx: MediaRouteContext): Route[] {
         );
       },
     },
-    // v0.13.0, each 501 where the adapter lacks it.
+    // Each 501 where the adapter lacks it.
     {
       method: "PUT",
       pattern: new RegExp(`^/media/${ID}/credit$`),

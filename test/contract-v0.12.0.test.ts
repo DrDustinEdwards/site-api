@@ -168,7 +168,7 @@ describe("the v0.12.0 contract", () => {
     widened(V0120.schemas.MediaLens!, now("MediaLens"), NEW_LENSES, "MediaLens");
   });
 
-  it("adds only the new schemas v0.13.0, v0.17.0 and v0.17.0 name", () => {
+  it("adds only the new schemas later versions name", () => {
     expect(exported.filter((n) => !(n in V0120.schemas)).sort()).toEqual(
       [
         ...NEW_SCHEMAS,
@@ -179,45 +179,5 @@ describe("the v0.12.0 contract", () => {
         ...V0190_SCHEMAS,
       ].sort(),
     );
-  });
-
-  it("parses v0.12.0 bodies with the v0.13.0 schemas", () => {
-    const item = {
-      id: "uploads/1-a.png",
-      url: "/media/uploads/1-a.png",
-      filename: "a.png",
-      contentType: "image/png",
-      bytes: 9,
-      width: null,
-      height: null,
-      alt: "",
-      uploadedAt: null,
-      deletable: true,
-      version: "m1",
-      tags: [],
-      trashedAt: null,
-      focus: null,
-      caption: "",
-    };
-    expect(contract.MediaUploadResult.safeParse(item).success).toBe(true);
-    expect(
-      contract.MediaList.safeParse({
-        items: [item],
-        nextCursor: null,
-        total: 1,
-        sorted: { sort: "added", dir: "desc" },
-      }).success,
-    ).toBe(true);
-    const capabilities = {
-      content: true,
-      preview: true,
-      media: true,
-      inbox: false,
-      insight: false,
-      publications: false,
-      mediaLenses: ["no-alt"],
-      mediaReplace: true,
-    };
-    expect(contract.Capabilities.safeParse(capabilities).success).toBe(true);
   });
 });

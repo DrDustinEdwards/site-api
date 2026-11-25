@@ -31,7 +31,7 @@ import {
 import { EMPTY_ROUNDS, megabytes, parseMediaTags } from "./intents.js";
 import { MEDIA_DONE } from "./uploads.js";
 
-/** Saves a file's credit, license, source address and license end (v0.13.0), each the whole value after it. */
+/** Saves a file's credit, license, source address and license end, each the whole value after it. */
 export async function setCredit(
   source: ContentSource,
   input: IntentInput,
@@ -72,7 +72,7 @@ const INVERSE: Record<TransformOp, TransformOp> = {
 };
 
 /**
- * Turns or mirrors one picture (v0.13.0), `op` one of MEDIA_TRANSFORMS. Undo puts the old bytes back where the site keeps
+ * Turns or mirrors one picture, `op` one of MEDIA_TRANSFORMS. Undo puts the old bytes back where the site keeps
  * history (a revert, so nothing is encoded twice), else turns it back. A quarter turn the site saves as a new file has no
  * Undo: the old file is as it was, and the message says so.
  */
@@ -125,7 +125,7 @@ export async function transformFile(
   return firstResult(outcomes, conflict, undo);
 }
 
-/** Puts a file's earlier bytes back (v0.13.0), `to` a revision from the inspector's history. Undo puts back the bytes it had. */
+/** Puts a file's earlier bytes back, `to` a revision from the inspector's history. Undo puts back the bytes it had. */
 export async function revertFile(
   source: ContentSource,
   file: { id: string; version: string },
@@ -160,7 +160,7 @@ export async function revertFile(
 }
 
 /**
- * Shrinks the chosen stored pictures to the site's size (v0.13.0), after asking: each changes every page that uses it. Sent
+ * Shrinks the chosen stored pictures to the site's size, after asking: each changes every page that uses it. Sent
  * in requests of the site's limit, each file with its own change id; one file's refusal is its own outcome.
  */
 export async function resizeFiles(

@@ -111,7 +111,7 @@ export function createSiteApi(config: SiteApiConfig): SiteApi {
   const { store } = config;
 
   const hooks: PublishHook[] = config.hooks ?? [];
-  // v0.22.0: the hooks a publish of a live page runs, by name, for capabilities.hooks and the conformance probe.
+  // The hooks a publish of a live page runs, by name, for capabilities.hooks and the conformance probe.
   const probe: PublishEvent = {
     action: "publish",
     id: "",
@@ -165,7 +165,7 @@ export function createSiteApi(config: SiteApiConfig): SiteApi {
   }
 
   // The event for one content write, from the page before it and after it. A draft that was never published has no page,
-  // so its writes tell no one, except a schedule or an unschedule (v0.22.0), which a hook naming them hears with no path.
+  // so its writes tell no one, except a schedule or an unschedule, which a hook naming them hears with no path.
   function pageEvent(
     id: string,
     action: PublishAction,
@@ -195,7 +195,7 @@ export function createSiteApi(config: SiteApiConfig): SiteApi {
   }
 
   /**
-   * v0.22.0 (F5): the tombstones. A delete or a trash of a live item leaves its path answering 410; a publish there, or a
+   * The tombstones. A delete or a trash of a live item leaves its path answering 410; a publish there, or a
    * rename onto it, takes the tombstone away. The trash emptying itself keeps it. A store that cannot keep one is logged,
    * and the write stands.
    */
@@ -224,8 +224,8 @@ export function createSiteApi(config: SiteApiConfig): SiteApi {
     }
   }
 
-  // v0.17.0: a hook that fails is kept for the cron to try again, where the site has a store.
-  // v0.22.0: each run is kept under its change id, where the store keeps hook runs, for `GET /hooks/recent`.
+  // A hook that fails is kept for the cron to try again, where the site has a store.
+  // Each run is kept under its change id, where the store keeps hook runs, for `GET /hooks/recent`.
   const tell = (event: PublishEvent) =>
     runHooks(
       hooks,
@@ -374,7 +374,7 @@ export function createSiteApi(config: SiteApiConfig): SiteApi {
     const hit = candidates.find((c) => c.route.method === request.method);
     if (!hit) return fail("method-not-allowed", "Method not allowed.");
 
-    // v0.22.0: a route that takes no query refuses one, before anything runs.
+    // A route that takes no query refuses one, before anything runs.
     if (!hit.route.query) {
       try {
         refuseAnyQuery(url);
@@ -482,7 +482,7 @@ export function createSiteApi(config: SiteApiConfig): SiteApi {
       }
       return run;
     },
-    // v0.22.0: HEAD as well, so a link checker's HEAD meets the same noindex answer as a browser's GET.
+    // HEAD as well, so a link checker's HEAD meets the same noindex answer as a browser's GET.
     matchesPreviewLink: (request) =>
       (request.method === "GET" || request.method === "HEAD") &&
       new URL(request.url).pathname.startsWith(PREVIEW_LINK_PATH),

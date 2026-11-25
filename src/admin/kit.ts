@@ -34,7 +34,7 @@ export interface ContentSource {
   can: Permissions;
   /** Where a row's title links: Carrel's editor, or the site's own. */
   editorHref(id: string): string;
-  /** Optional (v0.10.0): where a row's scheduled update is shown, its source beside the live one. Defaults to the editor. */
+  /** Optional: where a row's scheduled update is shown, its source beside the live one. Defaults to the editor. */
   scheduleHref?(id: string): string;
   /** Optional: a faster list than the site's own, such as Carrel's search index. Same answer as client.list. */
   postIndex?: { list(query: Partial<ListQuery> & { limit: number }): Promise<ContentList> };
@@ -51,13 +51,13 @@ export interface ContentSource {
   /** Where unexpected failures are logged. Defaults to console.error. */
   log?(entry: Record<string, unknown>): void;
   /**
-   * Optional (v0.22.0): the signed-in person, by display name. Every write the posts list sends carries it as `actor` (as
+   * Optional: the signed-in person, by display name. Every write the posts list sends carries it as `actor` (as
    * `actorName` on a DELETE), and the site keeps it as the revision's author.
    */
   actor?: { name: string };
 }
 
-/** The client with `actor` on every content write it sends (v0.22.0), so a host passes the person once. */
+/** The client with `actor` on every content write it sends, so a host passes the person once. */
 export function actingClient(client: SiteClient, actor: { name: string } | undefined): SiteClient {
   if (!actor) return client;
   const name = { actorName: actor.name };
@@ -92,7 +92,7 @@ export interface Outcome {
   usedBy?: MediaUse[];
   /** The new copy's id, after a duplicate. */
   copyId?: string;
-  /** True when an upload or import matched a file already stored, which is `id` (v0.13.0); nothing new was stored. */
+  /** True when an upload or import matched a file already stored, which is `id`; nothing new was stored. */
   duplicate?: boolean;
   /** The version this item's write made, so the screen's next write to it (another field of the same file) sends it. */
   version?: string;
@@ -109,9 +109,9 @@ export interface IntentResult {
   conflict?: { id: string; currentVersion: string | null };
   /** Set instead of acting, for a step nothing can undo: what to ask, and the fields to post again with `confirm`. */
   confirm?: ConfirmRequest;
-  /** Set by the posts list's `preview-link` (v0.17.0): the link to show once, and when it stops working. */
+  /** Set by the posts list's `preview-link`: the link to show once, and when it stops working. */
   previewLink?: { url: string; expiresAt: string };
-  /** Set by the media library's `suggest` (v0.19.0): the model's alt text and tags for the upload form, never stored as they are. */
+  /** Set by the media library's `suggest`: the model's alt text and tags for the upload form, never stored as they are. */
   suggestion?: { alt: string | null; tags: string[]; model: string };
 }
 
@@ -128,7 +128,7 @@ export interface ConfirmRequest {
   items: string[];
   fields: Fields;
   /**
-   * v0.22.0, on a delete or a trash where the site lists backlinks: each post about to go that other posts link to, and
+   * On a delete or a trash where the site lists backlinks: each post about to go that other posts link to, and
    * those posts, so the dialog warns with the list before the person confirms. Absent: nothing links to them.
    */
   backlinks?: Array<{ id: string; linkedFrom: Backlink[] }>;

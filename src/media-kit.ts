@@ -1,4 +1,4 @@
-// The media kit (v0.14.0): the pieces every site's media adapter wrote for itself, once. A file's version spelled from its
+// The media kit: the pieces every site's media adapter wrote for itself, once. A file's version spelled from its
 // index row's rev, a versioned write's outcome as the contract's answer or error, a fresh ArrayBuffer for R2 and the Images
 // binding, the AI suggester behind `suggest`, and the plain page a preview renders into.
 
@@ -120,7 +120,7 @@ export interface MediaSuggestion {
   tags: string[];
   alt: string | null;
   model: string;
-  /** What the call spent, as Anthropic reported it (v0.34.0). */
+  /** What the call spent, as Anthropic reported it. */
   usage?: { input: number; output: number; cacheRead: number; cacheWrite: number };
 }
 

@@ -27,12 +27,12 @@ export interface ConformanceConfig {
   /** Sends the stale-version write and the refused media writes. On by default; a conforming site refuses them and changes nothing. */
   probeWrites?: boolean;
   /**
-   * Uploads a 1x1 PNG of its own, reads it back and deletes it (v0.2.0). Off by default: it is a
+   * Uploads a 1x1 PNG of its own, reads it back and deletes it. Off by default: it is a
    * real write to the site's storage, though it deletes only the file it uploaded.
    */
   probeMediaUpload?: boolean;
   /**
-   * v0.22.0 (M1): makes a probe post of its own under a unique id, takes it through its life, and deletes it, even when a
+   * Makes a probe post of its own under a unique id, takes it through its life, and deletes it, even when a
    * step fails. Beside `probeWrites`, and off by default, since the post is published for a moment: its hooks run, and a
    * feed or a search engine may see it (its `noindex` is set where the site renders one). A site that cannot delete
    * content skips it, since the probe could not clean up after itself.
@@ -58,7 +58,7 @@ interface ConformanceCheck {
   detail: string;
 }
 
-/** One probe the run made or passed over (v0.22.0, M2): every check is one, and `skipped` ones say why in `detail`. */
+/** One probe the run made or passed over: every check is one, and `skipped` ones say why in `detail`. */
 interface ConformanceProbe {
   name: string;
   ok: boolean;
@@ -69,7 +69,7 @@ interface ConformanceProbe {
 export interface ConformanceReport {
   ok: boolean;
   checks: ConformanceCheck[];
-  /** v0.22.0: every probe in the order it ran, and every one passed over, with why. */
+  /** Every probe in the order it ran, and every one passed over, with why. */
   probes: ConformanceProbe[];
 }
 
@@ -81,7 +81,7 @@ export async function runConformance(config: ConformanceConfig): Promise<Conform
   const probes: ConformanceProbe[] = [];
   const skip = (name: string, why: string) =>
     void probes.push({ name, ok: true, skipped: true, detail: why });
-  // v0.17.0: a fresh change id for every probe write, since a site with `replay` keeps a refused write's answer under its
+  // A fresh change id for every probe write, since a site with `replay` keeps a refused write's answer under its
   // change id and would refuse the same id on another probe as a different request.
   const run = crypto.randomUUID().slice(0, 8);
   let sent = 0;
@@ -211,7 +211,7 @@ export async function runConformance(config: ConformanceConfig): Promise<Conform
     });
   }
 
-  // ---------- v0.3.0: the source at a revision, and the optional content delete
+  // ---------- the source at a revision, and the optional content delete
 
   await check("revision source of an unknown id: not found", async () => {
     const response = await doFetch(

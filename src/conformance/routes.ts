@@ -2,7 +2,7 @@ import { ErrorBody, NotFoundReport, PREFIX, type Meta as MetaType } from "../con
 import type { ConformanceContext } from "./context.js";
 import { PROBE_ID, STALE_VERSION } from "./context.js";
 
-// The insight group, and the content routes added since v0.17.0: each answers on the probe id, or 501 where the site lacks it.
+// The insight group, and the newer content routes: each answers on the probe id, or 501 where the site lacks it.
 export async function routeChecks(ctx: ConformanceContext): Promise<void> {
   const {
     config,
@@ -44,7 +44,7 @@ export async function routeChecks(ctx: ConformanceContext): Promise<void> {
     });
   }
 
-  // ---------- v0.17.0: each new route answers on the probe id, or 501 where the site lacks it
+  // ---------- each newer route answers on the probe id, or 501 where the site lacks it
 
   await check("errors: problem details with type, title and status", async () => {
     const response = await doFetch(`${origin}${PREFIX}/no-such-route`, { headers: auth });

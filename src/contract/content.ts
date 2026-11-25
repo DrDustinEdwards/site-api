@@ -15,24 +15,24 @@ import {
 
 export const ContentStatus = z.enum(["draft", "scheduled", "published"]);
 
-/** A post tag (v0.6.0): one short piece of text, trimmed, with nothing that would break a frontmatter list. */
+/** A post tag: one short piece of text, trimmed, with nothing that would break a frontmatter list. */
 export const ContentTag = z
   .string()
   .min(1)
   .max(40)
   .regex(/^[^\s,[\]"'#:\\](?:[^\r\n,[\]"'#:\\]*[^\s,[\]"'#:\\])?$/);
 
-/** A display name credited on a post (v0.17.0), as its `authors` post field holds it. */
+/** A display name credited on a post, as its `authors` post field holds it. */
 export const AuthorName = z.string().min(1).max(200);
 
-/** A post's whole tag set (v0.6.0). */
+/** A post's whole tag set. */
 export const ContentTags = z.array(ContentTag).max(50);
 
-/** What a list can be sorted by (v0.6.0). updated and published run newest first unless `dir` says otherwise; title runs A to Z. */
+/** What a list can be sorted by. updated and published run newest first unless `dir` says otherwise; title runs A to Z. */
 export const CONTENT_SORTS = ["updated", "published", "title"] as const;
 
 /**
- * The update waiting on a live item (v0.10.0): its own source replaces the live one at `publishAt`. Until then the
+ * The update waiting on a live item: its own source replaces the live one at `publishAt`. Until then the
  * live version is the one served. `changeId` is the change that scheduled it, and the one its publish is recorded under.
  */
 export const ScheduledUpdateSummary = z.object({
@@ -50,19 +50,19 @@ export const ContentSummary = z.object({
   publishAt: Timestamp.nullable(),
   publishedAt: Timestamp.nullable(),
   updatedAt: Timestamp.nullable(),
-  /** The item's version (v0.6.0), so a row's action needs no read first. Optional: a v0.5.0 site leaves it out. */
+  /** The item's version, so a row's action needs no read first. Optional: a site may leave it out. */
   version: Version.optional(),
-  /** The item's tags (v0.6.0), on a site that keeps them. */
+  /** The item's tags, on a site that keeps them. */
   tags: ContentTags.optional(),
-  /** On a live item, the update scheduled to replace it (v0.10.0); null when none. Absent: the site has no scheduled updates. */
+  /** On a live item, the update scheduled to replace it; null when none. Absent: the site has no scheduled updates. */
   scheduledUpdate: ScheduledUpdateSummary.nullable().optional(),
-  /** v0.17.0, from the post fields where the site keeps them, for a list: everyone credited, the primary first, and the excerpt. */
+  /** From the post fields where the site keeps them, for a list: everyone credited, the primary first, and the excerpt. */
   authors: z.array(AuthorName).max(50).optional(),
   excerpt: z.string().max(5000).optional(),
-  /** When the item went to the trash (v0.17.0), null when it is not there. Absent: the site has no content trash. */
+  /** When the item went to the trash, null when it is not there. Absent: the site has no content trash. */
   trashedAt: Timestamp.nullable().optional(),
   /**
-   * v0.22.0, where capabilities.contentHasDraft: true when the item is live and a saved draft waits that is not published
+   * Where capabilities.contentHasDraft: true when the item is live and a saved draft waits that is not published
    * yet; false otherwise. Such an item's `status` stays `published`, and a list filtered to `draft` lists it too.
    */
   hasDraft: z.boolean().optional(),
@@ -73,12 +73,12 @@ export const ContentDoc = ContentSummary.extend({
   source: Source,
   version: Version,
   /**
-   * v0.33.0: the item's transcript, read only, for a session that drafts from it (an episode's summary and chapters).
+   * The item's transcript, read only, for a session that drafts from it (an episode's summary and chapters).
    * Part of no version and no source: a save never carries it. Absent: the item has none or the site does not offer it.
    */
   transcript: z.string().max(500_000).optional(),
   /**
-   * v0.36.0, beside `transcript` on a site with capabilities.contentTranscript: the transcript's own version, which a
+   * Beside `transcript` on a site with capabilities.contentTranscript: the transcript's own version, which a
    * transcript write names as `expectedTranscriptVersion`. The package sets it (transcriptVersion); the item's `version`
    * does not move when the transcript does, so a draft of the post stays good across a transcript fix.
    */
@@ -98,7 +98,7 @@ export const TranscriptText = z
   });
 
 /**
- * Replacing an item's transcript (v0.36.0, capabilities.contentTranscript): `PUT /content/:id/transcript`. The whole
+ * Replacing an item's transcript (capabilities.contentTranscript): `PUT /content/:id/transcript`. The whole
  * WebVTT, and the transcriptVersion it was written from, null when the item has none yet. It is live at once: a
  * transcript has no draft on the site, so Carrel keeps the draft and sends this only when it publishes one.
  */
@@ -117,23 +117,23 @@ export const TranscriptWriteResult = z.object({
   changeId: ChangeId,
 });
 
-/** The list filters a site may offer (v0.17.0), named in capabilities.contentFilters; `published` is the pair of dates. */
+/** The list filters a site may offer, named in capabilities.contentFilters; `published` is the pair of dates. */
 export const CONTENT_FILTERS = ["kind", "tag", "author", "published", "trashed"] as const;
 
 export const ListQuery = z.object({
   status: ContentStatus.optional(),
   /** Matches the title and the body. Without `sort`, the newest updated come first. */
   q: z.string().max(200).optional(),
-  /** v0.17.0 filters, each answering 501 on a site that does not name it in capabilities.contentFilters. */
+  /** The newer filters, each answering 501 on a site that does not name it in capabilities.contentFilters. */
   kind: z.string().min(1).max(64).optional(),
   tag: ContentTag.optional(),
   author: AuthorName.optional(),
   publishedAfter: Timestamp.optional(),
   publishedBefore: Timestamp.optional(),
-  /** v0.6.0. A site that sorts says so in the answer's `sorted`; one that does not leaves its own order. */
+  /** A site that sorts says so in the answer's `sorted`; one that does not leaves its own order. */
   sort: z.enum(CONTENT_SORTS).optional(),
   dir: SortDir.optional(),
-  /** v0.17.0, where `contentTrash`: true lists only the trash. Absent or false: trashed items are never listed. */
+  /** Where `contentTrash`: true lists only the trash. Absent or false: trashed items are never listed. */
   trashed: z.stringbool().optional(),
   cursor: z.string().max(500).optional(),
   limit: Limit,
@@ -142,18 +142,18 @@ export const ListQuery = z.object({
 export const ContentList = z.object({
   items: z.array(ContentSummary),
   nextCursor: z.string().nullable(),
-  /** How many items match the query across every page (v0.6.0), where the site can count them. */
+  /** How many items match the query across every page, where the site can count them. */
   total: z.number().int().min(0).optional(),
-  /** The order the site applied (v0.6.0). Absent: the site did not sort as asked, so a caller sorts the page itself. */
+  /** The order the site applied. Absent: the site did not sort as asked, so a caller sorts the page itself. */
   sorted: z.object({ sort: z.enum(CONTENT_SORTS), dir: SortDir }).optional(),
   /**
-   * The v0.17.0 filters the site applied. A v0.14.0 site drops a filter it does not know and lists everything, so the
+   * The filters the site applied. A site that does not know a filter drops it it does not know and lists everything, so the
    * client refuses an answer that leaves out one it asked for, rather than show live posts as the trash.
    */
   filtered: z.array(z.enum(CONTENT_FILTERS)).optional(),
 });
 
-/** A post's whole tag set after the write (v0.6.0, optional per site). */
+/** A post's whole tag set after the write (optional per site). */
 export const ContentTagsInput = z.object({
   tags: ContentTags,
   expectedVersion: Version,
@@ -177,7 +177,7 @@ const PublishFields = z.object({
 });
 
 /**
- * source, when sent, is saved and published in one write. publishedAt (v0.17.0, where `contentPublishedAt`) is the
+ * source, when sent, is saved and published in one write. publishedAt (where `contentPublishedAt`) is the
  * date the item is published under: a backdate, or a new date for a live item. Never in the future: that is a schedule.
  */
 export const PublishInput = PublishFields.extend({
@@ -199,11 +199,11 @@ export const WriteResult = z.object({
   version: Version,
   status: ContentStatus,
   changeId: ChangeId,
-  /** The update still waiting on the item after the write (v0.10.0), null when none, on a site with scheduled updates. */
+  /** The update still waiting on the item after the write, null when none, on a site with scheduled updates. */
   scheduledUpdate: ScheduledUpdateSummary.nullable().optional(),
 });
 
-/** Trashing or restoring an item (v0.17.0, optional per site). */
+/** Trashing or restoring an item (optional per site). */
 export const ContentTrashInput = z.object({
   expectedVersion: Version,
   changeId: ChangeId,
@@ -211,7 +211,7 @@ export const ContentTrashInput = z.object({
 });
 
 /**
- * Moving an item to a new id (v0.17.0, optional per site). Its old public path, where it was ever published, keeps a
+ * Moving an item to a new id (optional per site). Its old public path, where it was ever published, keeps a
  * permanent redirect to the new one.
  */
 export const RenameInput = z.object({
@@ -226,7 +226,7 @@ export const RenameResult = WriteResult.extend({
   previousPath: z.string().startsWith("/").nullable(),
 });
 
-/** The update waiting on a live item, with its source (v0.10.0): `GET /content/:id/schedule`. */
+/** The update waiting on a live item, with its source: `GET /content/:id/schedule`. */
 export const ScheduledUpdate = ScheduledUpdateSummary.extend({
   id: ContentId,
   source: Source,
@@ -235,7 +235,7 @@ export const ScheduledUpdate = ScheduledUpdateSummary.extend({
 });
 
 /**
- * Canceling a schedule (v0.10.0), sent as a query since a DELETE carries no body. On a live item it drops the waiting
+ * Canceling a schedule, sent as a query since a DELETE carries no body. On a live item it drops the waiting
  * update and the live version stays; on a scheduled item that was never live it returns the item to draft.
  */
 export const ScheduleCancelQuery = z.object({
@@ -249,7 +249,7 @@ export const Revision = z.object({
   at: Timestamp,
   author: z.string().max(200),
   message: z.string().max(2000),
-  /** Everyone credited for this version (v0.17.0), where the site keeps more than the one `author`. */
+  /** Everyone credited for this version, where the site keeps more than the one `author`. */
   authors: z.array(AuthorName).max(50).optional(),
 });
 
@@ -269,7 +269,7 @@ export const Diff = z.object({
   patch: z.string(),
 });
 
-/** One revision's source, so each revision in the list can be opened (v0.3.0). */
+/** One revision's source, so each revision in the list can be opened. */
 export const RevisionSource = z.object({
   id: ContentId,
   version: Version,
@@ -277,7 +277,7 @@ export const RevisionSource = z.object({
 });
 
 /**
- * Deleting an item (v0.3.0, optional per site). Sent as a query, since a DELETE carries no body:
+ * Deleting an item (optional per site). Sent as a query, since a DELETE carries no body:
  * the version the caller last saw, and Carrel's change id.
  */
 export const ContentDeleteQuery = z.object({
@@ -298,19 +298,19 @@ export const PreviewInput = z.object({
   source: Source,
 });
 
-/** The longest a preview link lives (v0.22.0), in hours: 30 days. */
+/** The longest a preview link lives, in hours: 30 days. */
 export const PREVIEW_LINK_MAX_HOURS = 720;
 /** How long a preview link lives when the request does not say, in hours. */
 export const PREVIEW_LINK_DEFAULT_HOURS = 48;
 
 /**
- * A shareable preview link for one item (v0.17.0, where `previewLinks`). v0.22.0: it lives `expiresInHours`, 1 to 720,
- * 48 by default (capabilities.previewLinkHours says the most). `hours` is the v0.17.0 name, at most a week; send one.
+ * A shareable preview link for one item (where `previewLinks`). It lives `expiresInHours`, 1 to 720,
+ * 48 by default (capabilities.previewLinkHours says the most). `hours` is the older name, at most a week; send one.
  */
 export const PreviewLinkInput = z.object({
   id: ContentId,
   expiresInHours: z.number().int().min(1).max(PREVIEW_LINK_MAX_HOURS).optional(),
-  /** @deprecated v0.22.0: send `expiresInHours`. */
+  /** @deprecated Send `expiresInHours`. */
   hours: z.number().int().min(1).max(168).optional(),
   changeId: ChangeId,
   actor: Actor.optional(),
@@ -325,17 +325,17 @@ export const PreviewLink = z.object({
 
 export const PreviewLinkListQuery = z.object({ id: ContentId });
 
-/** A post that links to another (v0.22.0, where `backlinks`): its id, title and public path (null or absent while not live). */
+/** A post that links to another (where `backlinks`): its id, title and public path (null or absent while not live). */
 export const Backlink = z.object({
   id: ContentId,
   title: z.string().max(1000),
   path: z.string().startsWith("/").nullable().optional(),
 });
 
-/** `GET /content/:id/backlinks` (v0.22.0): every post that links to this one, so a delete or a trash can warn first. */
+/** `GET /content/:id/backlinks`: every post that links to this one, so a delete or a trash can warn first. */
 export const BacklinkList = z.object({ items: z.array(Backlink).max(1000) });
 
-/** `GET /hooks/recent?changeId=` (v0.22.0, with a store): the publish hooks that ran for one change. */
+/** `GET /hooks/recent?changeId=` (with a store): the publish hooks that ran for one change. */
 export const HookRunsQuery = z.object({ changeId: ChangeId });
 
 /** One hook run as the store keeps it (`hook_runs`): the hook's name, whether it worked, and when. */
@@ -387,7 +387,7 @@ export type TranscriptWriteResult = z.infer<typeof TranscriptWriteResult>;
 export type ContentSort = (typeof CONTENT_SORTS)[number];
 export type ContentFilter = (typeof CONTENT_FILTERS)[number];
 
-/** The v0.17.0 filters a list query asks for. */
+/** The filters a list query asks for. */
 export function filtersAsked(query: Partial<z.infer<typeof ListQuery>>): ContentFilter[] {
   const asked: Record<ContentFilter, boolean> = {
     kind: query.kind !== undefined,

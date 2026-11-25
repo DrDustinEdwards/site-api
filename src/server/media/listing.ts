@@ -78,7 +78,7 @@ export function listingRoutes(ctx: MediaRouteContext): Route[] {
         });
       },
     },
-    // v0.19.0: the model's alt text and tags for a file not yet stored, for the upload form to offer. Nothing is stored.
+    // The model's alt text and tags for a file not yet stored, for the upload form to offer. Nothing is stored.
     {
       method: "POST",
       pattern: /^\/media\/suggestions$/,
@@ -105,7 +105,7 @@ export function listingRoutes(ctx: MediaRouteContext): Route[] {
         );
       },
     },
-    // v0.13.0: the site's own copy of a file on the web, checked as an upload is.
+    // The site's own copy of a file on the web, checked as an upload is.
     {
       method: "POST",
       pattern: /^\/media\/import$/,
@@ -153,7 +153,7 @@ export function listingRoutes(ctx: MediaRouteContext): Route[] {
         );
       },
     },
-    // v0.4.0 writes. A site whose adapter lacks the method answers 501 whatever the body says.
+    // Writes. A site whose adapter lacks the method answers 501 whatever the body says.
     {
       method: "PUT",
       pattern: new RegExp(`^/media/${ID}/alt$`),
@@ -200,7 +200,7 @@ export function listingRoutes(ctx: MediaRouteContext): Route[] {
         );
       },
     },
-    // v0.10.0, each 501 where the adapter lacks it.
+    // Each 501 where the adapter lacks it.
     {
       method: "PUT",
       pattern: new RegExp(`^/media/${ID}/focus$`),

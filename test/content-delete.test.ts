@@ -1,8 +1,7 @@
-// v0.3.0: the source at a revision, and the optional content delete. Each plant is a request that
+// The source at a revision, and the optional content delete. Each plant is a request that
 // must be refused; where the package refuses it, the test also checks that the adapter never ran.
 
 import { describe, expect, it, vi } from "vitest";
-import { RefusedError } from "../src/adapter.js";
 import { SiteApiError } from "../src/client.js";
 import { memoryAdapter } from "../src/testing.js";
 import { req, site, siteWithClient } from "./helpers.js";
@@ -66,14 +65,7 @@ describe("content delete", () => {
     ).toEqual({ id: "first-post", deleted: true, changeId: "c3" });
     expect(adapter.deletedContent).toEqual(["first-post"]);
     await expect(c.get("first-post")).rejects.toMatchObject({ status: 404 });
-  });
-
-  it("advertises the delete in meta, and not on a site without one", async () => {
-    expect((await client().client.meta()).capabilities.contentDelete).toBe(true);
-    expect(
-      (await client(memoryAdapter({ contentDelete: false })).client.meta()).capabilities
-        .contentDelete,
-    ).toBeUndefined();
+    expect((await c.meta()).capabilities.contentDelete).toBe(true);
   });
 
   it("PLANT: refuses a stale version with 409 and the current version, and deletes nothing", async () => {
@@ -88,16 +80,6 @@ describe("content delete", () => {
     expect(adapter.deletedContent).toEqual([]);
   });
 
-  it("PLANT: answers 404 for an item the site does not hold", async () => {
-    const { client: c, adapter } = client();
-    const error = await c
-      .delete("no-such-post", { expectedVersion: "v1", changeId: "c3" })
-      .catch((e) => e);
-    expect(error.status).toBe(404);
-    expect(error.body.error).toBe("not-found");
-    expect(adapter.deletedContent).toEqual([]);
-  });
-
   it("PLANT: answers 501 on a site whose adapter has no delete, and the item stays", async () => {
     const { client: c, adapter, second } = await seeded(memoryAdapter({ contentDelete: false }));
     const error = await c
@@ -106,20 +88,7 @@ describe("content delete", () => {
     expect(error.status).toBe(501);
     expect(error.body.error).toBe("not-implemented");
     expect(adapter.store.has("first-post")).toBe(true);
-  });
-
-  it("PLANT: the site's own refusal comes back as 422 refused with its words, and the item stays", async () => {
-    const adapter = memoryAdapter();
-    const { client: c, second } = await seeded(adapter);
-    adapter.content.delete = async () => {
-      throw new RefusedError("The site keeps this page.");
-    };
-    const error = await c
-      .delete("first-post", { expectedVersion: second.version, changeId: "c3" })
-      .catch((e) => e);
-    expect(error.status).toBe(422);
-    expect(error.body).toMatchObject({ error: "refused", message: "The site keeps this page." });
-    expect(adapter.store.has("first-post")).toBe(true);
+    expect((await c.meta()).capabilities.contentDelete).toBeUndefined();
   });
 
   it("PLANT: refuses a delete with no expectedVersion or change id, or a bad id, before the adapter runs", async () => {

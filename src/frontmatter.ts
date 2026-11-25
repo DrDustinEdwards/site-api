@@ -37,7 +37,7 @@ function tagItem(tag: string): string {
 }
 
 /**
- * The search fields (v0.17.0): the same name on every site, kept in the frontmatter so each change is versioned
+ * The search fields: the same name on every site, kept in the frontmatter so each change is versioned
  * with the post. A site lists the ones it renders in its capabilities' `searchFields`, and Carrel shows a box for each.
  * An empty one falls back to the site's own default (the title, the opening text, the cover, the page's own address).
  */
@@ -87,9 +87,9 @@ export function setSearchFields(front: string, values: Partial<SearchValues>): s
 }
 
 /**
- * The post fields (v0.17.0), beside the search fields and kept the same way: `excerpt` (the summary a list shows),
+ * The post fields, beside the search fields and kept the same way: `excerpt` (the summary a list shows),
  * `authors` (display names in credit order, the first the primary author), `series` (its name) and `seriesPart` (a
- * positive whole number). v0.22.0: `featureImage` (the picture a post leads with: a URL, a site path or a media key) and
+ * positive whole number), `featureImage` (the picture a post leads with: a URL, a site path or a media key) and
  * `featureImageAlt` (its alt text). A site lists the ones it renders in its capabilities' `postFields`.
  */
 export const POST_FIELDS = [
@@ -109,7 +109,7 @@ export type PostValues = {
   featureImage: string;
   featureImageAlt: string;
   /**
-   * v0.22.0: true when the post marks its feature image decorative (`featureImageDecorative: true`), so an empty alt is
+   * True when the post marks its feature image decorative (`featureImageDecorative: true`), so an empty alt is
    * right and does not block a publish. Not a post field of its own: it goes with `featureImage`.
    */
   featureImageDecorative: boolean;
@@ -172,7 +172,7 @@ export function setPostFields(front: string, values: Partial<PostValues>): strin
 }
 
 /**
- * The picture fields whose alt text is missing (v0.22.0, D8): the share image (`image` without `imageAlt`) where the site
+ * The picture fields whose alt text is missing: the share image (`image` without `imageAlt`) where the site
  * lists `image`, and the feature image (`featureImage` without `featureImageAlt`) where it lists `featureImage`. Each blocks a publish, as alt text in the body does. A picture the post marks decorative (`imageDecorative:
  * true` or `featureImageDecorative: true`) takes an empty alt and is not listed; nothing else does. Carrel's gate and the
  * package's publish both read this.

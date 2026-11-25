@@ -60,7 +60,7 @@ import {
   type Route,
 } from "./http.js";
 
-/** A DELETE's `actorName` (v0.22.0) as the `actor` every other write hands the adapter. */
+/** A DELETE's `actorName` as the `actor` every other write hands the adapter. */
 function withActor<T extends { actorName?: string | undefined }>(
   query: T,
 ): Omit<T, "actorName"> & { actor?: { name: string } } {
@@ -74,7 +74,7 @@ export function contentRoutes(
 ): Route[] {
   const id = (m: RegExpMatchArray) => pathParam(m[1], ContentId, "content id");
 
-  // v0.22.0 (A2, D8): a feature image with no alt text blocks the text going out, as the share image's does in Carrel's
+  // A feature image with no alt text blocks the text going out, as the share image's does in Carrel's
   // gate: a publish, a schedule, or a save to a live item. Only where the site lists featureImage; a decorative one passes.
   const postFields = adapter.content.postFields ?? [];
   async function altGate(contentId: string, source: string | undefined) {
@@ -144,7 +144,7 @@ export function contentRoutes(
       run: async (m) => {
         const doc = await adapter.content.get(id(m));
         if (!doc) throw new NotFoundError();
-        // v0.36.0: the package names the transcript's version, so no site keeps a column for it.
+        // The package names the transcript's version, so no site keeps a column for it.
         const named =
           adapter.content.setTranscript && doc.transcript !== undefined
             ? { ...doc, transcriptVersion: await transcriptVersion(doc.transcript) }
@@ -197,7 +197,7 @@ export function contentRoutes(
           const input = await readBody(req, ScheduleInput);
           const current = await adapter.content.get(i);
           await altGate(i, input.source ?? current?.source);
-          // v0.10.0: a live item keeps being served, and the schedule is an update that replaces it at the time.
+          // A live item keeps being served, and the schedule is an update that replaces it at the time.
           if (current?.status !== "published") return adapter.content.schedule(i, input);
           if (current.version !== input.expectedVersion)
             throw new VersionConflictError(current.version);
@@ -440,7 +440,7 @@ export function contentRoutes(
         if (typeof html !== "string") throw new ContractBreach("preview: not a string");
         return new Response(html, {
           status: 200,
-          // v0.17.0: a preview is never a page to index, whatever the site's own render says.
+          // A preview is never a page to index, whatever the site's own render says.
           headers: {
             ...BASE_HEADERS,
             "content-type": "text/html; charset=utf-8",

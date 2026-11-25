@@ -71,7 +71,7 @@ export function memoryContent(options: MemoryAdapterOptions, now: () => Date) {
                 : (previous?.doc.trashedAt ?? null),
           }
         : {}),
-      // v0.22.0: only a live item has a pending draft; a write that does not say keeps what it had. (In memory the draft is
+      // Only a live item has a pending draft; a write that does not say keeps what it had. (In memory the draft is
       // the source itself: there is no separate public copy to keep.)
       ...(contentExtras
         ? {
@@ -93,7 +93,7 @@ export function memoryContent(options: MemoryAdapterOptions, now: () => Date) {
         ? { publishAt: pending.publishAt, changeId: pending.changeId }
         : null;
     const history = previous?.history ?? [];
-    // v0.22.0: the person Carrel names is the revision's author.
+    // The person Carrel names is the revision's author.
     history.unshift({
       revision: {
         version,
@@ -143,7 +143,7 @@ export function memoryContent(options: MemoryAdapterOptions, now: () => Date) {
     return commit(id, previous, changes, input.changeId, message, input.actor);
   }
 
-  /** v0.22.0: every other post whose source links to this one's path, as a site's link table would answer. */
+  /** Every other post whose source links to this one's path, as a site's link table would answer. */
   async function backlinks(id: string) {
     const target = `/blog/${id}`;
     // An id holds only letters, digits, dots, underscores and hyphens, so the dot is the one character to escape.
@@ -157,7 +157,7 @@ export function memoryContent(options: MemoryAdapterOptions, now: () => Date) {
       }));
   }
 
-  /** The reference schedules group (v0.10.0): the update sits beside the live item until `apply` puts it live. */
+  /** The reference schedules group: the update sits beside the live item until `apply` puts it live. */
   const schedulesAdapter = schedules
     ? memorySchedules({ store, now, existing, commit })
     : undefined;
@@ -207,13 +207,13 @@ export function memoryContent(options: MemoryAdapterOptions, now: () => Date) {
             d.source.toLowerCase().includes(needle),
         )
         .sort((a, b) => a.id.localeCompare(b.id));
-      // A search without a sort answers the newest updated first (v0.17.0), as every site's does.
+      // A search without a sort answers the newest updated first, as every site's does.
       if (needle && !query.sort)
         all.sort(
           (a, b) =>
             (b.updatedAt ?? "").localeCompare(a.updatedAt ?? "") || a.id.localeCompare(b.id),
         );
-      // v0.6.0: sorted as asked, newest first for the dates and A to Z for titles unless dir says otherwise.
+      // Sorted as asked, newest first for the dates and A to Z for titles unless dir says otherwise.
       const sorted = query.sort
         ? { sort: query.sort, dir: query.dir ?? (query.sort === "title" ? "asc" : "desc") }
         : undefined;
@@ -246,7 +246,7 @@ export function memoryContent(options: MemoryAdapterOptions, now: () => Date) {
       const transcript = transcripts.get(id);
       return { ...withTags(doc), ...(transcript !== undefined ? { transcript } : {}) };
     },
-    // v0.36.0: the transcript is live at once and the item's version stays.
+    // The transcript is live at once and the item's version stays.
     ...(options.contentTranscript === false
       ? {}
       : {

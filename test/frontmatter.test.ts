@@ -40,13 +40,6 @@ const SOURCE = [
 const parts = splitSource(SOURCE);
 
 // The block reader and writer (splitSource, readKey, setBlock and the rest) are Prelum's and tested there.
-describe("reads", () => {
-  it("reads the tags in flow form, and none from no frontmatter", () => {
-    expect(tagsOf(parts.front)).toEqual(["cloudflare", "workers"]);
-    expect(tagsOf(null)).toEqual([]);
-  });
-});
-
 describe("writes", () => {
   it("changes only the tags line and returns every other byte of the file as it was", () => {
     const out = joinSource({
@@ -92,6 +85,8 @@ describe("edge sources", () => {
       'title: x\ntags: [News, Field notes, "no", "true", "*", "{", "2026", "c#"]',
     );
     expect(tagsOf(written)).toEqual(["News", "Field notes", "no", "true", "*", "{", "2026", "c#"]);
+    expect(tagsOf(parts.front)).toEqual(["cloudflare", "workers"]);
+    expect(tagsOf(null)).toEqual([]);
   });
 });
 
@@ -181,7 +176,7 @@ describe("search fields", () => {
   });
 });
 
-describe("post fields (v0.17.0)", () => {
+describe("post fields", () => {
   it("keeps authors in order with a comma in a name, reads a hand-written list, and a blank or a bad part removes the key", () => {
     const front = setPostFields(parts.front!, {
       authors: ["Smith, Jr.", " Ada "],
@@ -211,7 +206,7 @@ describe("post fields (v0.17.0)", () => {
     );
   });
 
-  // v0.22.0 (A2, D8): a feature or share image with no alt blocks, unless the post marks it decorative.
+  // A feature or share image with no alt blocks, unless the post marks it decorative.
   it("names a feature or share image with no alt text, where the site renders it, and passes one marked decorative", () => {
     const declared = {
       searchFields: ["image", "imageAlt"],

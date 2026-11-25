@@ -1,8 +1,8 @@
-// Sending webmentions (v0.17.0): the hook that tells every page a post links to that it did, and tells them again when
+// Sending webmentions: the hook that tells every page a post links to that it did, and tells them again when
 // the post changes or leaves the site, so their copy of the mention follows. The receiving side is the mentions group.
 //
 // Every address it fetches comes from a stranger's page, so each one goes through the package's one outbound guard
-// (./outbound.ts, v0.22.0): http or https on the default port, never a local name or a private address, the host's DNS
+// (./outbound.ts): http or https on the default port, never a local name or a private address, the host's DNS
 // answers checked too, and every redirect checked again. Nothing here parses HTML with a DOM
 // (a Worker has HTMLRewriter, Node has neither); a small tag scanner over the text finds what it needs.
 
@@ -220,7 +220,7 @@ type TargetStore = Pick<SiteApiStore, "webmentionTargets" | "putWebmentionTarget
 export function webmentionHook(options: {
   store: TargetStore;
   fetch?: typeof fetch;
-  /** v0.22.0: the fetch the outbound guard asks DNS over HTTPS with. Defaults to `fetch`. */
+  /** The fetch the outbound guard asks DNS over HTTPS with. Defaults to `fetch`. */
   dnsFetch?: typeof fetch;
   userAgent?: string;
   log?: (entry: Record<string, unknown>) => void;
@@ -293,7 +293,7 @@ export function webmentionHook(options: {
     name: "webmention",
     on: ["publish", "update", "unpublish", "delete", "trash", "rename"],
     run: async (event) => {
-      // Never a page that was not live: an event with no page (v0.22.0) announces nothing.
+      // Never a page that was not live: an event with no page announces nothing.
       if (!event.url) return;
       const deadline = AbortSignal.timeout(BUDGET_MS);
       const change = event.changeId ?? String(Date.now());

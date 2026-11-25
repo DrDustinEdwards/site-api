@@ -246,8 +246,8 @@ export interface MediaLibraryOptions {
     id?: string,
   ): Promise<{ tags: string[]; alt: string | null; model: string }>;
   /**
-   * The fetch imports go through (capabilities.mediaImport). The package checks each address and redirect first. v0.27.0:
-   * the Worker's own `fetch` when absent, so imports are on; `null` turns them off.
+   * The fetch imports go through (capabilities.mediaImport). The package checks each address and redirect first.
+   * The Worker's own `fetch` when absent, so imports are on; `null` turns them off.
    */
   importFetch?: typeof fetch | null;
   /** The clock, for tests. */

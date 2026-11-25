@@ -1,4 +1,4 @@
-// The media group (v0.2.0): the round trip through the client, and the plants. Each plant is a
+// The media group: the round trip through the client, and the plants. Each plant is a
 // request that must be refused; where the package refuses it, the test also checks that the
 // adapter never ran, so a refusal cannot come from the site's own code by accident.
 

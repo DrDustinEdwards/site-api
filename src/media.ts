@@ -1,4 +1,4 @@
-// The upload checks the package makes before a site sees a byte (v0.2.0): the declared type must be
+// The upload checks the package makes before a site sees a byte: the declared type must be
 // one the site accepts, the body may not exceed the site's limit (read no further than that), and
 // the bytes must look like the declared type where the type has a signature. The site's own checks
 // (measuring an image, its storage) come after these, never instead of them.
@@ -55,7 +55,7 @@ const SIGNATURES: Record<string, (b: Uint8Array) => boolean> = {
   "image/gif": (b) => ascii(b, 0, 6) === "GIF87a" || ascii(b, 0, 6) === "GIF89a",
   "image/webp": (b) => ascii(b, 0, 4) === "RIFF" && ascii(b, 8, 4) === "WEBP",
   "image/avif": (b) => ascii(b, 4, 4) === "ftyp" && /avi[fs]/.test(ascii(b, 8, 24)),
-  // v0.15.0: an ISO media file whose major or compatible brands name HEVC pictures (HEIC) or any HEIF picture (mif1, msf1).
+  // An ISO media file whose major or compatible brands name HEVC pictures (HEIC) or any HEIF picture (mif1, msf1).
   "image/heic": (b) => ascii(b, 4, 4) === "ftyp" && /he(i[cxms]|v[cx])/.test(ascii(b, 8, 24)),
   "image/heif": (b) =>
     ascii(b, 4, 4) === "ftyp" && /he(i[cxms]|v[cx])|m[is]f1/.test(ascii(b, 8, 24)),
@@ -121,7 +121,7 @@ export function checkUpload(
   return null;
 }
 
-// ---------- v0.13.0
+// ---------- the media library's ideas
 
 /** Alt text that names a kind of file rather than what it shows. */
 const EMPTY_ALT = new Set([
@@ -146,9 +146,9 @@ const words = (s: string) =>
     .trim();
 
 /**
- * Why an alt text cannot be stored (v0.19.0, checklist B2 and B3), or null: an alt write needs alt or an explicit
+ * Why an alt text cannot be stored, or null: an alt write needs alt or an explicit
  * decorative choice, never both; and an alt is at most MAX_ALT_CHARS, and is not the file's name, an address, or a word
- * such as "image" or "photo". An upload or an import passes `required: false` (v0.30.0): a picture may be stored with no
+ * such as "image" or "photo". An upload or an import passes `required: false`: a picture may be stored with no
  * alt so that one can be written for it afterward, and the missing alt is refused where the picture is placed on a page
  * (`placementAltRefusal`).
  */
@@ -184,7 +184,7 @@ export function altRefusal(
 
 /**
  * A library file's rights as Prelum's ImageObject takes them (pageImage and imageObject: `creditText`, `copyrightNotice`,
- * `license`, `acquireLicensePage`), each only where the file has it (v0.19.0), so a figure shows the stored credit and a
+ * `license`, `acquireLicensePage`), each only where the file has it, so a figure shows the stored credit and a
  * page's ImageObject carries it. `license` is the license page, else the license itself where it is an address.
  */
 export function imageRights(
@@ -253,7 +253,7 @@ const IMPORT_TIMEOUT_MS = 15_000;
 const IMPORT_REDIRECTS = 3;
 
 /**
- * Fetches an import through the package's one outbound guard (./outbound.ts, v0.22.0): https on the default port, never a
+ * Fetches an import through the package's one outbound guard (./outbound.ts): https on the default port, never a
  * local name or a private address, DNS answers included, each of at most three redirects checked as the first was.
  * Throws OutboundRefusal with words for the person; the response is the final one, unread, with its address.
  */

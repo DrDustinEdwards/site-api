@@ -1,4 +1,4 @@
-// Shareable preview links (v0.17.0), on a site that gives the package a store. Carrel makes one for an item under the
+// Shareable preview links, on a site that gives the package a store. Carrel makes one for an item under the
 // key; anyone holding its address sees the item's current source rendered, with no key, until it expires or is revoked.
 // The site keeps only the SHA-256 of each token, so its store cannot open a link.
 
@@ -43,7 +43,7 @@ export function previewLinkRoutes(adapter: SiteAdapter, store: SiteApiStore): Ro
         if (!(await adapter.content.get(input.id))) throw new NotFoundError();
         const token = base64url(crypto.getRandomValues(new Uint8Array(32)));
         const now = new Date();
-        // v0.22.0: expiresInHours, up to 30 days; the v0.17.0 `hours` still works.
+        // ExpiresInHours, up to 30 days; the older `hours` still works.
         if (input.expiresInHours !== undefined && input.hours !== undefined)
           throw new BadRequest("invalid", "Send expiresInHours or hours, not both.");
         const hours = input.expiresInHours ?? input.hours ?? PREVIEW_LINK_DEFAULT_HOURS;
@@ -140,7 +140,7 @@ export async function servePreviewLink(
 ): Promise<Response> {
   const token = pathname.slice(PREVIEW_LINK_PATH.length);
   const link = store && TOKEN.test(token) ? await store.previewLink(await sha256Hex(token)) : null;
-  // v0.22.0: a revoked link is as if it never was (404), so its address tells nothing; one that ran out says so (410).
+  // A revoked link is as if it never was (404), so its address tells nothing; one that ran out says so (410).
   if (!link || link.revokedAt) return page(404, "No such preview link.");
   if (Date.parse(link.expiresAt) <= Date.now()) return page(410, "This preview link has expired.");
   const doc = await adapter.content.get(link.contentId);

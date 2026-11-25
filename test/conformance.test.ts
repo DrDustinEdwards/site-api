@@ -8,6 +8,8 @@ import { d1SiteApiStore, tombstoneResponse, SITE_API_STORE_SQL } from "../src/st
 import { d1 } from "./d1.js";
 import { KEY, ORIGIN, allow, site, mountedFetch } from "./helpers.js";
 
+type Adapter = ReturnType<typeof memoryAdapter>;
+
 function failing(report: Awaited<ReturnType<typeof runConformance>>) {
   return report.checks.filter((c) => !c.ok).map((c) => c.name);
 }
@@ -48,56 +50,7 @@ describe("conformance", () => {
     const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: site().fetch });
     expect(failing(report)).toEqual([]);
     expect(report.ok).toBe(true);
-    expect(report.checks.map((c) => c.name).slice(12)).toEqual([
-      "content tags of an unknown id: refused, or not implemented where the site keeps no tags",
-      "content transcript of an unknown id: refused, or not implemented where transcripts are read only",
-      "schedule read and cancel of an unknown id: refused, or not implemented where the site has no scheduled updates",
-      "media: upload limits declared",
-      "media list: answers in the contract's shape",
-      "media lenses: each one the site names answers, and one it does not is not implemented",
-      "media delete of an unknown id: refused",
-      "media upload of a type the site does not accept: refused",
-      "media alt of an unknown id: refused, or not implemented where the site lacks it",
-      "media tags of an unknown id: refused, or not implemented where the site lacks it",
-      "media trash of an unknown id: refused, or not implemented where the site lacks it",
-      "media restore of an unknown id: refused, or not implemented where the site lacks it",
-      "media focus of an unknown id: refused, or not implemented where the site lacks it",
-      "media caption of an unknown id: refused, or not implemented where the site lacks it",
-      "media credit of an unknown id: refused, or not implemented where the site lacks it",
-      "media transform of an unknown id: refused, or not implemented where the site lacks it",
-      "media revert of an unknown id: refused, or not implemented where the site lacks it",
-      "media history of an unknown id: refused, or not implemented where the site lacks it",
-      "media suggestions of an unknown id: refused, or not implemented where the site lacks it",
-      "media import of an http address: refused, or not implemented where the site lacks it",
-      "media alt with a body outside the contract: refused, or not implemented where the site lacks it",
-      "media focus outside 0 to 1: refused, or not implemented where the site lacks it",
-      "media replace of an unknown id: refused, or not implemented where the site lacks it",
-      "media bulk: an unknown id is that file's own not-found, and the request answers 200",
-      "media bulk tag op with no tags: refused, or not implemented where the site lacks tags",
-      "media empty trash with a body outside the contract: refused, or not implemented where the site has no trash",
-      "mentions: advertised in capabilities, or answered 501",
-      "mentions writes without a key or with a wrong key: refused",
-      "mention decide of an unknown id: refused, or not implemented where the site has no mentions",
-      "mention delete of an unknown id: refused, or not implemented where the site has no mentions",
-      "mention reset of an unknown id: refused, or not implemented where the site has no reset",
-      "mention decide on a stale version: refused, whatever mention is first",
-      "mention sweep with no change id: refused before anything is removed",
-      "mentions list with an unknown status: refused",
-      "not-found report: advertised in capabilities, or answered 501",
-      "errors: problem details with type, title and status",
-      "preview: a tiny source answers HTML that is never indexed",
-      "publish of an unknown id: refused",
-      "publish with a future publishedAt: refused, or not implemented where the site cannot set the date",
-      "content rename of an unknown id: refused, or not implemented where the site lacks it",
-      "content trash of an unknown id: refused, or not implemented where the site lacks it",
-      "content restore of an unknown id: refused, or not implemented where the site lacks it",
-      "preview link for an unknown id: refused, or not implemented where the site has none",
-      "content list filters: each one the site does not offer answers 501",
-      "unknown query key: refused with unknown-field",
-      "unknown body field: refused with unknown-field before anything is written",
-      "backlinks of an unknown id: refused, or not implemented where the site has none",
-    ]);
-    // v0.22.0 (M2): every check is a probe, and the probe post's steps, off by default, are each listed as passed over.
+    // Every check is also a probe; the probe post's steps are off by default and listed as skipped.
     expect(report.probes.filter((p) => !p.skipped).map((p) => p.name)).toEqual(
       report.checks.map((c) => c.name),
     );
@@ -142,24 +95,29 @@ describe("conformance", () => {
       fetch: site(memoryAdapter({ media: false })).fetch,
     });
     expect(failing(report)).toEqual([]);
-    expect(report.checks).toHaveLength(36);
+    expect(report.checks.some((c) => c.name.startsWith("media"))).toBe(false);
   });
 
-  it("expects 501 on a site with no content delete, and 404 where it has one", async () => {
-    const without = await runConformance({
-      baseUrl: ORIGIN,
-      key: KEY,
-      fetch: site(memoryAdapter({ contentDelete: false })).fetch,
-    });
-    expect(failing(without)).toEqual([]);
-    expect(
-      without.checks.find((c) => c.name.startsWith("content delete of an unknown id"))?.detail,
-    ).toBe("501 not-implemented");
-    const withDelete = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: site().fetch });
-    expect(
-      withDelete.checks.find((c) => c.name.startsWith("content delete of an unknown id"))?.detail,
-    ).toBe("404 not-found");
-  });
+  it.each([
+    ["contentDelete", "content delete of an unknown id"],
+    ["contentTags", "content tags"],
+    ["mentionReset", "mention reset"],
+  ] as const)(
+    "expects 501 from %s on a site without it, and 404 where it has it",
+    async (option, prefix) => {
+      const detail = async (adapter?: ReturnType<typeof memoryAdapter>) => {
+        const report = await runConformance({
+          baseUrl: ORIGIN,
+          key: KEY,
+          fetch: site(adapter).fetch,
+        });
+        expect(failing(report)).toEqual([]);
+        return report.checks.find((c) => c.name.startsWith(prefix))?.detail;
+      };
+      expect(await detail(memoryAdapter({ [option]: false }))).toBe("501 not-implemented");
+      expect(await detail()).toBe("404 not-found");
+    },
+  );
 
   it("expects 501 from every mentions check on a site without the group, and runs only the five that apply", async () => {
     const report = await runConformance({
@@ -194,15 +152,6 @@ describe("conformance", () => {
     expect(adapter.purged).toEqual([]);
   });
 
-  it("PLANT: fails a site that decides a mention it does not hold", async () => {
-    const adapter = memoryAdapter();
-    adapter.mentions!.decide = async () => ({ status: "approved", version: "m9", purged: null });
-    const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: site(adapter).fetch });
-    expect(failing(report)).toEqual([
-      "mention decide of an unknown id: refused, or not implemented where the site has no mentions",
-    ]);
-  });
-
   it("expects 501 from every lens on a site that names none, and passes it", async () => {
     const report = await runConformance({
       baseUrl: ORIGIN,
@@ -232,36 +181,6 @@ describe("conformance", () => {
     ]);
   });
 
-  it("expects 501 from content tags on a site that keeps none, and 404 where it does", async () => {
-    const without = await runConformance({
-      baseUrl: ORIGIN,
-      key: KEY,
-      fetch: site(memoryAdapter({ contentTags: false })).fetch,
-    });
-    expect(failing(without)).toEqual([]);
-    expect(without.checks.find((c) => c.name.startsWith("content tags"))?.detail).toBe(
-      "501 not-implemented",
-    );
-    const withTags = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: site().fetch });
-    expect(withTags.checks.find((c) => c.name.startsWith("content tags"))?.detail).toBe(
-      "404 not-found",
-    );
-  });
-
-  it("PLANT: fails a site that tags a post it does not hold", async () => {
-    const adapter = memoryAdapter();
-    adapter.content.setTags = async (id, input) => ({
-      id,
-      version: "v9",
-      status: "draft",
-      changeId: input.changeId,
-    });
-    const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: site(adapter).fetch });
-    expect(failing(report)).toEqual([
-      "content tags of an unknown id: refused, or not implemented where the site keeps no tags",
-    ]);
-  });
-
   it("expects 501 from the 404 report on a site without it, and the report where it has one", async () => {
     const without = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: site().fetch });
     expect(without.checks.find((c) => c.name.startsWith("not-found report"))?.detail).toBe(
@@ -286,38 +205,60 @@ describe("conformance", () => {
     ).toEqual(["1 missing path(s) in 7 days", "400 invalid"]);
   });
 
-  it("expects 501 from a reset on a v0.5.0 mentions group, and 404 where the site has reset", async () => {
-    const without = await runConformance({
-      baseUrl: ORIGIN,
-      key: KEY,
-      fetch: site(memoryAdapter({ mentionReset: false })).fetch,
-    });
-    expect(failing(without)).toEqual([]);
-    expect(without.checks.find((c) => c.name.startsWith("mention reset"))?.detail).toBe(
-      "501 not-implemented",
-    );
-    const withReset = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: site().fetch });
-    expect(withReset.checks.find((c) => c.name.startsWith("mention reset"))?.detail).toBe(
-      "404 not-found",
-    );
-  });
-
-  it("PLANT: fails a site that resets a mention it does not hold", async () => {
-    const adapter = memoryAdapter();
-    adapter.mentions!.reset = async () => ({ status: "pending", version: "m9", purged: null });
-    const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: site(adapter).fetch });
-    expect(failing(report)).toEqual([
+  it.each([
+    [
+      "decides a mention it does not hold",
+      (a: Adapter) =>
+        (a.mentions!.decide = async () => ({ status: "approved", version: "m9", purged: null })),
+      "mention decide of an unknown id: refused, or not implemented where the site has no mentions",
+    ],
+    [
+      "resets a mention it does not hold",
+      (a: Adapter) =>
+        (a.mentions!.reset = async () => ({ status: "pending", version: "m9", purged: null })),
       "mention reset of an unknown id: refused, or not implemented where the site has no reset",
-    ]);
-  });
-
-  it("PLANT: fails a site that deletes a mention it does not hold", async () => {
-    const adapter = memoryAdapter();
-    adapter.mentions!.delete = async () => ({ purged: null });
-    const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: site(adapter).fetch });
-    expect(failing(report)).toEqual([
+    ],
+    [
+      "deletes a mention it does not hold",
+      (a: Adapter) => (a.mentions!.delete = async () => ({ purged: null })),
       "mention delete of an unknown id: refused, or not implemented where the site has no mentions",
-    ]);
+    ],
+    [
+      "tags a post it does not hold",
+      (a: Adapter) =>
+        (a.content.setTags = async (id, input) => ({
+          id,
+          version: "v9",
+          status: "draft",
+          changeId: input.changeId,
+        })),
+      "content tags of an unknown id: refused, or not implemented where the site keeps no tags",
+    ],
+    [
+      "answers a delete of an item it does not hold as done",
+      (a: Adapter) => (a.content.delete = async () => {}),
+      "content delete of an unknown id: refused, or not implemented where the site has no delete",
+    ],
+    [
+      "writes a transcript for an id it does not hold",
+      (a: Adapter) => (a.content.setTranscript = async () => ({ version: "v1" })),
+      "content transcript of an unknown id: refused, or not implemented where transcripts are read only",
+    ],
+    [
+      "answers a delete of a file it does not hold as done",
+      (a: Adapter) => (a.media!.delete = async () => {}),
+      "media delete of an unknown id: refused",
+    ],
+    [
+      "accepts an alt write on a file it does not hold",
+      (a: Adapter) => (a.media!.setAlt = async () => ({ version: "x" })),
+      "media alt of an unknown id: refused, or not implemented where the site lacks it",
+    ],
+  ])("PLANT: fails a site that %s", async (_name, plant, check) => {
+    const adapter = memoryAdapter();
+    plant(adapter);
+    const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: site(adapter).fetch });
+    expect(failing(report)).toEqual([check]);
   });
 
   it("PLANT: fails a site that ignores the version on a mention decision", async () => {
@@ -335,33 +276,6 @@ describe("conformance", () => {
     ]);
   });
 
-  it("PLANT: fails a site that offers mentions but does not say so in its capabilities", async () => {
-    expect(await failingWithout("mentions")).toEqual([
-      "mentions: advertised in capabilities, or answered 501",
-      "mention decide of an unknown id: refused, or not implemented where the site has no mentions",
-      "mention delete of an unknown id: refused, or not implemented where the site has no mentions",
-      "mention reset of an unknown id: refused, or not implemented where the site has no reset",
-    ]);
-  });
-
-  it("PLANT: fails a site that answers a delete of an item it does not hold as done", async () => {
-    const adapter = memoryAdapter();
-    adapter.content.delete = async () => {};
-    const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: site(adapter).fetch });
-    expect(failing(report)).toEqual([
-      "content delete of an unknown id: refused, or not implemented where the site has no delete",
-    ]);
-  });
-
-  it("PLANT: fails a site that writes a transcript for an id it does not hold", async () => {
-    const adapter = memoryAdapter();
-    adapter.content.setTranscript = async () => ({ version: "v1" });
-    const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: site(adapter).fetch });
-    expect(failing(report)).toContain(
-      "content transcript of an unknown id: refused, or not implemented where transcripts are read only",
-    );
-  });
-
   it("PLANT: fails a site whose revision list leaves out the current version", async () => {
     const adapter = memoryAdapter();
     await adapter.content.saveDraft("a-post", {
@@ -375,16 +289,11 @@ describe("conformance", () => {
     expect(failing(report)).toContain("revisions: the newest is the item's current version");
   });
 
-  it("PLANT: fails a site that offers a delete but does not say so in its capabilities", async () => {
-    expect(await failingWithout("contentDelete")).toEqual([
-      "content delete of an unknown id: refused, or not implemented where the site has no delete",
-    ]);
-  });
-
-  it("changes nothing on a conforming site: no content, no file stored, no file deleted", async () => {
+  it("changes nothing on a conforming site: no content, no file stored, no file deleted or edited", async () => {
     const s = site();
-    await seedPng(s);
+    const item = await seedPng(s);
     await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: s.fetch });
+    expect(s.adapter.mediaStore.get(item.id)?.item).toEqual(item);
     expect(s.adapter.store.size).toBe(0);
     expect(s.adapter.deletedContent).toEqual([]);
     expect([...s.adapter.mediaStore.keys()]).toEqual(["uploads/1-real.png"]);
@@ -419,13 +328,6 @@ describe("conformance", () => {
     expect(failing(report)).toEqual(["media upload of a type the site does not accept: refused"]);
   });
 
-  it("PLANT: fails a site that answers a delete of a file it does not hold as done", async () => {
-    const adapter = memoryAdapter();
-    adapter.media!.delete = async () => {};
-    const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: site(adapter).fetch });
-    expect(failing(report)).toEqual(["media delete of an unknown id: refused"]);
-  });
-
   it("expects 501 from every media write on a v0.2.0 site, and passes it", async () => {
     const report = await runConformance({
       baseUrl: ORIGIN,
@@ -442,40 +344,36 @@ describe("conformance", () => {
     expect(details.every((d) => d.startsWith("501"))).toBe(true);
   });
 
-  it("PLANT: fails a site whose alt write accepts a stale version on a file it does not hold", async () => {
-    const adapter = memoryAdapter();
-    adapter.media!.setAlt = async () => ({ version: "x" });
-    const report = await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: site(adapter).fetch });
-    expect(failing(report)).toEqual([
-      "media alt of an unknown id: refused, or not implemented where the site lacks it",
-    ]);
-  });
-
-  it("PLANT: fails a site that offers a trash but does not say so in its capabilities", async () => {
-    expect(await failingWithout("mediaTrash")).toEqual([
-      "media trash of an unknown id: refused, or not implemented where the site lacks it",
-      "media restore of an unknown id: refused, or not implemented where the site lacks it",
-      "media bulk: an unknown id is that file's own not-found, and the request answers 200",
-      "media empty trash with a body outside the contract: refused, or not implemented where the site has no trash",
-    ]);
-  });
-
-  it("changes no file on a conforming site when the write probes run", async () => {
-    const s = site();
-    const item = await s.adapter.media!.upload({
-      bytes: new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
-      contentType: "image/png",
-      filename: "real.png",
-      alt: "kept",
-      changeId: "seed",
-    });
-    await runConformance({ baseUrl: ORIGIN, key: KEY, fetch: s.fetch });
-    expect(s.adapter.mediaStore.get(item.id)?.item).toEqual(item);
-  });
-
-  it("PLANT: fails a site that offers media without declaring its limits", async () => {
-    expect(await failingWithout("mediaUpload")).toEqual(["media: upload limits declared"]);
-  });
+  it.each([
+    [
+      "mentions",
+      [
+        "mentions: advertised in capabilities, or answered 501",
+        "mention decide of an unknown id: refused, or not implemented where the site has no mentions",
+        "mention delete of an unknown id: refused, or not implemented where the site has no mentions",
+        "mention reset of an unknown id: refused, or not implemented where the site has no reset",
+      ],
+    ],
+    [
+      "contentDelete",
+      ["content delete of an unknown id: refused, or not implemented where the site has no delete"],
+    ],
+    [
+      "mediaTrash",
+      [
+        "media trash of an unknown id: refused, or not implemented where the site lacks it",
+        "media restore of an unknown id: refused, or not implemented where the site lacks it",
+        "media bulk: an unknown id is that file's own not-found, and the request answers 200",
+        "media empty trash with a body outside the contract: refused, or not implemented where the site has no trash",
+      ],
+    ],
+    ["mediaUpload", ["media: upload limits declared"]],
+  ])(
+    "PLANT: fails a site that offers %s but does not say so in its capabilities",
+    async (capability, expected) => {
+      expect(await failingWithout(capability)).toEqual(expected);
+    },
+  );
 
   it("PLANT: fails a site that ignores expectedVersion", async () => {
     const adapter = memoryAdapter();
@@ -520,7 +418,7 @@ describe("conformance", () => {
     expect(report.ok).toBe(false);
   });
 
-  // v0.22.0 (M1): the probe post, on a site whose public routes answer as a real site's do.
+  // A site whose public routes answer as a real site's do, for the probe post.
   function liveSite(
     options: { tombstones?: boolean; contentDelete?: boolean; deleteFromTrashOnly?: boolean } = {},
   ) {

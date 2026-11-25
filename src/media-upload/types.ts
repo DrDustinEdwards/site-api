@@ -1,7 +1,6 @@
 /**
  * What a picture says about itself (mediaEmbedded), read from its XMP, its IPTC and its EXIF, in that order of trust.
- * `credit` is the credit line, else the creator; `license` the usage terms, else the copyright notice (what it held before
- * v0.19.0); `takenAt` with an offset where the file names one, local time where not. v0.19.0 adds the copyright notice
+ * `credit` is the credit line, else the creator; `license` the usage terms, else the copyright notice ; `takenAt` with an offset where the file names one, local time where not. Also the copyright notice
  * alone and the two addresses Google Images reads for its Licensable badge: the license (`licenseUrl`, XMP's
  * WebStatement) and where to get one (`acquireLicenseUrl`, PLUS's LicensorURL).
  */

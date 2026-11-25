@@ -1,4 +1,4 @@
-// What the package keeps for itself on a site that gives it a store (v0.17.0): the answers to writes, so a retry under
+// What the package keeps for itself on a site that gives it a store: the answers to writes, so a retry under
 // the same change id is answered rather than run twice, the publish hooks that failed, so the cron tries them again, and
 // the shareable preview links and the webmentions each page last sent. A D1 site passes `d1SiteApiStore(env.DB)` as `store` and adds
 // `SITE_API_STORE_SQL` as its next migration. Exported as `@dustinedwards/site-api/store`.
@@ -44,18 +44,18 @@ export interface SiteApiStore {
   activePreviewLinks(contentId: string, now: string): Promise<PreviewLinkRow[]>;
   /** Revokes the unrevoked link whose hash starts with `prefix` (its id); false when none. */
   revokePreviewLink(prefix: string, at: string): Promise<boolean>;
-  /** The targets the webmention hook last sent for a source page (v0.17.0); [] when none. */
+  /** The targets the webmention hook last sent for a source page; [] when none. */
   webmentionTargets(source: string): Promise<string[]>;
   /** Replaces a source's targets with the ones it links to now, and drops the row when there are none. */
   putWebmentionTargets(source: string, targets: string[], sentAt: string): Promise<void>;
   /**
-   * v0.21.0: the media id the last upload or import with this duplicates key (duplicateKey) became; null when none. The
+   * The media id the last upload or import with this duplicates key (duplicateKey) became; null when none. The
    * route asks it after the adapter's findByHash, so a file the site converted or shrank is still found when sent again.
    */
   uploadedMedia(sha256: string): Promise<string | null>;
-  /** v0.21.0: remembers the file an upload or import with this key became, replacing an earlier one. */
+  /** Remembers the file an upload or import with this key became, replacing an earlier one. */
   putUploadedMedia(sha256: string, mediaId: string, at: string): Promise<void>;
-  // ---------- v0.22.0, optional so a site's own store from v0.17.0 still fits; d1SiteApiStore has them all
+  // ---------- optional so a site's own older store still fits; d1SiteApiStore has them all
   /** Keeps a tombstone for a path whose live item was deleted or trashed, so the site answers it 410 (tombstoneResponse). */
   markGone?(path: string, at: string): Promise<void>;
   /** Drops the tombstone: something is live at the path again. */
@@ -79,7 +79,6 @@ export interface SiteApiStore {
   compactMediaChanges?(): Promise<void>;
 }
 
-/** The D1 store, with every method of v0.22.0. */
 export type D1SiteApiStore = Required<SiteApiStore>;
 
 /**
@@ -92,7 +91,7 @@ export function gonePath(path: string): string {
 }
 
 /**
- * A site's own not-found answer, made 410 where the path holds a tombstone (v0.23.0): the same body and headers, so the
+ * A site's own not-found answer, made 410 where the path holds a tombstone: the same body and headers, so the
  * site's own page still shows, and never cached or indexed. Asked only on a 404, so a page that answers costs no query;
  * `isGone` answers false when the store cannot be read. Wrap the response the Worker is about to send:
  *
@@ -115,7 +114,7 @@ export async function tombstoned(
 }
 
 /**
- * The answer for a path that holds a tombstone (v0.22.0, F5): 410 Gone, never cached, never indexed. problem+json when
+ * The answer for a path that holds a tombstone 410 Gone, never cached, never indexed. problem+json when
  * the request asks for JSON over HTML, a small HTML page otherwise. A site's not-found handler answers it when
  * `store.isGone(url.pathname)`:
  *
@@ -158,7 +157,7 @@ export function tombstoneResponse(request?: Request): Response {
   });
 }
 
-/** One shareable preview link (v0.17.0). Times are UTC ISO text; `revokedAt` null while it works. */
+/** One shareable preview link. Times are UTC ISO text; `revokedAt` null while it works. */
 export interface PreviewLinkRow {
   tokenHash: string;
   contentId: string;
@@ -179,7 +178,7 @@ export interface HookRetry {
 }
 
 /**
- * v0.21.0's table, for a site that already applied SITE_API_STORE_SQL: it adds this as its next migration. Each row is the
+ * The table, for a site that already applied SITE_API_STORE_SQL: it adds this as its next migration. Each row is the
  * media id an upload's duplicates key became (duplicateKey), so the same file sent again is answered with that file.
  */
 export const SITE_API_STORE_SQL_V0_21 = `CREATE TABLE IF NOT EXISTS media_uploads (
@@ -190,7 +189,7 @@ export const SITE_API_STORE_SQL_V0_21 = `CREATE TABLE IF NOT EXISTS media_upload
 `;
 
 /**
- * v0.22.0's tables, additive: a site that applied SITE_API_STORE_SQL before v0.22.0 adds this as its next migration
+ * The tables, additive: a site that applied SITE_API_STORE_SQL before this table existed adds this as its next migration
  * (SITE_API_STORE_SQL holds it too, for a new site). `gone_paths` keeps the tombstones, `hook_runs` each hook's run.
  */
 export const SITE_API_STORE_SQL_V0_22 = `CREATE TABLE IF NOT EXISTS gone_paths (
@@ -435,7 +434,7 @@ export function d1SiteApiStore(db: D1Like): D1SiteApiStore {
       await db.prepare("DELETE FROM gone_paths WHERE path = ?").bind(gonePath(path)).run();
     },
     async isGone(path) {
-      // A not-found page must never fail on the store: a site that has not run the v0.22.0 migration yet answers 404.
+      // A not-found page must never fail on the store: a site that has not run the tombstone migration yet answers 404.
       try {
         return (
           (await db

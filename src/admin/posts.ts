@@ -110,7 +110,7 @@ export async function runPostsIntent(
     return refused("This site does not rename posts through the site API.");
   if (intent === "preview-link" && capabilities?.previewLinks !== true)
     return refused("This site does not make preview links.");
-  // v0.22.0: where the site lists backlinks, the posts that link to each one about to go, for the confirm to warn with.
+  // Where the site lists backlinks, the posts that link to each one about to go, for the confirm to warn with.
   const linked = async () => {
     if (capabilities?.backlinks !== true || text(input, "confirm") !== "") return [];
     const found = await Promise.all(
@@ -282,11 +282,11 @@ export interface PostQuery {
   status?: ContentStatus;
   kind?: string;
   tag?: string;
-  /** v0.17.0, where the site filters by them: one of the post's authors, and a published range in whole days (YYYY-MM-DD, both included). */
+  /** Where the site filters by them: one of the post's authors, and a published range in whole days (YYYY-MM-DD, both included). */
   author?: string;
   from?: string;
   to?: string;
-  /** v0.17.0, where the site has a trash: "1" lists only the trash. */
+  /** Where the site has a trash: "1" lists only the trash. */
   trashed?: "1";
   sort?: PostSort;
   dir?: SortDir;
@@ -306,8 +306,8 @@ export interface PostsData {
   counts?: Partial<Record<ContentStatus | "all" | "trash", number>>;
   kinds: string[];
   /**
-   * `scheduledUpdates` (v0.10.0): the site keeps an update waiting on a live post, so reschedule and cancel work on it.
-   * v0.17.0: `trash`, `rename` and `previewLinks` as the site's capabilities say, the list `filters` it applies, and the
+   * `scheduledUpdates`: the site keeps an update waiting on a live post, so reschedule and cancel work on it.
+   * `trash`, `rename` and `previewLinks` as the site's capabilities say, the list `filters` it applies, and the
    * `authors` on this page for the Author select.
    */
   offers: {
@@ -319,7 +319,7 @@ export interface PostsData {
     trash: boolean;
     rename: boolean;
     previewLinks: boolean;
-    /** v0.22.0: the site lists the posts that link to one, so a delete or a trash warns with them first. */
+    /** The site lists the posts that link to one, so a delete or a trash warns with them first. */
     backlinks: boolean;
     filters: ContentFilter[];
     authors: string[];
@@ -327,7 +327,7 @@ export interface PostsData {
   can: Permissions;
 }
 
-/** The update waiting on a live post, with what it changes, for the page that shows its source (v0.10.0). */
+/** The update waiting on a live post, with what it changes, for the page that shows its source. */
 export interface ScheduledUpdateView {
   id: string;
   title: string;

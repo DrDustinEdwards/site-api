@@ -142,7 +142,7 @@ export function memoryMentions(options: MemoryAdapterOptions, now: () => Date) {
           },
         };
 
-  // A v0.5.0 mentions group: no way back to pending.
+  // A mentions group with no way back to pending.
   if (mentionsAdapter && options.mentionReset === false) delete mentionsAdapter.reset;
   return { mentionStore, purged, receiveMention, mentionsAdapter };
 }

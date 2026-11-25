@@ -1,6 +1,5 @@
-// The site API as every site mounts it (v0.37.0): one standard set of publish hooks, and one gateway step for
-// site-runtime ./worker. Seven sites each wrote the same twenty lines (lib/carrel/handler.server.ts and the Carrel branch
-// of workers/app.ts), and bsw had no purge, no IndexNow and no webmentions.
+// The site API as every site mounts it: one standard set of publish hooks, and one gateway step for
+// site-runtime ./worker: purge, IndexNow and webmentions, so a site writes none of it.
 import { submitIndexNow } from "@drdustinedwards/site-helpers/indexnow";
 import { schedulePurgeHook } from "@dustinedwards/site-runtime/edge-cache";
 import { indexNowHook, type PublishHook } from "./hooks.js";

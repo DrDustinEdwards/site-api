@@ -1,4 +1,4 @@
-// v0.10.0: a live post carries a scheduled update; the live version stays served until the cron applies it, and the
+// A live post carries a scheduled update; the live version stays served until the cron applies it, and the
 // publish hooks hear every page a request or a schedule changes.
 
 import { isDatabaseDown } from "@dustinedwards/site-runtime/log";
@@ -59,7 +59,7 @@ async function livePost(client: ReturnType<typeof createSiteClient>) {
   return client.publish("a", { expectedVersion: draft.version, changeId: "c2" });
 }
 
-describe("scheduled updates (v0.10.0)", () => {
+describe("scheduled updates", () => {
   it("keeps the live version served until the time, then the cron puts the update live once and the hooks hear it", async () => {
     const { api, client, heard, settle } = mounted();
     const live = await livePost(client);
@@ -86,7 +86,6 @@ describe("scheduled updates (v0.10.0)", () => {
       changeId: "c3",
     });
 
-    // A reschedule replaces what was waiting.
     const moved = await client.schedule("a", {
       expectedVersion: scheduled.version,
       changeId: "c4",
@@ -222,7 +221,7 @@ describe("scheduled updates (v0.10.0)", () => {
   });
 });
 
-describe("publish hooks (v0.10.0)", () => {
+describe("publish hooks", () => {
   it("logs a hook that fails and never fails the write; the IndexNow hook sends the page through the site's submit", async () => {
     const sent: Array<{ urls: string[]; from?: string }> = [];
     const { api, logs } = siteWithHooks([
@@ -288,7 +287,7 @@ describe("publish hooks (v0.10.0)", () => {
   });
 });
 
-describe("publish hooks (v0.17.0)", () => {
+describe("publish hooks on rename, trash and restore", () => {
   it("hears what a hook names, sends both addresses of a rename, and retries a failed hook from the store until it gives up", async () => {
     const heard: string[] = [];
     const sent: string[][] = [];
@@ -346,7 +345,7 @@ describe("publish hooks (v0.17.0)", () => {
   });
 });
 
-describe("v0.27.0 runSchedulesOrThrow", () => {
+describe("runSchedulesOrThrow", () => {
   it("throws when a schedule failed, so the cron job fails and the schedule is tried again", async () => {
     const adapter = memoryAdapter();
     const api = createSiteApi({
@@ -380,7 +379,7 @@ describe("v0.27.0 runSchedulesOrThrow", () => {
   });
 });
 
-describe("page changes (v0.9.0)", () => {
+describe("page changes", () => {
   it("names the page a publish, a live save, an unpublish and a delete change, never a draft's, and waits on nothing", async () => {
     const { api, client: c, heard, settle } = mounted();
 

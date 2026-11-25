@@ -124,45 +124,45 @@ export const Capabilities = z.object({
   inbox: z.boolean(),
   insight: z.boolean(),
   publications: z.boolean(),
-  /** Present when `media` is true (v0.2.0). Optional, so a v0.1.0 reader parses a v0.2.0 meta. */
+  /** Present when `media` is true. Optional, so an older reader still parses it. */
   mediaUpload: MediaUploadLimits.optional(),
-  /** True when the site can delete content (v0.3.0). Absent or false: `DELETE /content/:id` answers 501. */
+  /** True when the site can delete content. Absent or false: `DELETE /content/:id` answers 501. */
   contentDelete: z.boolean().optional(),
-  /** True when the site can edit a file's alt text after upload (v0.4.0). Absent or false: the alt route answers 501. */
+  /** True when the site can edit a file's alt text after upload. Absent or false: the alt route answers 501. */
   mediaAlt: z.boolean().optional(),
-  /** True when the site keeps tags on files (v0.4.0). Absent or false: the tags route answers 501. */
+  /** True when the site keeps tags on files. Absent or false: the tags route answers 501. */
   mediaTags: z.boolean().optional(),
-  /** True when the site has a media trash: soft delete and restore (v0.4.0). Absent or false: those routes answer 501. */
+  /** True when the site has a media trash: soft delete and restore. Absent or false: those routes answer 501. */
   mediaTrash: z.boolean().optional(),
-  /** True when the site keeps tags on posts and writes them through `PUT /content/:id/tags` (v0.6.0). Absent or false: that route answers 501. */
+  /** True when the site keeps tags on posts and writes them through `PUT /content/:id/tags`. Absent or false: that route answers 501. */
   contentTags: z.boolean().optional(),
-  /** The media lenses the site answers (v0.6.0); with any of them it also sorts the media list. Absent: a lens answers 501. */
+  /** The media lenses the site answers; with any of them it also sorts the media list. Absent: a lens answers 501. */
   mediaLenses: z.array(MediaLens).optional(),
-  /** True when the site receives webmentions and lets Carrel moderate them (v0.5.0). Absent or false: every mentions route answers 501. */
+  /** True when the site receives webmentions and lets Carrel moderate them. Absent or false: every mentions route answers 501. */
   mentions: z.boolean().optional(),
-  /** True when a decision can be taken back to pending (v0.6.0), the `reset` decision. Absent or false: a reset answers 501. */
+  /** True when a decision can be taken back to pending, the `reset` decision. Absent or false: a reset answers 501. */
   mentionReset: z.boolean().optional(),
   /**
-   * True when a live item can carry a scheduled update (v0.10.0): `GET` and `DELETE /content/:id/schedule`, and a
+   * True when a live item can carry a scheduled update: `GET` and `DELETE /content/:id/schedule`, and a
    * schedule on a live item that keeps it live until the update replaces it. Absent or false: those routes answer 501,
    * and a schedule on a live item is refused rather than hiding it.
    */
   scheduledUpdates: z.boolean().optional(),
-  /** The search fields the site renders from a post's frontmatter (v0.17.0), each under its shared name. Absent: none. */
+  /** The search fields the site renders from a post's frontmatter, each under its shared name. Absent: none. */
   searchFields: z.array(z.enum(SEARCH_FIELDS)).optional(),
-  /** True when the site keeps a focal point on files (v0.10.0), `PUT /media/:id/focus`. Absent or false: that route answers 501. */
+  /** True when the site keeps a focal point on files, `PUT /media/:id/focus`. Absent or false: that route answers 501. */
   mediaFocus: z.boolean().optional(),
-  /** True when the site keeps a caption on files (v0.10.0), `PUT /media/:id/caption`. Absent or false: that route answers 501. */
+  /** True when the site keeps a caption on files, `PUT /media/:id/caption`. Absent or false: that route answers 501. */
   mediaCaption: z.boolean().optional(),
-  /** True when the site replaces a file's bytes under the same id and address (v0.10.0), `PUT /media/:id/file`. Absent or false: that route answers 501. */
+  /** True when the site replaces a file's bytes under the same id and address, `PUT /media/:id/file`. Absent or false: that route answers 501. */
   mediaReplace: z.boolean().optional(),
   /**
-   * True when the site refuses a replace whose picture is not the size of the one it replaces (v0.11.0): its addresses
+   * True when the site refuses a replace whose picture is not the size of the one it replaces: its addresses
    * or its pages are sized by the file's own width and height. Present only beside `mediaReplace`. A screen then asks
    * for a file of the same size, and saves a crop as a new file rather than in place. Absent: any size is taken.
    */
   mediaReplaceKeepsSize: z.boolean().optional(),
-  // ---------- v0.13.0, each optional per site; absent or false, the route or the query answers 501 and the field is absent
+  // ---------- each optional per site; absent or false, the route or the query answers 501 and the field is absent
   /** True when an upload or import whose bytes match a stored file's answers that file with `duplicateOf`, and details carry `twins`. */
   mediaDuplicates: z.boolean().optional(),
   /** True when items carry `usedCount` and the list sorts by `used`. */
@@ -187,9 +187,9 @@ export const Capabilities = z.object({
   mediaEmbedded: z.boolean().optional(),
   /** True when the site's model suggests tags and alt text for a file, `GET /media/:id/suggestions`. */
   mediaSuggestions: z.boolean().optional(),
-  /** True when the site's model suggests alt text and tags for a file before it is stored (v0.19.0), `POST /media/suggestions`. */
+  /** True when the site's model suggests alt text and tags for a file before it is stored, `POST /media/suggestions`. */
   mediaUploadSuggestions: z.boolean().optional(),
-  // ---------- v0.17.0, each optional per site
+  // ---------- each optional per site
   /**
    * True when every write is safe to retry under its change id: the same request again answers what the first one did,
    * with `Idempotent-Replayed: true`, and never runs twice. Preview links are the exception: their answer holds the
@@ -209,18 +209,18 @@ export const Capabilities = z.object({
   previewLinks: z.boolean().optional(),
   /** True when a publish takes `publishedAt`, the date it is published under. */
   contentPublishedAt: z.boolean().optional(),
-  /** v0.22.0: items carry `hasDraft`, and a `draft` list also lists a live item with a pending draft. */
+  /** Items carry `hasDraft`, and a `draft` list also lists a live item with a pending draft. */
   contentHasDraft: z.boolean().optional(),
   /** The post fields the site renders from a post's frontmatter, each under its shared name. Absent: none. */
   postFields: z.array(z.enum(POST_FIELDS)).optional(),
-  /** The Prelum RENDER_VERSION the site's stored HTML was rendered with (v0.17.0); a site re-renders when it is behind. Absent: the site does not say. */
+  /** The Prelum RENDER_VERSION the site's stored HTML was rendered with; a site re-renders when it is behind. Absent: the site does not say. */
   render: z.object({ version: z.string() }).optional(),
-  /** True when the site counts its 404s and reports them (v0.16.0), `GET /insight/not-found`. Absent: that route answers 501. */
+  /** True when the site counts its 404s and reports them, `GET /insight/not-found`. Absent: that route answers 501. */
   insightNotFound: z.boolean().optional(),
-  // ---------- v0.22.0, each optional per site
+  // ---------- each optional per site
   /** True when the site lists the posts that link to one, `GET /content/:id/backlinks`. Absent: that route answers 501. */
   backlinks: z.boolean().optional(),
-  /** Beside `previewLinks`: the most hours `expiresInHours` takes. Absent: a v0.17.0 site, which takes `hours` up to 168. */
+  /** Beside `previewLinks`: the most hours `expiresInHours` takes. Absent: an older site, which takes `hours` up to 168. */
   previewLinkHours: z.object({ max: z.number().int().min(1) }).optional(),
   /**
    * With a store: the publish hooks that hear a publish of a live page, by name. Each run is kept under its change id and
@@ -228,7 +228,7 @@ export const Capabilities = z.object({
    */
   hooks: z.array(z.string().min(1).max(200)).optional(),
   /**
-   * v0.36.0: true when the site replaces an item's transcript, `PUT /content/:id/transcript`, and a read carries
+   * True when the site replaces an item's transcript, `PUT /content/:id/transcript`, and a read carries
    * `transcriptVersion` beside `transcript`. Absent: that route answers 501 and the transcript stays read only.
    */
   contentTranscript: z.boolean().optional(),
@@ -255,14 +255,14 @@ export const ErrorCode = z.enum([
   "refused",
   "not-implemented",
   "internal",
-  /** v0.17.0: a write under this change id is still running; send it again once that one has answered. */
+  /** A write under this change id is still running; send it again once that one has answered. */
   "in-progress",
-  /** v0.22.0: the body or the query has a field the contract does not name; `field` names it. */
+  /** The body or the query has a field the contract does not name; `field` names it. */
   "unknown-field",
 ]);
 
 /**
- * Every error answer, sent as `application/problem+json` (RFC 9457) from v0.17.0: `type`, `title`, `status` and
+ * Every error answer, sent as `application/problem+json` (RFC 9457): `type`, `title`, `status` and
  * `detail` (the message again) are the standard's fields, optional so an earlier site's answer still parses.
  */
 export const ErrorBody = z.object({
@@ -274,9 +274,9 @@ export const ErrorBody = z.object({
   detail: z.string().optional(),
   /** On version-conflict only: what the site holds now, or null when the id does not exist. */
   currentVersion: Version.nullable().optional(),
-  /** On a refused media delete only (v0.2.0): every place the file is used. */
+  /** On a refused media delete only: every place the file is used. */
   usedBy: z.array(MediaUse).optional(),
-  /** On unknown-field only (v0.22.0): the first field the contract does not name. */
+  /** On unknown-field only: the first field the contract does not name. */
   field: z.string().optional(),
 });
 

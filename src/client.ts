@@ -147,11 +147,11 @@ export function createSiteClient(config: SiteClientConfig) {
 
   return {
     /**
-     * v0.22.0: a list in capabilities that names a value this package does not know (a later site's new post field, say)
+     * A list in capabilities that names a value this package does not know (a later site's new post field, say)
      * keeps the ones it knows, so a newer site never breaks an older reader's meta.
      */
     meta: async () => Meta.parse(knownCapabilities(await (await call("GET", "/meta")).json())),
-    /** A list. A filter the answer does not name in `filtered` was not applied (a v0.14.0 site), so it is refused as 501. */
+    /** A list. A filter the answer does not name in `filtered` was not applied (an older site), so it is refused as 501. */
     list: async (q: Partial<ListQuery> = {}) => {
       const list = await get(ContentList, "GET", `/content${query(q)}`);
       const missing = filtersAsked(q).find((f) => !list.filtered?.includes(f));
@@ -168,14 +168,14 @@ export function createSiteClient(config: SiteClientConfig) {
     publish: (id: string, input: PublishInput) =>
       get(WriteResult, "POST", `/content/${enc(id)}/publish`, input),
     /**
-     * Schedules a draft to go live at `publishAt`, or (v0.10.0, where `scheduledUpdates`) a live item's update: the live
+     * Schedules a draft to go live at `publishAt`, or (where `scheduledUpdates`) a live item's update: the live
      * version stays served and `source` replaces it then. Sent again, it reschedules.
      */
     schedule: (id: string, input: ScheduleInput) =>
       get(WriteResult, "POST", `/content/${enc(id)}/schedule`, input),
-    /** Optional per site (v0.10.0): the update waiting on a live item, with its source. 404 when none, 501 without the capability. */
+    /** Optional per site: the update waiting on a live item, with its source. 404 when none, 501 without the capability. */
     scheduledUpdate: (id: string) => get(ScheduledUpdate, "GET", `/content/${enc(id)}/schedule`),
-    /** Optional per site (v0.10.0): cancels a schedule. A live item stays live; a scheduled one returns to draft. */
+    /** Optional per site: cancels a schedule. A live item stays live; a scheduled one returns to draft. */
     cancelSchedule: (
       id: string,
       input: { expectedVersion: string; changeId: string; actorName?: string },
@@ -183,31 +183,31 @@ export function createSiteClient(config: SiteClientConfig) {
     unpublish: (id: string, input: UnpublishInput) =>
       get(WriteResult, "POST", `/content/${enc(id)}/unpublish`, input),
     revisions: (id: string) => get(RevisionList, "GET", `/content/${enc(id)}/revisions`),
-    /** One revision's source (v0.3.0), so each revision in the list opens. */
+    /** One revision's source, so each revision in the list opens. */
     revision: (id: string, version: string) =>
       get(RevisionSource, "GET", `/content/${enc(id)}/revisions/${enc(version)}`),
-    /** Optional per site (v0.3.0): a site with no delete answers SiteApiError with status 501. */
+    /** Optional per site: a site with no delete answers SiteApiError with status 501. */
     delete: (
       id: string,
       input: { expectedVersion: string; changeId: string; actorName?: string },
     ) => get(ContentDeleteResult, "DELETE", `/content/${enc(id)}${query(input)}`),
-    /** Optional per site (v0.22.0, `backlinks`): every post that links to this one, to warn with before a delete or a trash. */
+    /** Optional per site (`backlinks`): every post that links to this one, to warn with before a delete or a trash. */
     backlinks: (id: string) => get(BacklinkList, "GET", `/content/${enc(id)}/backlinks`),
-    /** v0.22.0, on a site with `hooks`: the publish hooks that ran for a change, and whether each worked. */
+    /** On a site with `hooks`: the publish hooks that ran for a change, and whether each worked. */
     hookRuns: (changeId: string) => get(HookRunList, "GET", `/hooks/recent${query({ changeId })}`),
-    /** Optional per site (v0.6.0): sets a post's whole tag set. A site without it answers SiteApiError with status 501. */
+    /** Optional per site: sets a post's whole tag set. A site without it answers SiteApiError with status 501. */
     setTags: (id: string, input: ContentTagsInput) =>
       get(WriteResult, "PUT", `/content/${enc(id)}/tags`, input),
     /**
-     * Optional per site (v0.36.0, `contentTranscript`): replaces an item's transcript, live at once, from the
+     * Optional per site (`contentTranscript`): replaces an item's transcript, live at once, from the
      * `transcriptVersion` it was written from (null when the item has none). A site without it answers 501.
      */
     setTranscript: (id: string, input: TranscriptInput) =>
       get(TranscriptWriteResult, "PUT", `/content/${enc(id)}/transcript`, input),
-    /** Optional per site (v0.17.0, `contentRename`): moves an item to `newId`; its old path redirects to the new one. */
+    /** Optional per site (`contentRename`): moves an item to `newId`; its old path redirects to the new one. */
     rename: (id: string, input: RenameInput) =>
       get(RenameResult, "POST", `/content/${enc(id)}/rename`, input),
-    /** Optional per site (v0.17.0, `contentTrash`): to the trash (a live item leaves the site first) and back, as a draft. */
+    /** Optional per site (`contentTrash`): to the trash (a live item leaves the site first) and back, as a draft. */
     trash: (id: string, input: ContentTrashInput) =>
       get(WriteResult, "POST", `/content/${enc(id)}/trash`, input),
     restore: (id: string, input: ContentTrashInput) =>
@@ -215,21 +215,21 @@ export function createSiteClient(config: SiteClientConfig) {
     diff: (id: string, from: string, to?: string) =>
       get(Diff, "GET", `/content/${enc(id)}/diff${query({ from, to })}`),
     preview: async (input: PreviewInput) => (await call("POST", "/preview", input)).text(),
-    /** Optional per site (v0.17.0, `previewLinks`): a link anyone can open to see an item's current source, without the key. */
+    /** Optional per site (`previewLinks`): a link anyone can open to see an item's current source, without the key. */
     previewLinks: {
       create: (input: PreviewLinkInput) => get(PreviewLink, "POST", "/preview-links", input),
       list: (id: string) => get(PreviewLinkList, "GET", `/preview-links${query({ id })}`),
       revoke: (linkId: string, input: { changeId: string; actorName?: string }) =>
         get(PreviewLinkRevokeResult, "DELETE", `/preview-links/${enc(linkId)}${query(input)}`),
     },
-    /** The media group (v0.2.0). A refused delete throws SiteApiError whose body carries `usedBy`. */
+    /** The media group. A refused delete throws SiteApiError whose body carries `usedBy`. */
     media: {
       list: (q: Partial<MediaListQuery> = {}) => get(MediaList, "GET", `/media${query(q)}`),
       get: (id: string) => get(MediaDetail, "GET", `/media/${enc(id)}`),
       /**
-       * v0.13.0: answers MediaUploadResult, the item with `duplicateOf` where the site already held these bytes (nothing new
+       * Answers MediaUploadResult, the item with `duplicateOf` where the site already held these bytes (nothing new
        * was stored), `embedded` and `resizedFrom`. `resize: "no"` keeps this file's size on a site that shrinks uploads.
-       * v0.19.0: `alt`, or `decorative: true`, is required; a site refuses an upload with neither (400).
+       * `alt`, or `decorative: true`, is required; a site refuses an upload with neither (400).
        */
       upload: async (input: {
         bytes: Uint8Array;
@@ -254,7 +254,7 @@ export function createSiteClient(config: SiteClientConfig) {
           ).json(),
         ),
       /**
-       * v0.19.0 (`mediaUploadSuggestions`): the site's model's alt text and tags for a file before it is stored, from its
+       * (`mediaUploadSuggestions`): the site's model's alt text and tags for a file before it is stored, from its
        * bytes, or from an import's `url`. Nothing is stored: the form shows the alt for the person to keep or change.
        */
       suggestFile: async (input: { bytes: Uint8Array; contentType: string } | { url: string }) =>
@@ -268,7 +268,7 @@ export function createSiteClient(config: SiteClientConfig) {
                 })
           ).json(),
         ),
-      /** Takes `{ changeId }` (v0.6.0), like every other write; the change id alone still works. */
+      /** Takes `{ changeId }`, like every other write; the change id alone still works. */
       delete: (id: string, input: { changeId: string } | string) =>
         get(
           MediaDeleteResult,
@@ -276,7 +276,7 @@ export function createSiteClient(config: SiteClientConfig) {
           `/media/${enc(id)}${query({ changeId: typeof input === "string" ? input : input.changeId })}`,
         ),
       /**
-       * The writes of v0.4.0, each optional per site: a site without it answers SiteApiError with
+       * The writes, each optional per site: a site without it answers SiteApiError with
        * status 501 (see meta().capabilities). A stale version is status 409 with the current version.
        */
       setAlt: (id: string, input: MediaAltInput) =>
@@ -288,7 +288,7 @@ export function createSiteClient(config: SiteClientConfig) {
       restore: (id: string, input: MediaTrashInput) =>
         get(MediaWriteResult, "POST", `/media/${enc(id)}/restore`, input),
       /**
-       * v0.10.0, each optional per site (`mediaFocus`, `mediaCaption`, `mediaReplace`; 501 without). `focus` is "XxY"
+       * Each optional per site (`mediaFocus`, `mediaCaption`, `mediaReplace`; 501 without). `focus` is "XxY"
        * from site-runtime's ./image `focusOf`, or null to clear it.
        */
       setFocus: (id: string, input: MediaFocusInput) =>
@@ -323,7 +323,7 @@ export function createSiteClient(config: SiteClientConfig) {
           ).json(),
         ),
       /**
-       * v0.13.0, each optional per site (501 without; see meta().capabilities). `importUrl` has the site fetch an https
+       * Each optional per site (501 without; see meta().capabilities). `importUrl` has the site fetch an https
        * address into its own storage (`mediaImport`), answering as an upload does.
        */
       importUrl: (input: MediaImportInput) =>
@@ -352,20 +352,20 @@ export function createSiteClient(config: SiteClientConfig) {
       /** One request for many files; every file's outcome is its own, so check each `ok`. */
       bulk: (input: MediaBulkInput) => get(MediaBulkResult, "POST", "/media/bulk", input),
     },
-    /** The mentions group (v0.5.0), optional per site: a site without it answers SiteApiError with status 501. */
+    /** The mentions group, optional per site: a site without it answers SiteApiError with status 501. */
     mentions: {
       list: (q: Partial<MentionListQuery> = {}) => get(MentionList, "GET", `/mentions${query(q)}`),
       decide: (id: string, input: MentionDecideInput) =>
         get(MentionWriteResult, "POST", `/mentions/${enc(id)}/decide`, input),
       delete: (id: string, input: { expectedVersion: string; changeId: string }) =>
         get(MentionDeleteResult, "DELETE", `/mentions/${enc(id)}${query(input)}`),
-      /** Takes `{ changeId }` (v0.6.0), like every other write; the change id alone still works. */
+      /** Takes `{ changeId }`, like every other write; the change id alone still works. */
       sweep: (input: { changeId: string } | string) =>
         get(MentionSweepResult, "POST", "/mentions/sweep", {
           changeId: typeof input === "string" ? input : input.changeId,
         }),
     },
-    /** The insight group (v0.16.0), optional per site (`insightNotFound`): a site without it answers SiteApiError with status 501. */
+    /** The insight group, optional per site (`insightNotFound`): a site without it answers SiteApiError with status 501. */
     insight: {
       /** The site's most-hit missing paths, with the hosts that linked to each: `days` 1 to 90 (30), `limit` 1 to 200 (50). */
       notFound: (q: { days?: number; limit?: number; includeProbes?: boolean } = {}) =>

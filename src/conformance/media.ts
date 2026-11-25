@@ -39,7 +39,7 @@ export async function mediaChecks(ctx: ConformanceContext): Promise<void> {
       return `${list.items.length} file(s) on the first page`;
     });
 
-    // v0.6.0 lenses: every one the site names answers in shape; one it does not name answers 501.
+    // Lenses: every one the site names answers in shape; one it does not name answers 501.
     await check(
       "media lenses: each one the site names answers, and one it does not is not implemented",
       async () => {
@@ -88,7 +88,7 @@ export async function mediaChecks(ctx: ConformanceContext): Promise<void> {
         return "400 invalid";
       });
 
-      // v0.4.0 writes. Each is optional: where the site declares the capability, the probe is refused as
+      // Writes. Each is optional: where the site declares the capability, the probe is refused as
       // a real error; where it does not, the same request must answer 501. Nothing here can change a file.
       const probeId = encodeURIComponent(MEDIA_PROBE_ID);
       const stale = { expectedVersion: STALE_VERSION, changeId: probe() };
@@ -120,7 +120,6 @@ export async function mediaChecks(ctx: ConformanceContext): Promise<void> {
         ["restore", capabilities.mediaTrash, "POST", "restore", stale],
         ["focus", capabilities.mediaFocus, "PUT", "focus", { focus: "0.5x0.5", ...stale }],
         ["caption", capabilities.mediaCaption, "PUT", "caption", { caption: "probe", ...stale }],
-        // v0.13.0
         [
           "credit",
           capabilities.mediaCredit,
@@ -145,7 +144,7 @@ export async function mediaChecks(ctx: ConformanceContext): Promise<void> {
         );
       }
 
-      // v0.13.0 reads of the probe id: a site answers 404 before it would ask its model anything.
+      // Reads of the probe id: a site answers 404 before it would ask its model anything.
       const reads: Array<[string, boolean | undefined, string]> = [
         ["history", capabilities.mediaHistory, "history"],
         ["suggestions", capabilities.mediaSuggestions, "suggestions"],
@@ -204,7 +203,7 @@ export async function mediaChecks(ctx: ConformanceContext): Promise<void> {
           ),
       );
 
-      // v0.10.0: a replace of the probe id, in a type the site accepts, is a 404 before any byte is read.
+      // A replace of the probe id, in a type the site accepts, is a 404 before any byte is read.
       await check(
         "media replace of an unknown id: refused, or not implemented where the site lacks it",
         async () => {

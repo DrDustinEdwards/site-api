@@ -8,7 +8,7 @@ export interface RateLimiter {
 }
 
 /**
- * The secrets a site holds for the API (v0.14.0), for its Env: `CARREL_SITE_KEY`, set with `wrangler secret put
+ * The secrets a site holds for the API, for its Env: `CARREL_SITE_KEY`, set with `wrangler secret put
  * CARREL_SITE_KEY` and passed to `createSiteApi` as `key`.
  */
 export interface SiteApiSecrets {
@@ -23,15 +23,15 @@ export interface SiteApiConfig {
   /** Where refusals and adapter failures are logged. Defaults to `siteApiLog`: site-runtime's scrubbed logger, a refused request named in the OWASP vocabulary. */
   log?: (entry: Record<string, unknown>) => void;
   /**
-   * Run when a public page changes (v0.10.0): a publish, an unpublish, a delete of a live item, a save or tag change to
+   * Run when a public page changes: a publish, an unpublish, a delete of a live item, a save or tag change to
    * a live item, and each schedule `runSchedules` applies. The first is `indexNowHook`, over Prelum's `submitIndexNow`.
    * After a request they run under its `waitUntil` when `handle` is given one, so Carrel's answer never waits on them;
-   * a hook that fails is logged, never answered, and the write stands. v0.17.0: a hook may name the actions it hears
+   * a hook that fails is logged, never answered, and the write stands. A hook may name the actions it hears
    * (`on`), and with a `store` a failed one is kept and `runSchedules` runs it again (HOOK_BACKOFF_MINUTES).
    */
   hooks?: PublishHook[];
   /**
-   * Where the package keeps what it needs between requests (v0.17.0): on D1, `d1SiteApiStore(env.DB)` from
+   * Where the package keeps what it needs between requests: on D1, `d1SiteApiStore(env.DB)` from
    * `@dustinedwards/site-api/store`, with `SITE_API_STORE_SQL` as a migration. With it, every write is safe to retry
    * under its change id (capabilities.replay). Absent: nothing is kept between requests.
    */
@@ -47,13 +47,13 @@ export interface ScheduleRun {
   failed: number;
   /** The pass hit its limit, so more may be due now. */
   more: boolean;
-  /** v0.17.0: items deleted for good from the content trash, TRASH_DAYS after they went there. */
+  /** Items deleted for good from the content trash, TRASH_DAYS after they went there. */
   emptied: number;
-  /** v0.17.0: failed publish hooks run again, where the site has a store. */
+  /** Failed publish hooks run again, where the site has a store. */
   retried: number;
 }
 
-/** How long an item stays in the content trash (v0.17.0) before `runSchedules` deletes it for good. */
+/** How long an item stays in the content trash before `runSchedules` deletes it for good. */
 export const TRASH_DAYS = 30;
 
 /** How many schedules one pass applies at most, so a backlog drains over several passes within a Worker's limits. */
@@ -69,7 +69,7 @@ export interface SiteApi {
   matches(request: Request): boolean;
   handle(request: Request, ctx?: WaitUntil): Promise<Response>;
   /**
-   * Applies every schedule due at `now` (v0.10.0) and runs the hooks for each: call it from the site's cron
+   * Applies every schedule due at `now` and runs the hooks for each: call it from the site's cron
    * (`scheduled()`, under `ctx.waitUntil`). Safe to run as often as wanted: an applied schedule is gone, so a second
    * pass finds nothing. A site whose adapter has no `schedules` applies nothing.
    */
@@ -79,11 +79,11 @@ export interface SiteApi {
    * and the schedule is listed again next pass. Returns the run when none failed.
    */
   runSchedulesOrThrow(options?: { now?: Date; limit?: number }): Promise<ScheduleRun>;
-  /** v0.17.0: true for a GET (v0.22.0: or a HEAD) under PREVIEW_LINK_PATH, outside the prefix. Mount `servePreviewLink` where this holds. */
+  /** True for a GET or HEAD under PREVIEW_LINK_PATH, outside the prefix. Mount `servePreviewLink` where this holds. */
   matchesPreviewLink(request: Request): boolean;
   /**
-   * Serves a shareable preview link with no key (v0.17.0): the item's current source through the site's preview, never
-   * indexed, cached or sent on as a referrer. An expired link answers 410; a revoked one (v0.22.0) and any other 404, and a
+   * Serves a shareable preview link with no key: the item's current source through the site's preview, never
+   * indexed, cached or sent on as a referrer. An expired link answers 410; a revoked one and any other 404, and a
    * site with no store answers every link 404. A HEAD gets the GET's status and headers, no body. Rate limited like the API.
    */
   servePreviewLink(request: Request): Promise<Response>;

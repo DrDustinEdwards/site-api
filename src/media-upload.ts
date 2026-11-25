@@ -1,4 +1,4 @@
-// The upload step every site's media adapter ran for itself (v0.15.0), once: the checks, HEIC and HEIF to JPEG, a
+// The upload step every site's media adapter ran for itself, once: the checks, HEIC and HEIF to JPEG, a
 // photo's private metadata taken out, the shrink to the site's longest edge, what the picture says about itself, a file
 // name in words, the placeholder and main color, and the hashes. A site's `upload` calls prepareUpload and stores what it
 // answers. readEmbedded, stripMetadata and the PNG reader are byte work on Web APIs alone, so they run in a Worker; the
@@ -174,7 +174,7 @@ const EXTENSIONS: Record<string, string[]> = {
 };
 
 /**
- * The name a file is stored under (C10): a camera's own name (IMG_0001, DSC01234, PXL_20260101_..., Screenshot 2026-...
+ * The name a file is stored under: a camera's own name (IMG_0001, DSC01234, PXL_20260101_..., Screenshot 2026-...
  * at 10.22.33 AM, a UUID) replaced by `words` (the alt text, else the caption) as lower case words joined by hyphens, at
  * most 60 characters, a leading article dropped; any other name kept. The extension is the stored type's, so a name never
  * says .heic or .png over a JPEG. Exported for a site's own upload path.
@@ -237,7 +237,7 @@ export interface PreparedUpload {
   /** The stored type: image/jpeg for a HEIC or HEIF upload, else the upload's. */
   contentType: string;
   /**
-   * The name to store (v0.19.0): a camera's or a phone's own name (IMG_0001, DSC01234, PXL_..., Screenshot ...) becomes
+   * The name to store: a camera's or a phone's own name (IMG_0001, DSC01234, PXL_..., Screenshot ...) becomes
    * words from the alt text, else the embedded caption, and the extension is the stored type's (.jpg for a converted HEIC).
    */
   filename: string;
@@ -247,7 +247,7 @@ export interface PreparedUpload {
   /** The SHA-256 of `bytes`, the stored file. */
   sha256: string;
   /**
-   * The upload's duplicates key (duplicateKey, v0.21.0; before, the SHA-256 of the bytes as sent): what the package's route
+   * The upload's duplicates key (duplicateKey): what the package's route
    * asked findByHash about and records for the file in the site's store. Equal to `sha256` unless the picture was
    * converted or shrunk.
    */

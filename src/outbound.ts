@@ -1,4 +1,4 @@
-// The one outbound-address guard (v0.22.0), for every fetch the package makes to an address a stranger chose: the
+// The one outbound-address guard, for every fetch the package makes to an address a stranger chose: the
 // webmention sender (targets and their endpoints) and the media import.
 //
 // An address passes when it is https (or http, where the caller allows it), on the scheme's default port, with no user
