@@ -43,6 +43,14 @@ export function memoryMentions(options: MemoryAdapterOptions, now: () => Date) {
     return id;
   }
 
+  /** Stores a mention's decision under a new version and purges the page it is shown on. */
+  function settle(current: MentionItem, changes: Partial<MentionItem>) {
+    const next: MentionItem = { ...current, ...changes, version: `m${++mentionVersion}` };
+    mentionStore.set(current.id, next);
+    purged.push(current.targetId);
+    return { status: next.status, version: next.version, purged: true };
+  }
+
   function heldMention(id: string, expectedVersion: string): MentionItem {
     const current = mentionStore.get(id);
     if (!current) throw new NotFoundError("No such mention.");
@@ -109,30 +117,17 @@ export function memoryMentions(options: MemoryAdapterOptions, now: () => Date) {
                 `A ${current.status} mention cannot be decided: only a verified mention can.`,
               );
             }
-            const next: MentionItem = {
-              ...current,
+            return settle(current, {
               status: input.decision === "approve" ? "approved" : "rejected",
               decidedAt: now().toISOString(),
-              version: `m${++mentionVersion}`,
-            };
-            mentionStore.set(id, next);
-            purged.push(current.targetId);
-            return { status: next.status, version: next.version, purged: true };
+            });
           },
           async reset(id, input) {
             const current = heldMention(id, input.expectedVersion);
             if (current.status !== "approved" && current.status !== "rejected") {
               throw new RefusedError(`A ${current.status} mention has no decision to take back.`);
             }
-            const next: MentionItem = {
-              ...current,
-              status: "pending",
-              decidedAt: null,
-              version: `m${++mentionVersion}`,
-            };
-            mentionStore.set(id, next);
-            purged.push(current.targetId);
-            return { status: next.status, version: next.version, purged: true };
+            return settle(current, { status: "pending", decidedAt: null });
           },
           async delete(id, input) {
             const current = heldMention(id, input.expectedVersion);

@@ -33,7 +33,7 @@ export function pictureLimits(maxBytes = 20 * 1024 * 1024): MediaUploadLimits {
  */
 export const PICTURE_RESIZE: MediaResize = { maxEdge: 2560, quality: 85 };
 
-export const EXTENSIONS: Record<string, string> = {
+const EXTENSIONS: Record<string, string> = {
   "image/jpeg": "jpg",
   "image/png": "png",
   "image/webp": "webp",

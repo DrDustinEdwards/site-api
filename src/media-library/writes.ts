@@ -15,26 +15,6 @@ import { REENCODED, prepareUpload } from "../media-upload.js";
 import type { Encoded } from "../media-upload.js";
 import { type MediaLibraryOptions } from "./types.js";
 import { ALL_REVISIONS, RACED, TRANSFORMS, TRANSFORM_QUALITY, positive } from "./constants.js";
-export type {
-  MediaBucket,
-  MediaKeyInput,
-  MediaLibraryEvent,
-  MediaLibraryOptions,
-  MediaLibraryStore,
-  MediaObject,
-  MediaRecord,
-  MediaRecordFields,
-  MediaRecordWrite,
-  MediaRevisionReason,
-  MediaRevisionRecord,
-} from "./types.js";
-export {
-  PICTURE_RESIZE,
-  PICTURE_TYPES,
-  datedKey,
-  extensionFor,
-  pictureLimits,
-} from "./constants.js";
 
 import type { LibraryCore } from "./types.js";
 

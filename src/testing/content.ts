@@ -126,6 +126,23 @@ export function memoryContent(options: MemoryAdapterOptions, now: () => Date) {
 
   const deletedContent: string[] = [];
 
+  /** The stored item at its expected version: a missing id is NotFoundError, a stale version a conflict. */
+  function held(id: string, expectedVersion: string): Stored {
+    if (!store.has(id)) throw new NotFoundError();
+    return existing(id, expectedVersion);
+  }
+
+  /** A write made on behalf of a request: its change id and the person it names. */
+  function write(
+    id: string,
+    previous: Stored | undefined,
+    changes: WriteChanges,
+    input: { changeId: string; actor?: { name: string } },
+    message: string,
+  ): WriteResult {
+    return commit(id, previous, changes, input.changeId, message, input.actor);
+  }
+
   /** v0.22.0: every other post whose source links to this one's path, as a site's link table would answer. */
   async function backlinks(id: string) {
     const target = `/blog/${id}`;
@@ -250,7 +267,7 @@ export function memoryContent(options: MemoryAdapterOptions, now: () => Date) {
     async saveDraft(id, input) {
       const previous = expect(id, input.expectedVersion);
       const status = previous?.doc.status === "published" ? "published" : "draft";
-      return commit(
+      return write(
         id,
         previous,
         {
@@ -259,38 +276,35 @@ export function memoryContent(options: MemoryAdapterOptions, now: () => Date) {
           publishAt: previous?.doc.publishAt,
           hasDraft: status === "published",
         },
-        input.changeId,
+        input,
         "Save",
-        input.actor,
       );
     },
     async publish(id, input) {
       const previous = existing(id, input.expectedVersion);
       // A publish now drops any update that was waiting: what goes live is this.
       const redate = input.publishedAt ? { redate: new Date(input.publishedAt).toISOString() } : {};
-      return commit(
+      return write(
         id,
         previous,
         { source: input.source, status: "published", pending: null, hasDraft: false, ...redate },
-        input.changeId,
+        input,
         "Publish",
-        input.actor,
       );
     },
     async schedule(id, input) {
       const previous = existing(id, input.expectedVersion);
-      return commit(
+      return write(
         id,
         previous,
         { source: input.source, status: "scheduled", publishAt: input.publishAt },
-        input.changeId,
+        input,
         "Schedule",
-        input.actor,
       );
     },
     async unpublish(id, input) {
       const previous = existing(id, input.expectedVersion);
-      return commit(id, previous, { status: "draft" }, input.changeId, "Unpublish", input.actor);
+      return write(id, previous, { status: "draft" }, input, "Unpublish");
     },
     async revisions(id) {
       return store.get(id)?.history.map((h) => h.revision) ?? null;
@@ -311,21 +325,19 @@ export function memoryContent(options: MemoryAdapterOptions, now: () => Date) {
               actor?: { name: string };
             },
           ) {
-            if (!store.has(id)) throw new NotFoundError();
-            const previous = existing(id, input.expectedVersion);
+            const previous = held(id, input.expectedVersion);
             const parts = splitSource(previous.doc.source);
             if (parts.front === null)
               throw new RefusedError(
                 "This post has no frontmatter, so it has nowhere to keep tags.",
               );
             const source = joinSource({ ...parts, front: writeTags(parts.front, input.tags) });
-            return commit(
+            return write(
               id,
               previous,
               { source, status: previous.doc.status, publishAt: previous.doc.publishAt },
-              input.changeId,
+              input,
               "Tags",
-              input.actor,
             );
           },
         }),
@@ -340,8 +352,7 @@ export function memoryContent(options: MemoryAdapterOptions, now: () => Date) {
               actor?: { name: string };
             },
           ) {
-            if (!store.has(id)) throw new NotFoundError();
-            const previous = existing(id, input.expectedVersion);
+            const previous = held(id, input.expectedVersion);
             if (store.has(input.newId)) throw new RefusedError(`${input.newId} is already taken.`);
             const previousPath = previous.doc.publishedAt ? previous.doc.path : null;
             store.delete(id);
@@ -362,34 +373,24 @@ export function memoryContent(options: MemoryAdapterOptions, now: () => Date) {
             id: string,
             input: { expectedVersion: string; changeId: string; actor?: { name: string } },
           ) {
-            if (!store.has(id)) throw new NotFoundError();
-            const previous = existing(id, input.expectedVersion);
+            const previous = held(id, input.expectedVersion);
             if (previous.doc.trashedAt)
               throw new RefusedError("This post is already in the trash.");
-            return commit(
+            return write(
               id,
               previous,
               { status: "draft", pending: null, trashedAt: now().toISOString() },
-              input.changeId,
+              input,
               "Trash",
-              input.actor,
             );
           },
           async restore(
             id: string,
             input: { expectedVersion: string; changeId: string; actor?: { name: string } },
           ) {
-            if (!store.has(id)) throw new NotFoundError();
-            const previous = existing(id, input.expectedVersion);
+            const previous = held(id, input.expectedVersion);
             if (!previous.doc.trashedAt) throw new RefusedError("This post is not in the trash.");
-            return commit(
-              id,
-              previous,
-              { status: "draft", trashedAt: null },
-              input.changeId,
-              "Restore",
-              input.actor,
-            );
+            return write(id, previous, { status: "draft", trashedAt: null }, input, "Restore");
           },
         }
       : {}),

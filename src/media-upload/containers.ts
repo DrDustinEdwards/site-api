@@ -26,13 +26,12 @@ export function jpegSegments(b: Uint8Array): { segments: Segment[]; scan: number
 
 export const EXIF_JPEG = "Exif\u0000\u0000";
 export const XMP_JPEG = "http://ns.adobe.com/xap/1.0/\u0000";
-export const IPTC_JPEG = "Photoshop 3.0\u0000";
+const IPTC_JPEG = "Photoshop 3.0\u0000";
 export const XMP_PNG = "XML:com.adobe.xmp";
 
 export const isExif = (s: Segment) => s.marker === 0xe1 && ascii(s.data, 0, 6) === EXIF_JPEG;
-export const isXmp = (s: Segment) =>
-  s.marker === 0xe1 && ascii(s.data, 0, XMP_JPEG.length) === XMP_JPEG;
-export const isIptc = (s: Segment) =>
+const isXmp = (s: Segment) => s.marker === 0xe1 && ascii(s.data, 0, XMP_JPEG.length) === XMP_JPEG;
+const isIptc = (s: Segment) =>
   s.marker === 0xed && ascii(s.data, 0, IPTC_JPEG.length) === IPTC_JPEG;
 
 export function jpegBlocks(b: Uint8Array): Blocks {
@@ -234,7 +233,7 @@ export function heifBlocks(b: Uint8Array): Blocks {
 }
 
 /** The boxes between two offsets: each one's type and where its contents start and end. */
-export function boxes(
+function boxes(
   b: Uint8Array,
   from: number,
   to: number,

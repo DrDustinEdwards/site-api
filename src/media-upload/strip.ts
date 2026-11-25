@@ -25,7 +25,7 @@ import {
 } from "./containers.js";
 
 /** IFD0 tags a cleaned file keeps: description, orientation, resolution, chroma siting, artist and copyright. */
-export const KEEP_IFD0 = new Set([
+const KEEP_IFD0 = new Set([
   TAGS.description,
   0x0112,
   0x011a,
@@ -36,13 +36,13 @@ export const KEEP_IFD0 = new Set([
   TAGS.copyright,
 ]);
 /** EXIF IFD tags it keeps: the EXIF version and the color space. */
-export const KEEP_EXIF = new Set([0x9000, 0xa001]);
+const KEEP_EXIF = new Set([0x9000, 0xa001]);
 
 /**
  * A TIFF block with only the tags above, in the original byte order: no location, no camera or lens serial number, no
  * owner's name, no MakerNote, no dates, no thumbnail (IFD1, whose own metadata would stay otherwise). Null for none of them.
  */
-export function keptTiff(tiff: Uint8Array): Uint8Array | null {
+function keptTiff(tiff: Uint8Array): Uint8Array | null {
   const read = tiffEntries(tiff);
   if (!read) return null;
   const exif = read.exif.filter((e) => KEEP_EXIF.has(e.tag));
@@ -87,7 +87,7 @@ export function keptTiff(tiff: Uint8Array): Uint8Array | null {
  * A fresh XMP packet holding only who made the picture and its terms, in the IPTC Photo Metadata properties Google Images
  * reads for its credit and Licensable badge; null when there is none of them.
  */
-export function xmpPacket(f: Facts): Uint8Array | null {
+function xmpPacket(f: Facts): Uint8Array | null {
   const alt = (v: string) =>
     `<rdf:Alt><rdf:li xml:lang="x-default">${escapeXml(v)}</rdf:li></rdf:Alt>`;
   const props = [
@@ -113,7 +113,7 @@ export function xmpPacket(f: Facts): Uint8Array | null {
   );
 }
 
-export const XMP_NAMESPACES = {
+const XMP_NAMESPACES = {
   dc: "http://purl.org/dc/elements/1.1/",
   photoshop: "http://ns.adobe.com/photoshop/1.0/",
   xmpRights: "http://ns.adobe.com/xap/1.0/rights/",
@@ -121,7 +121,7 @@ export const XMP_NAMESPACES = {
 };
 
 /** The XMP a cleaned file keeps: written only where the file had XMP or IPTC, which the clean removes. */
-export const freshXmp = (blocks: Blocks) =>
+const freshXmp = (blocks: Blocks) =>
   blocks.xmp !== null || blocks.iptc !== null ? xmpPacket(factsOf(blocks)) : null;
 
 /**
@@ -165,11 +165,11 @@ export async function duplicateKey(bytes: Uint8Array, contentType: string): Prom
   return sha256Hex(stripMetadata(bytes, contentType));
 }
 
-export const jpegSegment = (marker: number, data: Uint8Array) =>
+const jpegSegment = (marker: number, data: Uint8Array) =>
   concat([new Uint8Array([0xff, marker, (data.length + 2) >> 8, (data.length + 2) & 0xff]), data]);
 
 /** Where a JPEG's first picture ends, after its EOI, from the start of its first scan; the file's end where it has none. */
-export function jpegEnd(b: Uint8Array, scan: number): number {
+function jpegEnd(b: Uint8Array, scan: number): number {
   let at = scan;
   while (at + 3 < b.length) {
     if (b[at] !== 0xff) {
@@ -187,7 +187,7 @@ export function jpegEnd(b: Uint8Array, scan: number): number {
 }
 
 /** Kept: JFIF, a new EXIF, the ICC profile, Adobe's color transform and every segment that is not metadata (tables, frame). */
-export function cleanJpeg(b: Uint8Array): Uint8Array {
+function cleanJpeg(b: Uint8Array): Uint8Array {
   if (b[0] !== 0xff || b[1] !== 0xd8) return b;
   const { segments, scan } = jpegSegments(b);
   if (scan >= b.length) return b;
@@ -214,7 +214,7 @@ export function cleanJpeg(b: Uint8Array): Uint8Array {
 }
 
 /** One PNG chunk: its length, type, data and the CRC-32 of the type and data. */
-export function pngChunk(type: string, data: Uint8Array): Uint8Array {
+function pngChunk(type: string, data: Uint8Array): Uint8Array {
   const chunk = new Uint8Array(12 + data.length);
   const view = new DataView(chunk.buffer);
   view.setUint32(0, data.length);
@@ -225,7 +225,7 @@ export function pngChunk(type: string, data: Uint8Array): Uint8Array {
 }
 
 /** The PNG chunks a cleaned file keeps: the picture, its color, its size on paper and its animation (APNG). */
-export const PNG_KEPT = new Set([
+const PNG_KEPT = new Set([
   "IHDR",
   "PLTE",
   "IDAT",
@@ -248,9 +248,9 @@ export const PNG_KEPT = new Set([
   "fdAT",
 ]);
 /** The text chunks it keeps, by keyword: the picture's title, author, copyright and description. */
-export const PNG_TEXT_KEPT = new Set(["Title", "Author", "Copyright", "Description"]);
+const PNG_TEXT_KEPT = new Set(["Title", "Author", "Copyright", "Description"]);
 
-export function cleanPng(b: Uint8Array): Uint8Array {
+function cleanPng(b: Uint8Array): Uint8Array {
   const chunks = pngChunks(b);
   // A file that does not walk to its IEND is not one the clean can rewrite.
   if (u32be(b, 0) !== 0x89504e47 || chunks.at(-1)?.type !== "IEND") return b;
@@ -274,9 +274,9 @@ export function cleanPng(b: Uint8Array): Uint8Array {
   return concat(parts);
 }
 
-export const RIFF_KEPT = new Set(["VP8X", "ICCP", "ANIM", "ANMF", "ALPH", "VP8 ", "VP8L"]);
+const RIFF_KEPT = new Set(["VP8X", "ICCP", "ANIM", "ANMF", "ALPH", "VP8 ", "VP8L"]);
 
-export function riffChunk(fourcc: string, data: Uint8Array): Uint8Array {
+function riffChunk(fourcc: string, data: Uint8Array): Uint8Array {
   const head = new Uint8Array(8);
   head.set(bytesOf(fourcc));
   new DataView(head.buffer).setUint32(4, data.length, true);
@@ -284,7 +284,7 @@ export function riffChunk(fourcc: string, data: Uint8Array): Uint8Array {
 }
 
 /** Kept: the picture's chunks (VP8X, ICCP, ANIM, ANMF, ALPH, VP8, VP8L), then a new EXIF and XMP, flagged in VP8X. */
-export function cleanWebp(b: Uint8Array): Uint8Array {
+function cleanWebp(b: Uint8Array): Uint8Array {
   if (ascii(b, 0, 4) !== "RIFF" || ascii(b, 8, 4) !== "WEBP") return b;
   const chunks = riffChunks(b);
   const exif = chunks.find((c) => c.fourcc === "EXIF");
@@ -306,7 +306,7 @@ export function cleanWebp(b: Uint8Array): Uint8Array {
 }
 
 /** In place, so no item offset moves: the Exif item's TIFF rewritten and zero-padded, the XMP item rewritten and space-padded. */
-export function cleanHeif(b: Uint8Array): Uint8Array {
+function cleanHeif(b: Uint8Array): Uint8Array {
   const out = b.slice();
   const xmp = xmpPacket(factsOf(heifBlocks(b)));
   for (const item of heifItems(out)) {

@@ -9,26 +9,6 @@ import {
 import { kindOf, orientationOf } from "../media.js";
 import { type MediaLibraryOptions, type MediaRecord } from "./types.js";
 import { OFFSET, SEQ, positive } from "./constants.js";
-export type {
-  MediaBucket,
-  MediaKeyInput,
-  MediaLibraryEvent,
-  MediaLibraryOptions,
-  MediaLibraryStore,
-  MediaObject,
-  MediaRecord,
-  MediaRecordFields,
-  MediaRecordWrite,
-  MediaRevisionReason,
-  MediaRevisionRecord,
-} from "./types.js";
-export {
-  PICTURE_RESIZE,
-  PICTURE_TYPES,
-  datedKey,
-  extensionFor,
-  pictureLimits,
-} from "./constants.js";
 
 import type { LibraryCore } from "./types.js";
 

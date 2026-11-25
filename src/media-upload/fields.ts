@@ -32,7 +32,7 @@ export function readEmbedded(bytes: Uint8Array, contentType: string): EmbeddedFi
   return Object.fromEntries(Object.entries(fields).filter(([, v]) => v !== undefined));
 }
 
-export function blocksOf(bytes: Uint8Array, contentType: string): Blocks {
+function blocksOf(bytes: Uint8Array, contentType: string): Blocks {
   try {
     if (contentType === "image/jpeg") return jpegBlocks(bytes);
     if (contentType === "image/webp") return webpBlocks(bytes);
@@ -59,7 +59,7 @@ export function factsOf(blocks: Blocks): Facts {
   return found;
 }
 
-export function safely<T>(read: (block: T) => Facts, block: T | null): Facts {
+function safely<T>(read: (block: T) => Facts, block: T | null): Facts {
   try {
     return block === null ? {} : read(block);
   } catch {
@@ -67,18 +67,18 @@ export function safely<T>(read: (block: T) => Facts, block: T | null): Facts {
   }
 }
 
-export const text = (value: string | undefined, max: number) => {
+const text = (value: string | undefined, max: number) => {
   // EXIF pads with NUL, and a copyright may hold "photographer\0editor": the first part is the one that names.
   const first = value?.split("\u0000")[0]?.trim();
   return first ? first.slice(0, max) : undefined;
 };
 
-export const address = (value: string | undefined) => {
+const address = (value: string | undefined) => {
   const v = value?.trim();
   return v && /^https?:\/\/\S+$/i.test(v) && v.length <= 2000 ? v : undefined;
 };
 
-export function fromPngText(found: Record<string, string>): Facts {
+function fromPngText(found: Record<string, string>): Facts {
   const created = found["Creation Time"] ? Date.parse(found["Creation Time"]) : Number.NaN;
   return {
     creator: text(found.Author, 300),
@@ -92,7 +92,7 @@ export function fromPngText(found: Record<string, string>): Facts {
 export type Entry = { tag: number; type: number; count: number; value: Uint8Array };
 
 /** Bytes per value of each TIFF field type. */
-export const TYPE_BYTES: Record<number, number> = {
+const TYPE_BYTES: Record<number, number> = {
   1: 1,
   2: 1,
   3: 2,
@@ -145,7 +145,7 @@ export function tiffEntries(
 }
 
 /** IFD0's artist, copyright and description, and the EXIF IFD's original date and its offset. */
-export function fromTiff(tiff: Uint8Array): Facts {
+function fromTiff(tiff: Uint8Array): Facts {
   const read = tiffEntries(tiff);
   if (!read) return {};
   const value = (entries: Entry[], tag: number, max: number) => {
@@ -161,10 +161,7 @@ export function fromTiff(tiff: Uint8Array): Facts {
 }
 
 /** EXIF's "YYYY:MM:DD HH:MM:SS" and its "+HH:MM", as an ISO date and time; undefined for a placeholder or a bad date. */
-export function exifDate(
-  value: string | undefined,
-  offset: string | undefined,
-): string | undefined {
+function exifDate(value: string | undefined, offset: string | undefined): string | undefined {
   const m = value && /^(\d{4}):(\d{2}):(\d{2})[ T](\d{2}):(\d{2}):(\d{2})/.exec(value);
   if (!m) return undefined;
   const local = `${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${m[6]}`;
@@ -173,14 +170,14 @@ export function exifDate(
   return offset && /^[+-]\d{2}:\d{2}$/.test(offset) ? `${local}${offset}` : local;
 }
 
-export const ENTITIES: Record<string, string> = {
+const ENTITIES: Record<string, string> = {
   amp: "&",
   lt: "<",
   gt: ">",
   quot: '"',
   apos: "'",
 };
-export const unxml = (s: string) =>
+const unxml = (s: string) =>
   s.replace(/&(#x[0-9a-f]+|#\d+|\w+);/gi, (m, e: string) => {
     if (e[0] !== "#") return ENTITIES[e] ?? m;
     const code =
@@ -194,7 +191,7 @@ export const unxml = (s: string) =>
  * (quadratic over a stranger's bytes: half a million `<` inside one property took minutes), so a `<` with no `>` left
  * ends the scan and the rest stays text. `<>` is not a tag.
  */
-export function stripTags(s: string): string {
+function stripTags(s: string): string {
   let out = "";
   let from = 0;
   for (;;) {
@@ -213,7 +210,7 @@ export function stripTags(s: string): string {
  * rdf:Alt, Seq or Bag (the x-default entry of an Alt; every entry of a Seq or Bag, joined with commas, as dc:creator lists
  * its creators). A regex reader, not an XML parser: it reads the few properties below and nothing else.
  */
-export function xmpValue(xmp: string, name: string): string | undefined {
+function xmpValue(xmp: string, name: string): string | undefined {
   const attribute = new RegExp(`\\s${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)')`).exec(xmp);
   if (attribute) return unxml(attribute[1] ?? attribute[2] ?? "");
   const element = xmpElement(xmp, name);
@@ -239,10 +236,7 @@ export function xmpValue(xmp: string, name: string): string | undefined {
  * A packet is a stranger's bytes: a lazy regex over it re-scans to the end from every opening tag that has no closing one
  * (quadratic), and many openings fit in a few hundred KB.
  */
-export function xmpElement(
-  xmp: string,
-  name: string,
-): { attributes: string; inner: string } | undefined {
+function xmpElement(xmp: string, name: string): { attributes: string; inner: string } | undefined {
   const open = `<${name}`;
   const close = `</${name}`;
   for (let from = 0; ;) {
@@ -265,7 +259,7 @@ export function xmpElement(
 }
 
 /** The `<rdf:li>` items of an element's contents, found by scanning (see xmpElement). */
-export function listItems(inner: string): { attributes: string; text: string }[] {
+function listItems(inner: string): { attributes: string; text: string }[] {
   const items = [];
   for (let from = 0; ;) {
     const at = inner.indexOf("<rdf:li", from);
@@ -283,7 +277,7 @@ export function listItems(inner: string): { attributes: string; text: string }[]
 }
 
 /** The IPTC Photo Metadata properties in XMP: Dublin Core, Photoshop, XMP Rights and PLUS. */
-export function fromXmp(xmp: string): Facts {
+function fromXmp(xmp: string): Facts {
   const created = xmpValue(xmp, "exif:DateTimeOriginal") ?? xmpValue(xmp, "photoshop:DateCreated");
   return {
     creator: text(xmpValue(xmp, "dc:creator"), 300),
@@ -305,7 +299,7 @@ export function fromXmp(xmp: string): Facts {
  * The IPTC IIM in a JPEG's Photoshop segment (its 8BIM resource 0x0404): By-line (2:80), Credit (2:110), Copyright Notice
  * (2:116) and Caption (2:120), as UTF-8.
  */
-export function fromIptc(resources: Uint8Array): Facts {
+function fromIptc(resources: Uint8Array): Facts {
   const found = new Map<number, string[]>();
   let at = 0;
   while (at + 12 <= resources.length && ascii(resources, at, 4) === "8BIM") {

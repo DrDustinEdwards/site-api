@@ -16,26 +16,6 @@ import {
   type MediaRevisionReason,
 } from "./types.js";
 import { LIBRARY_LENSES, RACED, datedKey, positive } from "./constants.js";
-export type {
-  MediaBucket,
-  MediaKeyInput,
-  MediaLibraryEvent,
-  MediaLibraryOptions,
-  MediaLibraryStore,
-  MediaObject,
-  MediaRecord,
-  MediaRecordFields,
-  MediaRecordWrite,
-  MediaRevisionReason,
-  MediaRevisionRecord,
-} from "./types.js";
-export {
-  PICTURE_RESIZE,
-  PICTURE_TYPES,
-  datedKey,
-  extensionFor,
-  pictureLimits,
-} from "./constants.js";
 
 /** What every method of the media library shares: the options, their derived settings and the row and object helpers. */
 export function libraryCore(options: MediaLibraryOptions) {
