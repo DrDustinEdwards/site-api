@@ -2,20 +2,28 @@ import { hasContentTrash, type SiteAdapter } from "../adapter.js";
 import { Timestamp } from "../contract/base.js";
 import type { ContentSummary } from "../contract.js";
 import type { PublishEvent, PublishHook } from "../hooks.js";
-import type { SiteApiStore } from "../store.js";
+import type { HookRetry, SiteApiStore } from "../store.js";
+import { CHANGE_ROW, HOOK_BACKOFF_MINUTES, MINUTE } from "./changes.js";
 import { TRASH_DAYS } from "./types.js";
 
 type Log = (entry: Record<string, unknown>) => void;
 
 const DAY = 24 * 60 * 60 * 1000;
-export const MINUTE = 60 * 1000;
 
-/** How long a failed hook waits before each retry, in minutes; after the last it is given up and logged. */
-export const HOOK_BACKOFF_MINUTES = [1, 5, 30, 120, 720] as const;
-
-// Each kept failure is run again when due, on its own hook only, until it works or has been tried after every backoff.
+// Each kept row is run again when due: a change a dying Worker left is finished (`resolve`), and a queued or failed
+// hook is run on its own until it works or has been tried after every backoff.
 export async function retryHooks(
-  { store, hooks, log }: { store: SiteApiStore | undefined; hooks: PublishHook[]; log: Log },
+  {
+    store,
+    hooks,
+    log,
+    resolve,
+  }: {
+    store: SiteApiStore | undefined;
+    hooks: PublishHook[];
+    log: Log;
+    resolve: (row: HookRetry) => Promise<void>;
+  },
   now: Date,
   limit: number,
 ): Promise<number> {
@@ -23,6 +31,10 @@ export async function retryHooks(
   let retried = 0;
   try {
     for (const retry of await store.dueHookRetries(now.toISOString(), limit)) {
+      if (retry.hook === CHANGE_ROW) {
+        await resolve(retry);
+        continue;
+      }
       retried++;
       const hook = hooks.find((h) => h.name === retry.hook);
       let error: string | null = hook ? null : "the site no longer has this hook";

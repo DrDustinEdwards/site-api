@@ -5,7 +5,7 @@ import { isDatabaseDown } from "@dustinedwards/site-runtime/log";
 import { describe, expect, it } from "vitest";
 import { createSiteClient, SiteApiError } from "../src/client.js";
 import { createSiteApi, indexNowHook, type PublishEvent } from "../src/index.js";
-import { d1SiteApiStore, SITE_API_STORE_SQL } from "../src/store.js";
+import { d1SiteApiStore, SITE_API_STORE_SQL, type D1SiteApiStore } from "../src/store.js";
 import { d1 } from "./d1.js";
 import { memoryAdapter } from "../src/testing.js";
 import { KEY, ORIGIN, allow, body, clientOf, req } from "./helpers.js";
@@ -411,5 +411,98 @@ describe("page changes", () => {
       }),
     );
     expect(bad.status).toBe(400);
+  });
+});
+
+// A Worker that stops partway: the change is kept in the store before the write, and the cron finishes what is left.
+describe("a write a Worker never finished", () => {
+  const minutes = (n: number) => new Date(Date.now() + n * 60 * 1000);
+  // A waitUntil that drops the work: the Worker stopped once it answered.
+  const stopped = { waitUntil: () => {} };
+
+  function stopping(
+    hooks: Parameters<typeof siteWithHooks>[0],
+    wrap: (store: D1SiteApiStore) => Partial<D1SiteApiStore> = () => ({}),
+  ) {
+    const store = d1SiteApiStore(d1(SITE_API_STORE_SQL));
+    const site = siteWithHooks(hooks, { store: { ...store, ...wrap(store) } });
+    const client = clientOf(site.api, ORIGIN, stopped);
+    const live = async () => {
+      const draft = await client.saveDraft("a", {
+        source: LIVE,
+        expectedVersion: null,
+        changeId: "c1",
+      });
+      return client.publish("a", { expectedVersion: draft.version, changeId: "c2" });
+    };
+    return { ...site, store, client, live };
+  }
+
+  it("sends a hook the Worker stopped under, once, from the cron", async () => {
+    const sent: string[] = [];
+    let alive = false;
+    const { api, live } = stopping([
+      {
+        name: "ping",
+        run: (e) => (alive ? void sent.push(`${e.action} ${e.url}`) : new Promise(() => {})),
+      },
+    ]);
+    await live();
+    alive = true;
+    await api.runSchedules({ now: minutes(2) });
+    await api.runSchedules({ now: minutes(60) });
+    expect(sent).toEqual([`publish ${ORIGIN}/blog/a`]);
+  });
+
+  it("finishes a change whose Worker stopped right after the write, and tells no one of a refused one", async () => {
+    const sent: string[] = [];
+    let dying = true;
+    const { api, client, live } = stopping(
+      [{ name: "ping", run: (e) => void sent.push(`${e.action} ${e.url}`) }],
+      (store) => ({
+        putHookRetry: async (row) => {
+          if (dying && row.hook === "ping") throw new Error("the Worker stopped");
+          return store.putHookRetry(row);
+        },
+      }),
+    );
+    await live();
+    expect(sent).toEqual([]);
+    dying = false;
+    await api.runSchedules({ now: minutes(2) });
+    expect(sent).toEqual([`publish ${ORIGIN}/blog/a`]);
+    await expect(
+      client.publish("a", { expectedVersion: "not-the-version", changeId: "c3" }),
+    ).rejects.toThrow();
+    await api.runSchedules({ now: minutes(60) });
+    expect(sent).toHaveLength(1);
+  });
+
+  it("keeps a tombstone the store refused on a later pass, and reports one it gave up on as an error", async () => {
+    let failing = 1;
+    const { api, client, store, logs, live } = stopping([], (s) => ({
+      markGone: async (path, at) => {
+        if (failing-- > 0) throw new Error("D1_ERROR: internal error");
+        return s.markGone(path, at);
+      },
+    }));
+    const first = await live();
+    await client.delete("a", { expectedVersion: first.version, changeId: "c3" });
+    expect(await store.isGone("/blog/a")).toBe(false);
+    await api.runSchedules({ now: minutes(2) });
+    expect(await store.isGone("/blog/a")).toBe(true);
+
+    failing = Infinity;
+    const again = await client.saveDraft("a", {
+      source: LIVE,
+      expectedVersion: null,
+      changeId: "c4",
+    });
+    const back = await client.publish("a", { expectedVersion: again.version, changeId: "c5" });
+    await client.delete("a", { expectedVersion: back.version, changeId: "c6" });
+    for (const at of [2, 8, 40, 200, 1000, 3000]) await api.runSchedules({ now: minutes(at) });
+    expect(logs.filter((l) => l.siteApi === "change-gave-up")).toMatchObject([
+      { level: "error", action: "delete", id: "a" },
+    ]);
   });
 });
