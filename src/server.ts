@@ -292,6 +292,9 @@ export function createSiteApi(config: SiteApiConfig): SiteApi {
     const action = write && id ? ACTION[`${request.method} ${write[2] ?? ""}`] : undefined;
     let finish: ((response: Response) => Promise<void>) | undefined;
     let response: Response;
+    // The change is kept before the write runs, so a Worker that dies after it leaves it for the cron to finish.
+    let change: Change | null = null;
+    let row: Awaited<ReturnType<typeof changes.open>> = null;
     try {
       let run = request;
       if (store && request.method !== "GET" && REPLAYED.test(path)) {
@@ -306,9 +309,6 @@ export function createSiteApi(config: SiteApiConfig): SiteApi {
         if ("answer" in claimed) return claimed.answer;
         ({ request: run, finish } = claimed);
       }
-      // The change is kept before the write runs, so a Worker that dies after it leaves it for the cron to finish.
-      let change: Change | null = null;
-      let row: Awaited<ReturnType<typeof changes.open>> = null;
       if (action) {
         const sent = (await run
           .clone()
@@ -342,9 +342,7 @@ export function createSiteApi(config: SiteApiConfig): SiteApi {
         );
         if (told && ctx) ctx.waitUntil(told);
         else await told;
-      } else if (row && response.status < 500) {
-        // Refused: nothing was written. A site failure is left for the cron, which reads whether it was.
-        await changes.drop(row);
+        row = null;
       }
     } catch (error) {
       const failure = describeFailure(error, log);
@@ -354,6 +352,12 @@ export function createSiteApi(config: SiteApiConfig): SiteApi {
         ...(failure.field !== undefined ? { field: failure.field } : {}),
       });
     }
+    // Refused, whether the route answered it or threw: nothing was written, and a row left behind would be finished as
+    // this write by the cron once a later write moved the item. A site failure is left for the cron, which reads whether it was.
+    if (row && response.status < 500)
+      await changes
+        .drop(row)
+        .catch((error) => log({ siteApi: "page-change-failed", error: String(error) }));
     await finish?.(response);
     return response;
   }

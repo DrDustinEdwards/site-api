@@ -471,11 +471,16 @@ describe("a write a Worker never finished", () => {
     dying = false;
     await api.runSchedules({ now: minutes(2) });
     expect(sent).toEqual([`publish ${ORIGIN}/blog/a`]);
-    await expect(
-      client.publish("a", { expectedVersion: "not-the-version", changeId: "c3" }),
-    ).rejects.toThrow();
+    // A refused write tells no one, even once a later write moves the item before the cron runs.
+    const refused = await client
+      .publish("a", { expectedVersion: "not-the-version", changeId: "c3" })
+      .then(
+        () => null,
+        (e: { body?: { currentVersion?: string } }) => e.body?.currentVersion ?? null,
+      );
+    await client.saveDraft("a", { source: NEXT, expectedVersion: refused, changeId: "c4" });
     await api.runSchedules({ now: minutes(60) });
-    expect(sent).toHaveLength(1);
+    expect(sent).toEqual([`publish ${ORIGIN}/blog/a`, `update ${ORIGIN}/blog/a`]);
   });
 
   it("keeps a tombstone the store refused on a later pass, and reports one it gave up on as an error", async () => {
