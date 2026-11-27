@@ -27,7 +27,8 @@ export interface SiteApiConfig {
    * a live item, and each schedule `runSchedules` applies. The first is `indexNowHook`, over Prelum's `submitIndexNow`.
    * After a request they run under its `waitUntil` when `handle` is given one, so Carrel's answer never waits on them;
    * a hook that fails is logged, never answered, and the write stands. A hook may name the actions it hears
-   * (`on`), and with a `store` a failed one is kept and `runSchedules` runs it again (HOOK_BACKOFF_MINUTES).
+   * (`on`). With a `store` each change is kept before its write, and its hooks before they run, so a failed hook or
+   * a Worker that stops partway leaves rows `runSchedules` finishes (server/changes.ts, HOOK_BACKOFF_MINUTES).
    */
   hooks?: PublishHook[];
   /**

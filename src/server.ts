@@ -9,14 +9,8 @@ import { isDatabaseDown } from "@dustinedwards/site-runtime/log";
 
 import type { DueSchedule } from "./adapter.js";
 import { PREFIX } from "./contract.js";
-import type { ContentStatus } from "./contract.js";
-import {
-  hears,
-  runHooks,
-  type PublishAction,
-  type PublishEvent,
-  type PublishHook,
-} from "./hooks.js";
+import { hears, type PublishAction, type PublishEvent, type PublishHook } from "./hooks.js";
+import { pageChanges, type Change } from "./server/changes.js";
 import { contentRoutes } from "./server/content.js";
 import { HookRunList, HookRunsQuery } from "./contract.js";
 import {
@@ -38,7 +32,7 @@ import {
   previewLinkRoutes,
   servePreviewLink,
 } from "./server/preview-links.js";
-import { emptyTrash, HOOK_BACKOFF_MINUTES, MINUTE, retryHooks } from "./server/maintenance.js";
+import { emptyTrash, retryHooks } from "./server/maintenance.js";
 import { pruneStore } from "./server/prune.js";
 import { claim, REPLAYED } from "./server/replay.js";
 import { siteApiLog } from "./log.js";
@@ -58,7 +52,7 @@ export type {
   StoredWrite,
 } from "./store.js";
 export { tombstoneResponse, gonePath, tombstoned } from "./store.js";
-export { HOOK_BACKOFF_MINUTES } from "./server/maintenance.js";
+export { HOOK_BACKOFF_MINUTES } from "./server/changes.js";
 export { PREVIEW_LINK_PATH } from "./server/preview-links.js";
 
 export type {
@@ -156,104 +150,7 @@ export function createSiteApi(config: SiteApiConfig): SiteApi {
     `^/(${[...(media ? [] : ["media"]), ...(mentions ? [] : ["mentions"]), ...(insight ? [] : ["insight"]), ...(store ? [] : ["preview-links"]), ...(hookRuns.length ? [] : ["hooks"]), "inbox", "publications"].join("|")})(/|$)`,
   );
 
-  type Page = { path: string | null; status: ContentStatus | null };
-
-  // The item's public path and status, read before a write and after it. A draft that was never published has no page.
-  async function pageOf(id: string): Promise<Page> {
-    const doc = await adapter.content.get(id).catch(() => null);
-    return { path: doc?.path ?? null, status: doc?.status ?? null };
-  }
-
-  // The event for one content write, from the page before it and after it. A draft that was never published has no page,
-  // so its writes tell no one, except a schedule or an unschedule, which a hook naming them hears with no path.
-  function pageEvent(
-    id: string,
-    action: PublishAction,
-    before: Page,
-    after: Page | null,
-    written: { changeId?: string },
-    request: Request,
-  ): PublishEvent | null {
-    const path = after?.path ?? before.path;
-    if (!path && action !== "schedule" && action !== "unschedule") return null;
-    const moved =
-      action === "rename" && before.path && path && before.path !== path ? before.path : null;
-    return {
-      action,
-      id,
-      path,
-      url: path ? new URL(path, adapter.site.origin).href : null,
-      trigger: "request",
-      changeId: written.changeId ?? null,
-      request,
-      ...(before.status ? { previousStatus: before.status } : {}),
-      ...(after?.status ? { status: after.status } : {}),
-      ...(moved
-        ? { previousPath: moved, previousUrl: new URL(moved, adapter.site.origin).href }
-        : {}),
-    };
-  }
-
-  /**
-   * The tombstones. A delete or a trash of a live item leaves its path answering 410; a publish there, or a
-   * rename onto it, takes the tombstone away. The trash emptying itself keeps it. A store that cannot keep one is logged,
-   * and the write stands.
-   */
-  async function keepTombstones(
-    action: PublishAction,
-    before: Page,
-    after: Page | null,
-  ): Promise<void> {
-    if (!store?.markGone || !store.clearGone) return;
-    try {
-      const at = new Date().toISOString();
-      if (
-        (action === "delete" || action === "trash") &&
-        before.status === "published" &&
-        before.path
-      )
-        await store.markGone(before.path, at);
-      if (
-        (action === "publish" || action === "rename") &&
-        after?.status === "published" &&
-        after.path
-      )
-        await store.clearGone(after.path);
-    } catch (error) {
-      log({ siteApi: "tombstone-failed", action, error: String(error) });
-    }
-  }
-
-  // A hook that fails is kept for the cron to try again, where the site has a store.
-  // Each run is kept under its change id, where the store keeps hook runs, for `GET /hooks/recent`.
-  const tell = (event: PublishEvent) =>
-    runHooks(
-      hooks,
-      event,
-      log,
-      async (hook, error) => {
-        if (!store) return;
-        const { request: _r, ...kept } = event;
-        const nextAt = new Date(Date.now() + HOOK_BACKOFF_MINUTES[0]! * MINUTE).toISOString();
-        await store.putHookRetry({
-          id: crypto.randomUUID(),
-          hook: hook.name,
-          event: JSON.stringify(kept),
-          attempts: 1,
-          nextAt,
-          lastError: error,
-        });
-      },
-      async (hook, ok) => {
-        if (store?.putHookRun && event.changeId)
-          await store.putHookRun({
-            changeId: event.changeId,
-            hook: hook.name,
-            ok,
-            at: new Date().toISOString(),
-          });
-      },
-    );
+  const changes = pageChanges({ adapter, store, hooks, log });
 
   // What each run's failed schedules threw, so runSchedulesOrThrow can tell a database that was down from a real fault.
   const failures = new WeakMap<ScheduleRun, unknown[]>();
@@ -272,7 +169,7 @@ export function createSiteApi(config: SiteApiConfig): SiteApi {
     if (store) await pruneStore(store, now, log);
     const limit = options.limit ?? SCHEDULE_BATCH_LIMIT;
     run.emptied = await emptyTrash({ adapter, log }, now, limit);
-    run.retried = await retryHooks({ store, hooks, log }, now, limit);
+    run.retried = await retryHooks({ store, hooks, log, resolve: changes.resolve }, now, limit);
     const { schedules } = adapter;
     if (!schedules) return run;
     let due: DueSchedule[];
@@ -287,29 +184,24 @@ export function createSiteApi(config: SiteApiConfig): SiteApi {
     // One at a time and each on its own: one failing never stops the rest, and is listed again next pass.
     for (const item of due) {
       try {
+        const change: Change = {
+          id: item.id,
+          action: item.kind,
+          trigger: "schedule",
+          changeId: item.changeId,
+          before: await changes.pageOf(item.id),
+        };
+        const row = await changes.open(change);
         const written = await schedules.apply(item.id, { ...item, now });
         if (!written) {
           run.skipped++;
+          await changes.drop(row);
           continue;
         }
         run.applied.push({ ...item, version: written.version });
-        const page = await pageOf(item.id);
-        if (item.kind === "publish")
-          await keepTombstones("publish", { path: null, status: "scheduled" }, page);
-        if (page.path && page.status === "published") {
-          const url = new URL(page.path, adapter.site.origin).href;
-          const previousStatus = item.kind === "publish" ? "scheduled" : "published";
-          await tell({
-            action: item.kind,
-            id: item.id,
-            path: page.path,
-            url,
-            trigger: "schedule",
-            changeId: item.changeId,
-            previousStatus,
-            status: "published",
-          });
-        }
+        await (
+          await changes.settle(row, change, await changes.pageOf(item.id))
+        ).told;
       } catch (error) {
         run.failed++;
         errors.push(error);
@@ -414,23 +306,45 @@ export function createSiteApi(config: SiteApiConfig): SiteApi {
         if ("answer" in claimed) return claimed.answer;
         ({ request: run, finish } = claimed);
       }
-      const before = action ? await pageOf(id) : null;
+      // The change is kept before the write runs, so a Worker that dies after it leaves it for the cron to finish.
+      let change: Change | null = null;
+      let row: Awaited<ReturnType<typeof changes.open>> = null;
+      if (action) {
+        const sent = (await run
+          .clone()
+          .json()
+          .catch(() => ({}))) as { changeId?: unknown; newId?: unknown };
+        const changeId = url.searchParams.get("changeId") ?? sent.changeId;
+        change = {
+          id,
+          ...(action === "rename" && typeof sent.newId === "string" ? { newId: sent.newId } : {}),
+          action,
+          trigger: "request",
+          changeId: typeof changeId === "string" ? changeId : null,
+          before: await changes.pageOf(id),
+        };
+        row = await changes.open(change);
+      }
       response = await hit.route.run(hit.match, url, run);
-      if (action && before && response.ok) {
+      if (change && response.ok) {
         // A rename answers the item under its new id.
         const written = (await response.clone().json()) as { id?: string; changeId?: string };
-        const now = written.id ?? id;
-        const after = action === "delete" ? null : await pageOf(now);
-        // The tombstone is part of the write, so a 404 handler asked the moment it answers already says 410.
-        await keepTombstones(action, before, after);
-        const event = pageEvent(now, action, before, after, written, request);
-        if (event && hooks.length > 0) {
-          const told = tell(event).catch((error) =>
-            log({ siteApi: "page-change-failed", error: String(error) }),
-          );
-          if (ctx) ctx.waitUntil(told);
-          else await told;
-        }
+        if (written.id && written.id !== id) change.newId = written.id;
+        if (written.changeId) change.changeId = written.changeId;
+        const after = action === "delete" ? null : await changes.pageOf(change.newId ?? id);
+        // The tombstone is part of the write, so a 404 handler asked the moment it answers already says 410. The write
+        // stands whatever happens after it: a change that cannot be finished now is left in its row for the cron.
+        const failed = (error: unknown) =>
+          log({ siteApi: "page-change-failed", error: String(error) });
+        const { told } = await changes.settle(row, change, after, request).then(
+          (settled) => ({ told: settled.told?.catch(failed) }),
+          (error) => (failed(error), { told: undefined }),
+        );
+        if (told && ctx) ctx.waitUntil(told);
+        else await told;
+      } else if (row && response.status < 500) {
+        // Refused: nothing was written. A site failure is left for the cron, which reads whether it was.
+        await changes.drop(row);
       }
     } catch (error) {
       const failure = describeFailure(error, log);

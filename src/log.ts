@@ -16,5 +16,11 @@ export function siteApiLog(entry: Record<string, unknown>): void {
     logEvent(event, entry, { level: "warn" });
     return;
   }
-  logEvent(`site_api_${String(entry.siteApi ?? "log")}`, entry);
+  // A line that names level "error" is one the site must hear of: site-runtime sends it on to the error reporting.
+  const { level, ...fields } = entry;
+  logEvent(
+    `site_api_${String(entry.siteApi ?? "log")}`,
+    fields,
+    level === "error" ? { level } : undefined,
+  );
 }
